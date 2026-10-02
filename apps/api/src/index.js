@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { db } from "./config/firebase.js";
+import {authenticateUser, requireAdmin} from "./middleware/auth.middleware.js";
 
 dotenv.config();
 
@@ -46,3 +47,19 @@ app.get("/api/firebase/health", async (req, res) => {
 app.listen(PORT, () => {
     console.log(`API running on http://localhost:${PORT}`);
 });
+
+app.get(
+    "/api/admin/health",
+    authenticateUser,
+    requireAdmin,
+    (req, res) => {
+        res.json({
+            status: "ok",
+            message: "Administrative access granted",
+            user: {
+                uid: req.user.uid,
+                email: req.user.email
+            }
+        });
+    }
+);
