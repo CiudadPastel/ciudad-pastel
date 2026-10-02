@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import { db } from "./config/firebase.js";
 
 dotenv.config();
 
@@ -22,6 +23,24 @@ app.get("/api/health", (req, res) => {
         status: "ok",
         message: "Ciudad Pastel API is running"
     });
+});
+
+app.get("/api/firebase/health", async (req, res) => {
+    try {
+        await db.collection("_connection_test").limit(1).get();
+
+        res.json({
+            status: "ok",
+            message: "Firebase Firestore connection successful"
+        });
+    } catch (error) {
+        console.error("Firebase connection error:", error);
+
+        res.status(500).json({
+            status: "error",
+            message: "Firebase Firestore connection failed"
+        });
+    }
 });
 
 app.listen(PORT, () => {
