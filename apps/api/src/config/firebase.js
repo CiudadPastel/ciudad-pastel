@@ -1,3 +1,5 @@
+import dotenv from "dotenv";
+
 import {
     applicationDefault,
     getApps,
@@ -7,11 +9,16 @@ import {
 import { getFirestore } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
 
+dotenv.config({
+    path: new URL("../../.env", import.meta.url)
+});
+
 const firebaseApp =
     getApps().length > 0
         ? getApps()[0]
         : initializeApp({
-            credential: applicationDefault()
+            credential: applicationDefault(),
+            projectId: process.env.GOOGLE_CLOUD_PROJECT
         });
 
 const db = getFirestore(firebaseApp);
