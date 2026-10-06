@@ -1,0 +1,174 @@
+.shell {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 100svh;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  padding: 1.75rem 1rem;
+  background: var(--cp-navy);
+  color: #fff;
+  position: sticky;
+  top: 0;
+  height: 100svh;
+}
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.brandName {
+  font-family: var(--font-heading);
+  font-size: 1.9rem;
+  letter-spacing: 0.12em;
+  line-height: 1;
+}
+
+.brandSub {
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.brandSub::before,
+.brandSub::after {
+  content: "";
+  width: 1.5rem;
+  height: 1px;
+  background: currentColor;
+}
+
+.brandTag {
+  margin-top: 0.75rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--cp-mint);
+  font-weight: 700;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.navLink {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.85);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.navLink:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.active,
+.active:hover {
+  background: var(--cp-mint);
+  color: var(--cp-navy-700);
+}
+
+.account {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.email {
+  color: rgba(255, 255, 255, 0.7);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logout {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+}
+
+.logout:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.content {
+  padding: 2rem clamp(1rem, 4vw, 3rem);
+  min-width: 0;
+}
+
+/* Celular: la barra lateral pasa a ser una barra superior */
+@media (max-width: 800px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: static;
+    height: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem 1rem;
+    padding: 0.75rem 1rem;
+  }
+
+  .brand {
+    flex-direction: row;
+    gap: 0.4rem;
+    padding: 0;
+    border: 0;
+  }
+
+  .brandName {
+    font-size: 1.25rem;
+  }
+
+  .brandSub::before,
+  .brandSub::after,
+  .brandTag,
+  .email {
+    display: none;
+  }
+
+  .nav {
+    flex-direction: row;
+    order: 3;
+    width: 100%;
+  }
+
+  .navLink {
+    padding: 0.5rem 0.75rem;
+  }
+
+  .account {
+    margin: 0 0 0 auto;
+  }
+
+  .content {
+    padding: 1.25rem 1rem;
+  }
+}
