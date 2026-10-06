@@ -1,0 +1,256 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  max-width: 1200px;
+}
+
+.header h1 {
+  font-size: 2rem;
+}
+
+.subtitle {
+  color: var(--cp-muted);
+  margin-top: 0.25rem;
+}
+
+/* Filtro por estado */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--cp-border);
+  background: var(--cp-surface);
+  color: var(--cp-navy);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.filter:hover:not(:disabled) {
+  border-color: var(--cp-navy);
+}
+
+.filter:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.filterActive,
+.filterActive:hover:not(:disabled) {
+  background: var(--cp-navy);
+  border-color: var(--cp-navy);
+  color: #fff;
+}
+
+.count {
+  min-width: 1.5rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: var(--cp-navy-50);
+  color: var(--cp-navy);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.filterActive .count {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+/* Tabla */
+.tableWrap {
+  background: var(--cp-surface);
+  border: 1px solid var(--cp-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.table th {
+  text-align: left;
+  padding: 0.75rem 1rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--cp-muted);
+  background: #fbfaf7;
+  border-bottom: 1px solid var(--cp-border);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--cp-border);
+  vertical-align: middle;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.row {
+  cursor: pointer;
+}
+
+.row:hover {
+  background: var(--cp-mint-50);
+}
+
+.name {
+  display: block;
+  font-weight: 700;
+  color: var(--cp-navy);
+}
+
+.secondary {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--cp-muted);
+}
+
+.table .num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.full {
+  color: var(--cp-danger);
+  font-weight: 700;
+}
+
+.fullTag {
+  margin-left: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--cp-danger);
+}
+
+.action {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.detailLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.detailLink:hover {
+  text-decoration: underline;
+}
+
+/* Esqueleto de carga */
+.skeletonRow {
+  display: flex;
+  gap: 1.5rem;
+  padding: 1.1rem 1rem;
+  border-bottom: 1px solid var(--cp-border);
+}
+
+.skeletonRow:last-child {
+  border-bottom: 0;
+}
+
+.skeleton {
+  height: 0.9rem;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #eceae4 0%, #f6f4ef 50%, #eceae4 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+
+/* Celular: cada fila se muestra como tarjeta */
+@media (max-width: 800px) {
+  .tableWrap {
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+  }
+
+  .table thead {
+    display: none;
+  }
+
+  .table,
+  .table tbody,
+  .table tr,
+  .table td {
+    display: block;
+  }
+
+  .table tr {
+    background: var(--cp-surface);
+    border: 1px solid var(--cp-border);
+    border-radius: var(--radius);
+    padding: 0.5rem 0;
+    margin-bottom: 0.75rem;
+  }
+
+  .table td {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.4rem 1rem;
+    border: 0;
+    text-align: right;
+  }
+
+  .table td::before {
+    content: attr(data-label);
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--cp-muted);
+    text-align: left;
+  }
+
+  .table td > div {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+  }
+
+  .table td.action::before {
+    content: none;
+  }
+
+  .table td.action {
+    justify-content: flex-end;
+  }
+
+  .skeletonRow {
+    background: var(--cp-surface);
+    border: 1px solid var(--cp-border);
+    border-radius: var(--radius);
+    margin-bottom: 0.75rem;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+}

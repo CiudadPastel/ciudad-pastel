@@ -30,7 +30,7 @@ export async function signInAdmin(email, password) {
 
         if (response.status === 403) {
             throw new Error(
-                "Esta cuenta no tiene privilegios adminstrativos."
+                "Esta cuenta no tiene privilegios administrativos."
             );
         }
 

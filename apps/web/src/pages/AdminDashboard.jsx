@@ -1,38 +1,26 @@
-import { useNavigate } from "react-router-dom";
+import { BookOpen } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthProvider";
 
 function AdminDashboard() {
-    const {
-        user,
-        logout
-    } = useAuth();
-
-    const navigate = useNavigate();
-
-    async function handleLogout() {
-        await logout();
-
-        navigate("/");
-    }
+    const { user } = useAuth();
 
     return (
-        <main>
-            <h1>
-                Administración Ciudad Pastel
-            </h1>
+        <section style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+            <h1>Bienvenida</h1>
 
             <p>
-                Sesión iniciada como{" "}
-                <strong>
-                    {user?.email}
-                </strong>
+                Sesión iniciada como <strong>{user?.email}</strong>.
             </p>
 
-            <button onClick={handleLogout}>
-                Cerrar sesión
-            </button>
-        </main>
+            <p>
+                <Link to="/admin/cursos" className="btn btn-primary">
+                    <BookOpen size={18} aria-hidden="true" />
+                    Ir a cursos
+                </Link>
+            </p>
+        </section>
     );
 }
 

@@ -1,0 +1,39 @@
+.box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.5rem;
+  padding: 3rem 1.5rem;
+  background: var(--cp-surface);
+  border: 1px dashed var(--cp-border);
+  border-radius: var(--radius);
+}
+
+.icon {
+  color: var(--cp-mint-600);
+  margin-bottom: 0.25rem;
+}
+
+.error {
+  border-style: solid;
+  border-color: #f4c7c3;
+  background: var(--cp-danger-50);
+}
+
+.error .icon {
+  color: var(--cp-danger);
+}
+
+.title {
+  font-size: 1.2rem;
+}
+
+.description {
+  color: var(--cp-muted);
+  max-width: 42ch;
+}
+
+.action {
+  margin-top: 0.75rem;
+}
