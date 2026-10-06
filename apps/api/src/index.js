@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { db } from "./config/firebase.js";
 import {authenticateUser, requireAdmin} from "./middleware/auth.middleware.js";
+import courseRoutes from "./routes/course.routes.js";
 
 dotenv.config();
 
@@ -18,6 +19,11 @@ app.use(
 );
 
 app.use(express.json());
+
+app.use(
+    "/api/admin/courses",
+    courseRoutes
+);
 
 app.get("/api/health", (req, res) => {
     res.json({
