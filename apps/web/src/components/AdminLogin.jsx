@@ -1,60 +1,102 @@
 import { useState } from "react";
-import { signInAdmin } from "../services/auth.service";
+import {
+    Navigate,
+    useLocation,
+    useNavigate
+} from "react-router-dom";
 
-function AdminLogin({ onLogin }) {
+import { useAuth } from "../auth/AuthProvider";
+
+function AdminLogin() {
     const [email, setEmail] = useState("");
-    const [password, setPassword] = useState("");
+    const [password, setPassword] =
+        useState("");
 
     const [error, setError] = useState("");
-    const [loading, setLoading] = useState(false);
+    const [submitting, setSubmitting] =
+        useState(false);
+
+    const {
+        user,
+        loading,
+        login
+    } = useAuth();
+
+    const navigate = useNavigate();
+    const location = useLocation();
 
     async function handleSubmit(event) {
         event.preventDefault();
 
         setError("");
-        setLoading(true);
+        setSubmitting(true);
 
         try {
-            const result = await signInAdmin(email, password);
+            await login(email, password);
 
-            onLogin(result.firebaseUser);
+            const destination =
+                location.state?.from?.pathname
+                || "/admin";
+
+            navigate(destination, {
+                replace: true
+            });
         } catch (error) {
             console.error(error);
 
             switch (error.code) {
                 case "auth/invalid-credential":
-                    setError("Contraseña o email invalidos.");
+                    setError(
+                        "Correo o contraseña incorrectos."
+                    );
                     break;
 
                 case "auth/invalid-email":
-                    setError("Formato de email invalido.");
+                    setError(
+                        "El correo no tiene un formato válido."
+                    );
                     break;
 
                 case "auth/too-many-requests":
                     setError(
-                        "Muchos intentos fallidos. Intenta de nuevo luego."
+                        "Demasiados intentos. Intenta nuevamente más tarde."
                     );
                     break;
 
                 default:
                     setError(
-                        error.message || "No se pudo iniciar sesion."
+                        error.message
+                        || "No se pudo iniciar sesión."
                     );
             }
         } finally {
-            setLoading(false);
+            setSubmitting(false);
         }
+    }
+
+    if (loading) {
+        return <p>Cargando...</p>;
+    }
+
+    if (user) {
+        return (
+            <Navigate
+                to="/admin"
+                replace
+            />
+        );
     }
 
     return (
         <main>
             <h1>Ciudad Pastel</h1>
-            <h2>Administracion</h2>
+
+            <h2>Administración</h2>
 
             <form onSubmit={handleSubmit}>
                 <div>
                     <label htmlFor="email">
-                        Email
+                        Correo electrónico
                     </label>
 
                     <input
@@ -62,15 +104,17 @@ function AdminLogin({ onLogin }) {
                         type="email"
                         value={email}
                         onChange={(event) =>
-                            setEmail(event.target.value)
+                            setEmail(
+                                event.target.value
+                            )
                         }
                         required
                     />
                 </div>
 
                 <div>
-                    <label htmlFor="Contraseña">
-                        Password
+                    <label htmlFor="password">
+                        Contraseña
                     </label>
 
                     <input
@@ -78,7 +122,9 @@ function AdminLogin({ onLogin }) {
                         type="password"
                         value={password}
                         onChange={(event) =>
-                            setPassword(event.target.value)
+                            setPassword(
+                                event.target.value
+                            )
                         }
                         required
                     />
@@ -92,11 +138,11 @@ function AdminLogin({ onLogin }) {
 
                 <button
                     type="submit"
-                    disabled={loading}
+                    disabled={submitting}
                 >
-                    {loading
-                        ? "Signing in..."
-                        : "Sign in"}
+                    {submitting
+                        ? "Ingresando..."
+                        : "Iniciar sesión"}
                 </button>
             </form>
         </main>
