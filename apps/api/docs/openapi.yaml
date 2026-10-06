@@ -1,0 +1,144 @@
+openapi: 3.0.3
+
+info:
+  title: Ciudad Pastel API
+  version: 1.0.0
+  description: API for Ciudad Pastel administrative and public operations.
+
+servers:
+  - url: http://localhost:3000/api
+    description: Local development server
+
+tags:
+  - name: Courses
+    description: Course administration
+
+paths:
+
+  /admin/courses:
+    post:
+      tags:
+        - Courses
+      summary: Create a course
+      description: Creates a new course. New courses are always created as draft.
+      security:
+        - bearerAuth: []
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCourseRequest"
+
+            example:
+              name: Pastelería Básica
+              summary: Aprende los fundamentos de la pastelería.
+              description: En este curso aprenderás técnicas fundamentales de preparación y decoración.
+              imageUrl: null
+              learningOutcomes:
+                - Preparar masas básicas
+                - Aplicar técnicas básicas de decoración
+              requiredMaterials:
+                - Delantal
+                - Espátula
+
+      responses:
+
+        "201":
+          description: Course created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Course"
+
+        "400":
+          description: Invalid course data.
+
+        "401":
+          description: Authentication required or invalid token.
+
+        "403":
+          description: Administrator privileges required.
+
+        "500":
+          description: Internal server error.
+
+components:
+
+  securitySchemes:
+
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+
+    CreateCourseRequest:
+      type: object
+
+      required:
+        - name
+        - summary
+        - description
+
+      properties:
+
+        name:
+          type: string
+          minLength: 3
+          maxLength: 120
+
+        summary:
+          type: string
+          minLength: 10
+          maxLength: 240
+
+        description:
+          type: string
+          minLength: 20
+          maxLength: 5000
+
+        imageUrl:
+          type: string
+          format: uri
+          nullable: true
+
+        learningOutcomes:
+          type: array
+          items:
+            type: string
+            maxLength: 200
+          maxItems: 15
+
+        requiredMaterials:
+          type: array
+          items:
+            type: string
+            maxLength: 150
+          maxItems: 30
+
+    Course:
+      allOf:
+        - $ref: "#/components/schemas/CreateCourseRequest"
+
+        - type: object
+          properties:
+
+            id:
+              type: string
+              format: uuid
+
+            status:
+              type: string
+              enum:
+                - draft
+                - published
+                - archived
+
+            createdAt:
+              type: object
+
+            updatedAt:
+              type: object
