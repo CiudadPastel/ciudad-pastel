@@ -40,6 +40,36 @@ export async function getCourseById(id) {
 }
 
 
+// Applies a status change after validating the current state atomically.
+export async function updateCourseStatus(id, status, validateTransition) {
+    const courseRef = db.collection(COURSE_COLLECTION).doc(id);
+
+    const updated = await db.runTransaction(async (transaction) => {
+        const course = await transaction.get(courseRef);
+
+        if (!course.exists) {
+            return false;
+        }
+
+        validateTransition(course.data().status);
+
+        transaction.update(courseRef, {
+            status,
+            updatedAt: FieldValue.serverTimestamp()
+        });
+
+        return true;
+    });
+
+    if (!updated) {
+        return null;
+    }
+
+    const updatedCourse = await courseRef.get();
+
+    return updatedCourse.exists ? mapCourseDocument(updatedCourse) : null;
+}
+
 // Updates editable fields while preserving course metadata.
 export async function updateCourse(id, courseData) {
     const courseRef = db
