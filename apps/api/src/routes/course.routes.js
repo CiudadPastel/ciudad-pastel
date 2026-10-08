@@ -6,10 +6,26 @@ import {
 } from "../middleware/auth.middleware.js";
 
 import {
-    createCourse
+    createCourse,
+    getCourses,
+    getCourseById
 } from "../controllers/course.controller.js";
 
 const router = Router();
+
+router.get(
+    "/",
+    authenticateUser,
+    requireAdmin,
+    getCourses
+);
+
+router.get(
+    "/:id",
+    authenticateUser,
+    requireAdmin,
+    getCourseById
+);
 
 
 // Creates a new course for authenticated administrators.
