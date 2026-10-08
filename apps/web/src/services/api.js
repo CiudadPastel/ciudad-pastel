@@ -3,15 +3,26 @@ import { auth } from "../config/firebase";
 const API_URL =
     import.meta.env.VITE_API_URL || "http://localhost:3000/api";
 
+const STATUS_MESSAGES = {
+    400: "Algunos datos no son válidos. Revíselos e intente de nuevo.",
+    401: "Su sesión expiró. Inicie sesión de nuevo.",
+    403: "Su cuenta no tiene permisos para realizar esta acción.",
+    404: "No se encontró la información solicitada.",
+    409: "Esta acción no es posible en el estado actual.",
+    default: "Ocurrió un error en el servidor. Intente de nuevo en unos minutos."
+};
+
 /**
  * Error de la API con el código HTTP, para que las pantallas
  * puedan distinguir "no encontrado" (404) de otros errores.
  */
 export class ApiError extends Error {
-    constructor(message, status) {
+    constructor(message, status, details = null) {
         super(message);
         this.name = "ApiError";
         this.status = status;
+        // Detalle de validación del backend: lista de textos, ej. ["name must ..."]
+        this.details = details;
     }
 }
 
@@ -50,16 +61,28 @@ export async function apiFetch(path, { requiresAuth = false, headers, ...options
     }
 
     if (!response.ok) {
-        let message = "Ocurrió un error inesperado.";
+        let details = null;
+        let serverMessage = "";
 
         try {
             const body = await response.json();
-            message = body.message || message;
+            serverMessage = body.message || "";
+            details = body.errors || null;
         } catch {
-            // La respuesta no traía JSON; se usa el mensaje genérico
+            // La respuesta no traía JSON
         }
 
-        throw new ApiError(message, response.status);
+        // El backend responde en inglés: se muestra un mensaje en español
+        // y se deja el original en la consola para depurar.
+        if (serverMessage) {
+            console.warn(`API ${response.status}: ${serverMessage}`, details ?? "");
+        }
+
+        throw new ApiError(
+            STATUS_MESSAGES[response.status] ?? STATUS_MESSAGES.default,
+            response.status,
+            details
+        );
     }
 
     return response.status === 204 ? null : response.json();

@@ -1,29 +1,46 @@
 import { useEffect, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, ImageOff, Pencil, Plus } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
+import CourseStatusActions from "../../components/admin/CourseStatusActions";
+import Notice from "../../components/ui/Notice";
 import StateMessage, { RetryButton } from "../../components/ui/StateMessage";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { getAdminCourses } from "../../services/courses.service";
-import { formatDate, formatPrice } from "../../utils/format";
+import { COURSE_STATUS, canEditCourse } from "../../constants/course";
+import { formatDateTime } from "../../utils/format";
 
 import styles from "./CoursesList.module.css";
 
 const FILTERS = [
     { value: "todos", label: "Todos" },
     { value: "publicados", label: "Publicados" },
-    { value: "no-publicados", label: "No publicados" }
+    { value: "borradores", label: "Borradores" },
+    { value: "archivados", label: "Archivados" }
 ];
 
+// Valor del filtro en la URL -> estado del curso en la API
+const FILTER_STATUS = {
+    publicados: COURSE_STATUS.PUBLISHED,
+    borradores: COURSE_STATUS.DRAFT,
+    archivados: COURSE_STATUS.ARCHIVED
+};
+
+const EMPTY_FILTER_TITLES = {
+    publicados: "No hay cursos publicados",
+    borradores: "No hay cursos en borrador",
+    archivados: "No hay cursos archivados"
+};
+
 function matchesFilter(course, filter) {
-    if (filter === "publicados") return course.isPublished;
-    if (filter === "no-publicados") return !course.isPublished;
-    return true;
+    return filter === "todos" || course.status === FILTER_STATUS[filter];
 }
 
 function CoursesList() {
     const [state, setState] = useState({ status: "loading", courses: [], error: null });
     const [reloadKey, setReloadKey] = useState(0);
+    // Aviso después de publicar/despublicar/archivar
+    const [notice, setNotice] = useState(null);
 
     // El filtro vive en la URL (?estado=...) para conservarlo al volver del detalle
     const [searchParams, setSearchParams] = useSearchParams();
@@ -54,6 +71,18 @@ function CoursesList() {
         setReloadKey((key) => key + 1);
     }
 
+    function handleStatusChanged(updated, message) {
+        setState((prev) => ({
+            ...prev,
+            courses: prev.courses.map((c) => (c.id === updated.id ? updated : c))
+        }));
+        setNotice({ variant: "success", text: message });
+    }
+
+    function handleStatusError(message) {
+        setNotice({ variant: "error", text: message });
+    }
+
     function changeFilter(value) {
         const next = new URLSearchParams(searchParams);
         if (value === "todos") next.delete("estado");
@@ -63,8 +92,9 @@ function CoursesList() {
 
     const counts = {
         todos: state.courses.length,
-        publicados: state.courses.filter((c) => c.isPublished).length,
-        "no-publicados": state.courses.filter((c) => !c.isPublished).length
+        publicados: state.courses.filter((c) => matchesFilter(c, "publicados")).length,
+        borradores: state.courses.filter((c) => matchesFilter(c, "borradores")).length,
+        archivados: state.courses.filter((c) => matchesFilter(c, "archivados")).length
     };
 
     const visibleCourses = state.courses.filter((c) => matchesFilter(c, filter));
@@ -79,7 +109,18 @@ function CoursesList() {
                         Todos los cursos registrados de la Academia, publicados o no.
                     </p>
                 </div>
+
+                <Link to="/admin/cursos/nuevo" className="btn btn-primary">
+                    <Plus size={18} aria-hidden="true" />
+                    Nuevo curso
+                </Link>
             </header>
+
+            {notice && (
+                <Notice variant={notice.variant} onClose={() => setNotice(null)}>
+                    {notice.text}
+                </Notice>
+            )}
 
             <div
                 className={styles.filters}
@@ -118,6 +159,12 @@ function CoursesList() {
                 <StateMessage
                     title="Todavía no hay cursos registrados"
                     description="Cuando se cree el primer curso aparecerá en esta lista."
+                    action={
+                        <Link to="/admin/cursos/nuevo" className="btn btn-primary">
+                            <Plus size={18} aria-hidden="true" />
+                            Crear el primer curso
+                        </Link>
+                    }
                 />
             )}
 
@@ -125,11 +172,7 @@ function CoursesList() {
                 state.courses.length > 0 &&
                 visibleCourses.length === 0 && (
                     <StateMessage
-                        title={
-                            filter === "publicados"
-                                ? "No hay cursos publicados"
-                                : "No hay cursos sin publicar"
-                        }
+                        title={EMPTY_FILTER_TITLES[filter]}
                         description="Pruebe con otro filtro para ver el resto de los cursos."
                         action={
                             <button
@@ -152,18 +195,14 @@ function CoursesList() {
                         <thead>
                             <tr>
                                 <th scope="col">Curso</th>
-                                <th scope="col">Horario</th>
-                                <th scope="col" className={styles.num}>Precio</th>
-                                <th scope="col" className={styles.num}>Cupo</th>
                                 <th scope="col">Estado</th>
-                                <th scope="col"><span className="sr-only">Ver detalle</span></th>
+                                <th scope="col">Última modificación</th>
+                                <th scope="col"><span className="sr-only">Acciones</span></th>
                             </tr>
                         </thead>
                         <tbody>
                             {visibleCourses.map((course) => {
                                 const detailUrl = `/admin/cursos/${course.id}`;
-                                const isFull = course.enrolledCount >= course.capacity;
-
                                 return (
                                     <tr
                                         key={course.id}
@@ -171,36 +210,46 @@ function CoursesList() {
                                         onClick={() => navigate(detailUrl, { state: detailState })}
                                     >
                                         <td data-label="Curso">
-                                            <div>
-                                                <span className={styles.name}>{course.name}</span>
-                                                <span className={styles.secondary}>
-                                                    {course.instructor}
-                                                </span>
-                                            </div>
-                                        </td>
-                                        <td data-label="Horario">
-                                            <div>
-                                                <span>{course.schedule}</span>
-                                                <span className={styles.secondary}>
-                                                    Inicia el {formatDate(course.startDate)}
-                                                </span>
-                                            </div>
-                                        </td>
-                                        <td data-label="Precio" className={styles.num}>
-                                            {formatPrice(course.price)}
-                                        </td>
-                                        <td data-label="Cupo" className={styles.num}>
-                                            <div>
-                                                <span className={isFull ? styles.full : ""}>
-                                                    {course.enrolledCount}/{course.capacity}
-                                                </span>
-                                                {isFull && <span className={styles.fullTag}>Lleno</span>}
+                                            <div className={styles.courseCell}>
+                                                <CourseThumb course={course} />
+                                                <div>
+                                                    <span className={styles.name}>{course.name}</span>
+                                                    <span className={styles.secondary}>
+                                                        {course.summary}
+                                                    </span>
+                                                    <span className={styles.meta}>
+                                                        {countLabel(course.learningOutcomes, "aprendizaje", "aprendizajes")}
+                                                        {" · "}
+                                                        {countLabel(course.requiredMaterials, "material", "materiales")}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </td>
                                         <td data-label="Estado">
-                                            <StatusBadge isPublished={course.isPublished} />
+                                            <StatusBadge status={course.status} />
+                                        </td>
+                                        <td data-label="Modificado" className={styles.date}>
+                                            {formatDateTime(course.updatedAt)}
                                         </td>
                                         <td className={styles.action}>
+                                            <CourseStatusActions
+                                                course={course}
+                                                compact
+                                                onChanged={handleStatusChanged}
+                                                onError={handleStatusError}
+                                            />
+                                            {canEditCourse(course) && (
+                                                <Link
+                                                    to={`${detailUrl}/editar`}
+                                                    state={detailState}
+                                                    className={styles.editLink}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    aria-label={`Editar ${course.name}`}
+                                                    title="Editar"
+                                                >
+                                                    <Pencil size={16} aria-hidden="true" />
+                                                </Link>
+                                            )}
                                             <Link
                                                 to={detailUrl}
                                                 state={detailState}
@@ -219,6 +268,33 @@ function CoursesList() {
                 </div>
             )}
         </section>
+    );
+}
+
+function countLabel(items = [], singular, plural) {
+    const n = items.length;
+    if (n === 0) return `Sin ${plural}`;
+    return `${n} ${n === 1 ? singular : plural}`;
+}
+
+function CourseThumb({ course }) {
+    const [broken, setBroken] = useState(false);
+
+    if (!course.imageUrl || broken) {
+        return (
+            <span className={styles.thumbEmpty} aria-hidden="true">
+                <ImageOff size={18} />
+            </span>
+        );
+    }
+
+    return (
+        <img
+            src={course.imageUrl}
+            alt=""
+            className={styles.thumb}
+            onError={() => setBroken(true)}
+        />
     );
 }
 

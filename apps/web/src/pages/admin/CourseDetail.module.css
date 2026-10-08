@@ -43,58 +43,11 @@
 .visibility {
   color: var(--cp-muted);
   font-size: 0.9rem;
-  margin-top: -0.5rem;
 }
 
 .description {
   font-size: 1.05rem;
   max-width: 65ch;
-}
-
-.facts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 1rem;
-  margin: 0.5rem 0 0;
-  padding: 1.25rem 0 0;
-  border-top: 1px solid var(--cp-border);
-}
-
-.fact {
-  display: flex;
-  gap: 0.75rem;
-  align-items: flex-start;
-}
-
-.factIcon {
-  flex-shrink: 0;
-  margin-top: 0.15rem;
-  color: var(--cp-mint-600);
-}
-
-.fact dt {
-  font-size: 0.8rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--cp-muted);
-}
-
-.fact dd {
-  margin: 0.1rem 0 0;
-  font-weight: 600;
-}
-
-.fact dd.hint {
-  font-weight: 400;
-  font-size: 0.85rem;
-  color: var(--cp-muted);
-}
-
-.fact dd.warn {
-  font-weight: 700;
-  font-size: 0.85rem;
-  color: var(--cp-danger);
 }
 
 .meta {
@@ -125,4 +78,102 @@
   .skeleton {
     animation: none;
   }
+}
+
+.top {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.intro {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.image,
+.imageEmpty {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.imageEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  background: var(--cp-mint-50);
+  color: var(--cp-mint-700);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 0.5rem;
+}
+
+.summary {
+  font-size: 1.1rem;
+  color: var(--cp-text);
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--cp-border);
+}
+
+.block h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.1rem;
+}
+
+.blockIcon {
+  color: var(--cp-mint-600);
+}
+
+.lists {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 2rem;
+}
+
+.itemList {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.itemList li::marker {
+  color: var(--cp-mint-600);
+}
+
+.empty {
+  color: var(--cp-muted);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 700px) {
+  .top,
+  .lists {
+    grid-template-columns: 1fr;
+  }
+
+  .image,
+  .imageEmpty {
+    max-width: 320px;
+  }
+}
+
+.editButton {
+  margin-left: auto;
 }

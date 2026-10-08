@@ -1,18 +1,20 @@
 import { useEffect, useState } from "react";
 import {
     ArrowLeft,
-    Banknote,
-    CalendarDays,
-    Clock,
-    UserRound,
-    Users
+    GraduationCap,
+    ImageOff,
+    Package,
+    Pencil
 } from "lucide-react";
 import { Link, useLocation, useParams } from "react-router-dom";
 
+import CourseStatusActions from "../../components/admin/CourseStatusActions";
+import Notice from "../../components/ui/Notice";
 import StateMessage, { RetryButton } from "../../components/ui/StateMessage";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { getAdminCourseById } from "../../services/courses.service";
-import { formatDate, formatDateTime, formatPrice } from "../../utils/format";
+import { COURSE_STATUS, canEditCourse } from "../../constants/course";
+import { formatDateTime } from "../../utils/format";
 
 import styles from "./CourseDetail.module.css";
 
@@ -22,6 +24,10 @@ function CourseDetail() {
 
     // Vuelve a la lista con el mismo filtro que tenía la persona
     const backTo = location.state?.from || "/admin/cursos";
+
+    // Aviso que llega desde otra pantalla, ej. "El curso se creó correctamente"
+    const flash = location.state?.flash;
+    const [notice, setNotice] = useState(flash ? { variant: "success", text: flash } : null);
 
     const [state, setState] = useState({ id: null, status: "loading", course: null, error: null });
     const [reloadKey, setReloadKey] = useState(0);
@@ -100,41 +106,82 @@ function CourseDetail() {
     }
 
     const { course } = state;
-    const available = Math.max(course.capacity - course.enrolledCount, 0);
+    const visibilityText = {
+        [COURSE_STATUS.PUBLISHED]: "Este curso se muestra en la oferta pública de la Academia.",
+        [COURSE_STATUS.DRAFT]: "Borrador: este curso no es visible para el público.",
+        [COURSE_STATUS.ARCHIVED]: "Archivado: este curso ya no se ofrece ni es visible para el público."
+    }[course.status];
 
     return (
         <section className={styles.page}>
             {backLink}
 
-            <article className={styles.card}>
-                <header className={styles.header}>
-                    <h1>{course.name}</h1>
-                    <StatusBadge isPublished={course.isPublished} />
-                </header>
+            {notice && (
+                <Notice variant={notice.variant} onClose={() => setNotice(null)}>
+                    {notice.text}
+                </Notice>
+            )}
 
-                <p className={styles.visibility}>
-                    {course.isPublished
-                        ? "Este curso se muestra en la oferta pública de la Academia."
-                        : "Este curso no es visible para el público."}
-                </p>
+            <article className={styles.card}>
+                <div className={styles.top}>
+                    <CourseImage url={course.imageUrl} name={course.name} />
+
+                    <div className={styles.intro}>
+                        <header className={styles.header}>
+                            <h1>{course.name}</h1>
+                            <StatusBadge status={course.status} />
+                            {canEditCourse(course) && (
+                                <Link
+                                    to={`/admin/cursos/${course.id}/editar`}
+                                    state={{ from: backTo }}
+                                    className={`btn btn-secondary ${styles.editButton}`}
+                                >
+                                    <Pencil size={16} aria-hidden="true" />
+                                    Editar
+                                </Link>
+                            )}
+                        </header>
+
+                        <p className={styles.visibility}>
+                            {visibilityText}
+                        </p>
+
+                        <CourseStatusActions
+                            course={course}
+                            onChanged={(updated, message) => {
+                                setState((prev) => ({ ...prev, course: updated }));
+                                setNotice({ variant: "success", text: message });
+                            }}
+                            onError={(message) => setNotice({ variant: "error", text: message })}
+                        />
+
+                        {course.summary && (
+                            <p className={styles.summary}>{course.summary}</p>
+                        )}
+                    </div>
+                </div>
 
                 {course.description && (
-                    <p className={styles.description}>{course.description}</p>
+                    <section className={styles.block}>
+                        <h2>Descripción</h2>
+                        <p className={styles.description}>{course.description}</p>
+                    </section>
                 )}
 
-                <dl className={styles.facts}>
-                    <Fact icon={UserRound} label="Instructor" value={course.instructor} />
-                    <Fact icon={Clock} label="Horario" value={course.schedule} />
-                    <Fact icon={CalendarDays} label="Fecha de inicio" value={formatDate(course.startDate)} />
-                    <Fact icon={Banknote} label="Precio" value={formatPrice(course.price)} />
-                    <Fact
-                        icon={Users}
-                        label="Cupo"
-                        value={`${course.enrolledCount} de ${course.capacity} matriculados`}
-                        hint={available === 0 ? "Sin espacios disponibles" : `${available} espacios disponibles`}
-                        warn={available === 0}
+                <div className={styles.lists}>
+                    <ItemList
+                        icon={GraduationCap}
+                        title="¿Qué aprenderá el estudiante?"
+                        items={course.learningOutcomes}
+                        emptyText="No se han agregado aprendizajes."
                     />
-                </dl>
+                    <ItemList
+                        icon={Package}
+                        title="Materiales que debe traer"
+                        items={course.requiredMaterials}
+                        emptyText="No se han agregado materiales."
+                    />
+                </div>
 
                 <footer className={styles.meta}>
                     <span>Creado: {formatDateTime(course.createdAt)}</span>
@@ -145,16 +192,45 @@ function CourseDetail() {
     );
 }
 
-function Fact({ icon: Icon, label, value, hint, warn = false }) {
-    return (
-        <div className={styles.fact}>
-            <Icon size={20} aria-hidden="true" className={styles.factIcon} />
-            <div>
-                <dt>{label}</dt>
-                <dd>{value || "—"}</dd>
-                {hint && <dd className={warn ? styles.warn : styles.hint}>{hint}</dd>}
+function CourseImage({ url, name }) {
+    const [broken, setBroken] = useState(false);
+
+    if (!url || broken) {
+        return (
+            <div className={styles.imageEmpty}>
+                <ImageOff size={32} aria-hidden="true" />
+                <span>{url ? "No se pudo cargar la imagen" : "Sin imagen"}</span>
             </div>
-        </div>
+        );
+    }
+
+    return (
+        <img
+            src={url}
+            alt={`Imagen del curso ${name}`}
+            className={styles.image}
+            onError={() => setBroken(true)}
+        />
+    );
+}
+
+function ItemList({ icon: Icon, title, items = [], emptyText }) {
+    return (
+        <section className={styles.block}>
+            <h2>
+                <Icon size={18} aria-hidden="true" className={styles.blockIcon} />
+                {title}
+            </h2>
+            {items.length === 0 ? (
+                <p className={styles.empty}>{emptyText}</p>
+            ) : (
+                <ul className={styles.itemList}>
+                    {items.map((item) => (
+                        <li key={item}>{item}</li>
+                    ))}
+                </ul>
+            )}
+        </section>
     );
 }
 

@@ -1,0 +1,44 @@
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.8rem 1rem;
+  border: 1px solid;
+  border-radius: var(--radius);
+  font-weight: 600;
+}
+
+.notice > svg {
+  flex-shrink: 0;
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+}
+
+.success {
+  border-color: #b9e0d0;
+  background: var(--cp-mint-50);
+  color: var(--cp-mint-700);
+}
+
+.error {
+  border-color: #f4c7c3;
+  background: var(--cp-danger-50);
+  color: var(--cp-danger);
+}
+
+.close {
+  display: inline-flex;
+  padding: 0.3rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.close:hover {
+  background: rgba(0, 0, 0, 0.06);
+}

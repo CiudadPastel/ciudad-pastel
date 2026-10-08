@@ -1,0 +1,59 @@
+.full {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.compact {
+  display: inline-flex;
+  gap: 0.15rem;
+  vertical-align: middle;
+}
+
+.iconButton {
+  display: inline-flex;
+  padding: 0.4rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--cp-navy);
+  cursor: pointer;
+}
+
+.iconButton:hover:not(:disabled) {
+  background: var(--cp-navy-50);
+}
+
+.iconButton:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.dangerIcon:hover:not(:disabled) {
+  background: var(--cp-danger-50);
+  color: var(--cp-danger);
+}
+
+.dangerOutline {
+  color: var(--cp-danger);
+  border-color: #f4c7c3;
+}
+
+.dangerOutline:hover:not(:disabled) {
+  border-color: var(--cp-danger);
+  background: var(--cp-danger-50);
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}
