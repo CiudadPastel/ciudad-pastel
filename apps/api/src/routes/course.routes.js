@@ -9,10 +9,18 @@ import {
     createCourse,
     getCourses,
     getCourseById,
-    updateCourse
+    updateCourse,
+    updateCourseStatus
 } from "../controllers/course.controller.js";
 
 const router = Router();
+
+router.patch(
+    "/:id/status",
+    authenticateUser,
+    requireAdmin,
+    updateCourseStatus
+);
 
 router.get(
     "/",

@@ -17,6 +17,7 @@ import {
 } from "./middleware/auth.middleware.js";
 
 import courseRoutes from "./routes/course.routes.js";
+import publicCourseRoutes from "./routes/public-course.routes.js";
 
 
 dotenv.config();
@@ -70,6 +71,9 @@ app.use(
     courseRoutes
 );
 
+
+// Public published-course listing.
+app.use("/api/courses", publicCourseRoutes);
 
 // Checks whether the API is running.
 app.get("/api/health", (req, res) => {
