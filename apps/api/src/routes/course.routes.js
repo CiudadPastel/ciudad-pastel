@@ -8,7 +8,8 @@ import {
 import {
     createCourse,
     getCourses,
-    getCourseById
+    getCourseById,
+    updateCourse
 } from "../controllers/course.controller.js";
 
 const router = Router();
@@ -27,6 +28,13 @@ router.get(
     getCourseById
 );
 
+
+router.put(
+    "/:id",
+    authenticateUser,
+    requireAdmin,
+    updateCourse
+);
 
 // Creates a new course for authenticated administrators.
 router.post(
