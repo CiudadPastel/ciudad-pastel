@@ -1,7 +1,8 @@
 import {
     createCourse as createCourseService,
     getCourses as getCoursesService,
-    getCourseById as getCourseByIdService
+    getCourseById as getCourseByIdService,
+    updateCourse as updateCourseService
 } from "../services/course.service.js";
 
 // Handles the HTTP request to list administrative courses.
@@ -47,6 +48,34 @@ export async function getCourseById(req, res) {
     }
 }
 
+
+// Handles the HTTP request to update an administrative course.
+export async function updateCourse(req, res) {
+    try {
+        const course = await updateCourseService(req.params.id, req.body);
+
+        return res.status(200).json(course);
+    } catch (error) {
+        if (error.name === "ValidationError") {
+            return res.status(400).json({
+                message: error.message,
+                errors: error.details
+            });
+        }
+
+        if (error.name === "NotFoundError") {
+            return res.status(404).json({
+                message: error.message
+            });
+        }
+
+        console.error("Course update error:", error);
+
+        return res.status(500).json({
+            message: "Could not update course."
+        });
+    }
+}
 
 // Handles the HTTP request to create a new course.
 export async function createCourse(req, res) {

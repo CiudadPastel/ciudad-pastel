@@ -9,7 +9,8 @@ import {
 import {
     createCourse as createCourseRepository,
     getCourses as getCoursesRepository,
-    getCourseById as getCourseByIdRepository
+    getCourseById as getCourseByIdRepository,
+    updateCourse as updateCourseRepository
 } from "../repositories/course.repository.js";
 
 // Validates the optional status filter before reading courses.
@@ -46,6 +47,32 @@ export async function getCourseById(id) {
     return course;
 }
 
+
+// Validates and replaces the editable course information.
+export async function updateCourse(id, input) {
+    const validation = validateCourseInput(input ?? {});
+
+    if (!validation.valid) {
+        const error = new Error("Course validation failed.");
+
+        error.name = "ValidationError";
+        error.details = validation.errors;
+
+        throw error;
+    }
+
+    const course = await updateCourseRepository(id, validation.data);
+
+    if (!course) {
+        const error = new Error("Course not found.");
+
+        error.name = "NotFoundError";
+
+        throw error;
+    }
+
+    return course;
+}
 
 // Validates the input and creates a new draft course.
 export async function createCourse(input) {
