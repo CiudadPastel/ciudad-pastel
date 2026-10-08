@@ -16,6 +16,42 @@ tags:
 paths:
 
   /admin/courses:
+    get:
+      tags:
+        - Courses
+      summary: List administrative courses
+      description: Returns all courses, including draft, published, and archived courses, optionally filtered by status.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Filter courses by status. Omit to return all courses.
+          schema:
+            type: string
+            enum:
+              - draft
+              - published
+              - archived
+      responses:
+        "200":
+          description: Courses retrieved successfully.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Course"
+        "400":
+          description: Unsupported status filter.
+        "401":
+          description: Authentication required or invalid token.
+        "403":
+          description: Administrator privileges required.
+        "500":
+          description: Internal server error.
+
     post:
       tags:
         - Courses
@@ -61,6 +97,37 @@ paths:
         "403":
           description: Administrator privileges required.
 
+        "500":
+          description: Internal server error.
+
+  /admin/courses/{id}:
+    get:
+      tags:
+        - Courses
+      summary: Get an administrative course
+      description: Returns a course using its Firestore document ID.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Course document ID.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Course retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Course"
+        "401":
+          description: Authentication required or invalid token.
+        "403":
+          description: Administrator privileges required.
+        "404":
+          description: Course not found.
         "500":
           description: Internal server error.
 
@@ -138,7 +205,9 @@ components:
                 - archived
 
             createdAt:
-              type: object
+              type: string
+              format: date-time
 
             updatedAt:
-              type: object
+              type: string
+              format: date-time
