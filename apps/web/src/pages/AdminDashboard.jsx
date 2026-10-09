@@ -1,7 +1,7 @@
 import { BookOpen } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import { useAuth } from "../auth/AuthProvider";
+import { useAuth } from "../auth/authContext";
 
 function AdminDashboard() {
     const { user } = useAuth();

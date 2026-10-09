@@ -39,7 +39,7 @@ function matchesFilter(course, filter) {
 function CoursesList() {
     const [state, setState] = useState({ status: "loading", courses: [], error: null });
     const [reloadKey, setReloadKey] = useState(0);
-    // Aviso después de publicar/despublicar/archivar
+    // Aviso después de publicar, pasar a borrador o archivar
     const [notice, setNotice] = useState(null);
 
     // El filtro vive en la URL (?estado=...) para conservarlo al volver del detalle

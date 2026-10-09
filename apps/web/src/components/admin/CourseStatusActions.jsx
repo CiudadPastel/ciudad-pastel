@@ -18,8 +18,8 @@ const ACTIONS = [
     },
     {
         target: COURSE_STATUS.DRAFT,
-        label: "Despublicar",
-        hint: "Ocultar el curso y pasarlo a borrador",
+        label: "Pasar a borrador",
+        hint: "Ocultar el curso del público y moverlo a borradores",
         icon: EyeOff,
         buttonClass: "btn-secondary",
         success: (name) => `"${name}" pasó a borrador y ya no es visible para el público.`
