@@ -4,6 +4,7 @@ import {
     CircleAlert,
     Eye,
     EyeOff,
+    Info,
     LoaderCircle,
     Lock,
     LogIn,
@@ -16,7 +17,7 @@ import {
     useNavigate
 } from "react-router-dom";
 
-import { useAuth } from "../auth/AuthProvider";
+import { useAuth } from "../auth/authContext";
 import logo from "../assets/logo-ciudad-pastel-blanco.png";
 
 import styles from "./AdminLogin.module.css";
@@ -35,6 +36,7 @@ function AdminLogin() {
     const {
         user,
         loading,
+        sessionMessage,
         login
     } = useAuth();
 
@@ -50,9 +52,11 @@ function AdminLogin() {
         try {
             await login(email, password);
 
-            const destination =
-                location.state?.from?.pathname
-                || "/admin";
+            // Vuelve a la página que se intentó abrir, con sus filtros (?estado=...)
+            const from = location.state?.from;
+            const destination = from?.pathname
+                ? `${from.pathname}${from.search ?? ""}`
+                : "/admin";
 
             navigate(destination, {
                 replace: true
@@ -131,6 +135,13 @@ function AdminLogin() {
                         <h1>Administración</h1>
                         <p>Ingrese con su cuenta autorizada de Ciudad Pastel.</p>
                     </header>
+
+                    {sessionMessage && !error && (
+                        <p role="status" className={styles.info}>
+                            <Info size={18} aria-hidden="true" />
+                            {sessionMessage}
+                        </p>
+                    )}
 
                     <form onSubmit={handleSubmit} className={styles.form}>
                         <div className={styles.field}>

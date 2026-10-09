@@ -1,7 +1,7 @@
 import { BookOpen, LayoutDashboard, LogOut } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
-import { useAuth } from "../../auth/AuthProvider";
+import { useAuth } from "../../auth/authContext";
 
 import styles from "./AdminLayout.module.css";
 

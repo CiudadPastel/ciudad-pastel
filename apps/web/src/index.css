@@ -130,3 +130,17 @@ button {
 .btn-secondary:hover {
   border-color: var(--cp-navy);
 }
+
+.btn-danger {
+  background: var(--cp-danger);
+  color: #fff;
+}
+
+.btn-danger:hover {
+  background: #912018;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

@@ -18,3 +18,8 @@
   background: var(--cp-neutral-50);
   color: var(--cp-neutral-700);
 }
+
+.archived {
+  background: #f6efe3;
+  color: #7a5a1f;
+}

@@ -152,6 +152,24 @@
   margin-top: 0.1rem;
 }
 
+.info {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 8px;
+  background: var(--cp-navy-50);
+  border: 1px solid #cdd8e5;
+  color: var(--cp-navy);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.info svg {
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
 .submit {
   justify-content: center;
   padding: 0.8rem 1rem;

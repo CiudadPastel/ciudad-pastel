@@ -1,6 +1,4 @@
 import {
-    createContext,
-    useContext,
     useEffect,
     useState
 } from "react";
@@ -11,12 +9,15 @@ import {
     signOutAdmin,
     validateAdminSession
 } from "../services/auth.service";
+import { AUTH_EXPIRED_EVENT } from "../services/api";
 
-const AuthContext = createContext(null);
+import { AuthContext } from "./authContext";
 
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
+    // Mensaje para el login cuando la sesión se cerró sola (ej. token vencido)
+    const [sessionMessage, setSessionMessage] = useState("");
 
     useEffect(() => {
         const unsubscribe = observeAuthState(
@@ -53,11 +54,32 @@ export function AuthProvider({ children }) {
         return unsubscribe;
     }, []);
 
+    // Cierra la sesión si la API indica que el token ya no sirve o no hay permisos
+    useEffect(() => {
+        async function handleAuthExpired(event) {
+            setSessionMessage(
+                event.detail?.status === 403
+                    ? "Su cuenta ya no tiene permisos de administración."
+                    : "Su sesión expiró. Inicie sesión de nuevo."
+            );
+
+            try {
+                await signOutAdmin();
+            } finally {
+                setUser(null);
+            }
+        }
+
+        window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
+        return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
+    }, []);
+
     async function login(email, password) {
         const result =
             await signInAdmin(email, password);
 
         setUser(result.firebaseUser);
+        setSessionMessage("");
 
         return result.firebaseUser;
     }
@@ -70,6 +92,7 @@ export function AuthProvider({ children }) {
     const value = {
         user,
         loading,
+        sessionMessage,
         login,
         logout
     };
@@ -79,8 +102,4 @@ export function AuthProvider({ children }) {
             {children}
         </AuthContext.Provider>
     );
-}
-
-export function useAuth() {
-    return useContext(AuthContext);
 }

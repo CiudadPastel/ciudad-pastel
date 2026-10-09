@@ -16,8 +16,14 @@ import AdminLogin
 import AdminDashboard
     from "./pages/AdminDashboard";
 
+import CourseCreate
+    from "./pages/admin/CourseCreate";
+
 import CourseDetail
     from "./pages/admin/CourseDetail";
+
+import CourseEdit
+    from "./pages/admin/CourseEdit";
 
 import CoursesList
     from "./pages/admin/CoursesList";
@@ -58,8 +64,18 @@ function App() {
                     />
 
                     <Route
+                        path="cursos/nuevo"
+                        element={<CourseCreate />}
+                    />
+
+                    <Route
                         path="cursos/:id"
                         element={<CourseDetail />}
+                    />
+
+                    <Route
+                        path="cursos/:id/editar"
+                        element={<CourseEdit />}
                     />
                 </Route>
             </Route>
