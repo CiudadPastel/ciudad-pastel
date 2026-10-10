@@ -21,19 +21,19 @@ export function isPublished(course) {
 /*
  * Cambios de estado permitidos. Igual que COURSE_STATUS_TRANSITIONS
  * en apps/api/src/services/course.service.js.
- * Un curso archivado ya no puede cambiar de estado.
+ * Un curso archivado puede volver a borrador antes de publicarse.
  */
 export const COURSE_STATUS_TRANSITIONS = {
     [COURSE_STATUS.DRAFT]: [COURSE_STATUS.PUBLISHED, COURSE_STATUS.ARCHIVED],
     [COURSE_STATUS.PUBLISHED]: [COURSE_STATUS.DRAFT, COURSE_STATUS.ARCHIVED],
-    [COURSE_STATUS.ARCHIVED]: []
+    [COURSE_STATUS.ARCHIVED]: [COURSE_STATUS.DRAFT]
 };
 
 export function canChangeStatus(course, nextStatus) {
     return COURSE_STATUS_TRANSITIONS[course?.status]?.includes(nextStatus) ?? false;
 }
 
-/** Los cursos archivados no se editan: ya no se ofrecen y no pueden volver. */
+/** Los cursos archivados deben volver a borrador antes de editarse. */
 export function canEditCourse(course) {
     return course?.status !== COURSE_STATUS.ARCHIVED;
 }

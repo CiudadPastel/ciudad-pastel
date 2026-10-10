@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Archive, Eye, EyeOff, LoaderCircle } from "lucide-react";
+import { Archive, ArchiveRestore, Eye, EyeOff, LoaderCircle } from "lucide-react";
 
 import ConfirmDialog from "../ui/ConfirmDialog";
 import { COURSE_STATUS, canChangeStatus } from "../../constants/course";
@@ -9,6 +9,7 @@ import styles from "./CourseStatusActions.module.css";
 
 const ACTIONS = [
     {
+        from: [COURSE_STATUS.DRAFT],
         target: COURSE_STATUS.PUBLISHED,
         label: "Publicar",
         hint: "Mostrar el curso al público",
@@ -17,6 +18,7 @@ const ACTIONS = [
         success: (name) => `"${name}" se publicó y ya es visible para el público.`
     },
     {
+        from: [COURSE_STATUS.PUBLISHED],
         target: COURSE_STATUS.DRAFT,
         label: "Pasar a borrador",
         hint: "Ocultar el curso del público y moverlo a borradores",
@@ -25,9 +27,19 @@ const ACTIONS = [
         success: (name) => `"${name}" pasó a borrador y ya no es visible para el público.`
     },
     {
+        from: [COURSE_STATUS.ARCHIVED],
+        target: COURSE_STATUS.DRAFT,
+        label: "Desarchivar",
+        hint: "Restaurar el curso como borrador sin publicarlo",
+        icon: ArchiveRestore,
+        buttonClass: "btn-secondary",
+        success: (name) => `"${name}" se desarchivó y volvió a borrador.`
+    },
+    {
+        from: [COURSE_STATUS.DRAFT, COURSE_STATUS.PUBLISHED],
         target: COURSE_STATUS.ARCHIVED,
         label: "Archivar",
-        hint: "Retirar el curso definitivamente",
+        hint: "Retirar el curso de la oferta pública",
         icon: Archive,
         buttonClass: "btn-secondary",
         danger: true,
@@ -47,9 +59,11 @@ function CourseStatusActions({ course, compact = false, onChanged, onError }) {
     const [pending, setPending] = useState(null);
     const [confirming, setConfirming] = useState(false);
 
-    const available = ACTIONS.filter((action) => canChangeStatus(course, action.target));
+    const available = ACTIONS.filter((action) =>
+        action.from.includes(course.status) && canChangeStatus(course, action.target)
+    );
 
-    // Curso archivado: no hay acciones posibles
+    // No mostrar botones si el estado no tiene acciones disponibles.
     if (available.length === 0) return null;
 
     async function run(action) {
@@ -130,11 +144,12 @@ function CourseStatusActions({ course, compact = false, onChanged, onError }) {
                 <p>
                     {isPublishedNow
                         ? "El curso dejará de mostrarse al público de inmediato."
-                        : "El curso quedará retirado de la Academia."}
+                        : "El curso seguirá oculto al público."}
                 </p>
                 <p>
-                    <strong>Esta acción no se puede deshacer:</strong> un curso archivado
-                    no se puede volver a publicar ni editar.
+                    Mientras esté archivado, el curso no se puede editar. Puede
+                    desarchivarlo después para volver a borrador y, desde allí, editarlo
+                    o publicarlo.
                 </p>
             </ConfirmDialog>
             )}

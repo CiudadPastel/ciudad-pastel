@@ -181,7 +181,8 @@ paths:
       summary: Change an administrative course status
       description: >-
         Allows draft to published, published to draft, and draft or published to archived.
-        Archived is terminal. Same-state transitions are rejected.
+        Archived to draft restores (unarchives) the course as a draft, hidden from the public listing until explicitly published.
+        Archived to published and same-state transitions are rejected.
         Only status and the server-generated updatedAt change; course content, ID, and createdAt are preserved.
       security:
         - bearerAuth: []

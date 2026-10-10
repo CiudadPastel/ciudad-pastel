@@ -114,7 +114,7 @@ function CourseEdit() {
                 {backLink}
                 <StateMessage
                     title="Este curso está archivado"
-                    description="Los cursos archivados ya no se ofrecen y no se pueden editar."
+                    description="Este curso está archivado. Desarchívelo primero para volver a editarlo."
                     action={
                         <Link to={detailUrl} state={{ from: listUrl }} className="btn btn-primary">
                             Volver al curso
