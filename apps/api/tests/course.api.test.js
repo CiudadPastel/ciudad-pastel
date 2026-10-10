@@ -93,7 +93,7 @@ beforeEach(() => {
     fake.repository.updateCourseStatus.mockImplementation(async (id, status, validateTransition) => {
         const current = fake.courses.get(id);
         if (!current) return null;
-        // Use the real service's rules, including same-state and terminal states.
+        // Use the real service's rules, including rejected transitions.
         validateTransition(current.status);
         const updated = { ...current, status, updatedAt: timestamp() };
         fake.courses.set(id, updated);
@@ -235,10 +235,11 @@ describe("course updates", () => {
     });
 });
 
-describe("status transitions and archiving", () => {
+describe("status transitions, archiving and unarchiving", () => {
     it.each([
         [STATUS.DRAFT, STATUS.PUBLISHED], [STATUS.PUBLISHED, STATUS.DRAFT],
-        [STATUS.DRAFT, STATUS.ARCHIVED], [STATUS.PUBLISHED, STATUS.ARCHIVED]
+        [STATUS.DRAFT, STATUS.ARCHIVED], [STATUS.PUBLISHED, STATUS.ARCHIVED],
+        [STATUS.ARCHIVED, STATUS.DRAFT]
     ])("changes %s to %s while preserving content and metadata", async (from, to) => {
         const before = seedCourse(from);
         const response = await adminRequest("patch", `/api/admin/courses/${before.id}/status`).send({
@@ -254,7 +255,7 @@ describe("status transitions and archiving", () => {
 
     it.each([
         [STATUS.DRAFT, STATUS.DRAFT], [STATUS.PUBLISHED, STATUS.PUBLISHED],
-        [STATUS.ARCHIVED, STATUS.DRAFT], [STATUS.ARCHIVED, STATUS.PUBLISHED], [STATUS.ARCHIVED, STATUS.ARCHIVED]
+        [STATUS.ARCHIVED, STATUS.PUBLISHED], [STATUS.ARCHIVED, STATUS.ARCHIVED]
     ])("rejects %s to %s without modifying the course", async (from, to) => {
         const before = seedCourse(from);
         const response = await adminRequest("patch", `/api/admin/courses/${before.id}/status`).send({ status: to });
@@ -276,6 +277,24 @@ describe("status transitions and archiving", () => {
         expect(response.status).toBe(404);
         expect(response.body.message).toMatch(/course not found/i);
         expect((await adminRequest("get", "/api/admin/courses/missing")).status).toBe(404);
+    });
+
+    it.each([STATUS.PUBLISHED, STATUS.ARCHIVED])("allows a restored draft to become %s through the normal status endpoint", async (target) => {
+        const before = seedCourse(STATUS.ARCHIVED);
+        const restored = await adminRequest("patch", `/api/admin/courses/${before.id}/status`).send({ status: STATUS.DRAFT });
+        expect(restored.status).toBe(200);
+        expect(restored.body).toEqual({ ...before, status: STATUS.DRAFT, updatedAt: expect.any(String) });
+        expect(restored.body.updatedAt).not.toBe(before.updatedAt);
+
+        const publicCourses = await request(app).get("/api/courses");
+        expect(publicCourses.status).toBe(200);
+        expect(publicCourses.body).toEqual([]);
+
+        const changed = await adminRequest("patch", `/api/admin/courses/${before.id}/status`).send({ status: target });
+        expect(changed.status).toBe(200);
+        expect(changed.body).toEqual({ ...before, status: target, updatedAt: expect.any(String) });
+        expect(changed.body.updatedAt).not.toBe(restored.body.updatedAt);
+        expect((await request(app).get("/api/courses")).body).toEqual(target === STATUS.PUBLISHED ? [changed.body] : []);
     });
 
     it("archives instead of removing a course and excludes it from the public listing", async () => {
@@ -359,6 +378,23 @@ describe("unexpected repository failures", () => {
 });
 
 describe("application routes and isolation", () => {
+    it("starts the API entry point and serves health without real Firebase", async () => {
+        vi.stubEnv("PORT", "0");
+        vi.spyOn(console, "log").mockImplementation(() => {});
+        const listen = vi.spyOn(app, "listen");
+        await import("../src/index.js");
+        const server = listen.mock.results[0].value;
+
+        try {
+            const response = await request(server).get("/api/health");
+            expect(response.status).toBe(200);
+            expect(response.body.status).toBe("ok");
+            expect(fake.healthQuery).not.toHaveBeenCalled();
+        } finally {
+            await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+        }
+    });
+
     it("runs with no Firebase credential path", () => {
         expect(process.env.GOOGLE_APPLICATION_CREDENTIALS).toBe("");
     });
