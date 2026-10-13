@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto";
 import { buildCourse, COURSE_STATUS } from "../models/course.model.js";
 
 import {
-    validateCourseInput
+    validateCourseInput,
+    getMissingPlanningFields
 } from "../validators/course.validator.js";
 
 import {
@@ -19,6 +20,21 @@ const COURSE_STATUS_TRANSITIONS = {
     [COURSE_STATUS.PUBLISHED]: [COURSE_STATUS.DRAFT, COURSE_STATUS.ARCHIVED],
     [COURSE_STATUS.ARCHIVED]: [COURSE_STATUS.DRAFT]
 };
+
+// Builds the error reported when a published course lacks planning data.
+function buildPlanningDataError(missingFields) {
+    const error = new Error(
+        "Course publication validation failed."
+    );
+
+    error.name = "ValidationError";
+    error.details = missingFields.map(
+        (field) =>
+            `${field} is required for a published course.`
+    );
+
+    return error;
+}
 
 // Lists only published courses for public access.
 export async function getPublishedCourses() {
@@ -45,7 +61,7 @@ export async function updateCourseStatus(id, input) {
         throw error;
     }
 
-    const course = await updateCourseStatusRepository(id, status, (currentStatus) => {
+    const course = await updateCourseStatusRepository(id, status, (currentStatus, currentCourse) => {
         if (!COURSE_STATUS_TRANSITIONS[currentStatus]?.includes(status)) {
             const error = new Error(
                 `Cannot change course status from ${currentStatus} to ${status}.`
@@ -54,6 +70,15 @@ export async function updateCourseStatus(id, input) {
             error.name = "InvalidTransitionError";
 
             throw error;
+        }
+
+        // A course can only be published with its planning data complete.
+        if (status === COURSE_STATUS.PUBLISHED) {
+            const missingFields = getMissingPlanningFields(currentCourse);
+
+            if (missingFields.length > 0) {
+                throw buildPlanningDataError(missingFields);
+            }
         }
     });
 
@@ -114,6 +139,17 @@ export async function updateCourse(id, input) {
         error.details = validation.errors;
 
         throw error;
+    }
+
+    // A published course must keep its planning data complete.
+    const missingFields = getMissingPlanningFields(validation.data);
+
+    if (missingFields.length > 0) {
+        const currentCourse = await getCourseByIdRepository(id);
+
+        if (currentCourse?.status === COURSE_STATUS.PUBLISHED) {
+            throw buildPlanningDataError(missingFields);
+        }
     }
 
     const course = await updateCourseRepository(id, validation.data);

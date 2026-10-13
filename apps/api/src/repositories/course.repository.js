@@ -10,6 +10,11 @@ function mapCourseDocument(documentSnapshot) {
 
     return {
         ...courseData,
+        // Courses created before HU-A02 do not have planning data yet.
+        capacity: courseData.capacity ?? null,
+        price: courseData.price ?? null,
+        instructor: courseData.instructor ?? null,
+        schedule: courseData.schedule ?? null,
         id: documentSnapshot.id,
         createdAt: courseData.createdAt.toDate().toISOString(),
         updatedAt: courseData.updatedAt.toDate().toISOString()
@@ -51,7 +56,7 @@ export async function updateCourseStatus(id, status, validateTransition) {
             return false;
         }
 
-        validateTransition(course.data().status);
+        validateTransition(course.data().status, course.data());
 
         transaction.update(courseRef, {
             status,
@@ -90,6 +95,10 @@ export async function updateCourse(id, courseData) {
             imageUrl: courseData.imageUrl,
             learningOutcomes: courseData.learningOutcomes,
             requiredMaterials: courseData.requiredMaterials,
+            capacity: courseData.capacity,
+            price: courseData.price,
+            instructor: courseData.instructor,
+            schedule: courseData.schedule,
             updatedAt: FieldValue.serverTimestamp()
         });
     } catch (error) {

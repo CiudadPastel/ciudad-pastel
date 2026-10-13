@@ -35,8 +35,17 @@ const validInput = {
     description: "Un curso práctico de masas, cremas y decoración para personas que comienzan en pastelería.",
     imageUrl: "https://example.com/pastel.jpg",
     learningOutcomes: ["Preparar masas básicas", "Decorar un pastel"],
-    requiredMaterials: ["Delantal", "Espátula"]
+    requiredMaterials: ["Delantal", "Espátula"],
+    capacity: 12,
+    price: 45000,
+    instructor: "Yamilena Blanco Chaves",
+    schedule: {
+        startDate: "2026-11-03",
+        endDate: "2026-11-24",
+        description: "Martes de 6:00 p. m. a 9:00 p. m."
+    }
 };
+const planningFields = ["capacity", "price", "instructor", "schedule"];
 const editableFields = Object.keys(validInput);
 
 function timestamp() {
@@ -94,7 +103,7 @@ beforeEach(() => {
         const current = fake.courses.get(id);
         if (!current) return null;
         // Use the real service's rules, including rejected transitions.
-        validateTransition(current.status);
+        validateTransition(current.status, current);
         const updated = { ...current, status, updatedAt: timestamp() };
         fake.courses.set(id, updated);
         return structuredClone(updated);
@@ -135,6 +144,55 @@ describe("course creation", () => {
         });
         expect(response.status).toBe(201);
         expect(response.body).toMatchObject({ name: validInput.name, imageUrl: null, learningOutcomes: [], requiredMaterials: [] });
+    });
+
+    it("saves a draft without planning data and stores it as null", async () => {
+        const { name, summary, description } = validInput;
+        const response = await adminRequest("post", "/api/admin/courses").send({ name, summary, description });
+        expect(response.status).toBe(201);
+        expect(response.body).toMatchObject({ status: STATUS.DRAFT, capacity: null, price: null, instructor: null, schedule: null });
+    });
+
+    it("stores and returns the planning data with the course", async () => {
+        const created = await adminRequest("post", "/api/admin/courses").send(validInput);
+        expect(created.status).toBe(201);
+        expect(created.body).toMatchObject({
+            capacity: 12, price: 45000, instructor: "Yamilena Blanco Chaves", schedule: validInput.schedule
+        });
+        const detail = await adminRequest("get", `/api/admin/courses/${created.body.id}`);
+        expect(detail.body.schedule).toEqual(validInput.schedule);
+    });
+
+    it("normalizes planning strings and an omitted end date", async () => {
+        const response = await adminRequest("post", "/api/admin/courses").send({
+            ...validInput, instructor: "  Yamilena Blanco  ",
+            schedule: { startDate: "2026-11-03", description: "  Martes por la noche  " }
+        });
+        expect(response.status).toBe(201);
+        expect(response.body.instructor).toBe("Yamilena Blanco");
+        expect(response.body.schedule).toEqual({ startDate: "2026-11-03", endDate: null, description: "Martes por la noche" });
+    });
+
+    it.each([
+        ["zero capacity", { capacity: 0 }, "capacity"],
+        ["capacity above the limit", { capacity: 101 }, "capacity"],
+        ["decimal capacity", { capacity: 12.5 }, "capacity"],
+        ["text capacity", { capacity: "12" }, "capacity"],
+        ["negative price", { price: -1 }, "price"],
+        ["decimal price", { price: 45000.5 }, "price"],
+        ["text price", { price: "45000" }, "price"],
+        ["too-short instructor", { instructor: "ab" }, "instructor"],
+        ["non-text instructor", { instructor: 123 }, "instructor"],
+        ["non-object schedule", { schedule: "martes" }, "schedule"],
+        ["schedule without start date", { schedule: { description: "Martes por la noche" } }, "schedule.startDate"],
+        ["impossible start date", { schedule: { startDate: "2026-02-30", description: "Martes por la noche" } }, "schedule.startDate"],
+        ["malformed start date", { schedule: { startDate: "03/11/2026", description: "Martes por la noche" } }, "schedule.startDate"],
+        ["end date before start date", { schedule: { startDate: "2026-11-10", endDate: "2026-11-03", description: "Martes por la noche" } }, "schedule.endDate"],
+        ["schedule without description", { schedule: { startDate: "2026-11-03" } }, "schedule.description"],
+        ["too-short schedule description", { schedule: { startDate: "2026-11-03", description: "ab" } }, "schedule.description"]
+    ])("rejects %s without creating a course", async (_label, changes, field) => {
+        expectValidation(await adminRequest("post", "/api/admin/courses").send({ ...validInput, ...changes }), field);
+        expect((await adminRequest("get", "/api/admin/courses")).body).toEqual([]);
     });
 
     it.each([
@@ -195,7 +253,9 @@ describe("course updates", () => {
         const changes = {
             name: "Decoración avanzada", summary: "Aprende nuevas técnicas de decoración profesional.",
             description: "Practica técnicas avanzadas para decorar pasteles con distintas cremas y herramientas.",
-            imageUrl: "https://example.com/decoracion.jpg", learningOutcomes: ["Aplicar decoraciones avanzadas"], requiredMaterials: ["Mangas"]
+            imageUrl: "https://example.com/decoracion.jpg", learningOutcomes: ["Aplicar decoraciones avanzadas"], requiredMaterials: ["Mangas"],
+            capacity: 8, price: 60000, instructor: "Denia González Alfaro",
+            schedule: { startDate: "2026-12-01", endDate: null, description: "Jueves de 5:00 p. m. a 8:00 p. m." }
         };
         const response = await adminRequest("put", `/api/admin/courses/${before.id}`).send({
             ...changes, id: "fake-id", status: status === STATUS.DRAFT ? STATUS.PUBLISHED : STATUS.DRAFT,
@@ -215,6 +275,28 @@ describe("course updates", () => {
         const response = await adminRequest("put", `/api/admin/courses/${before.id}`).send({ name, summary, description });
         expect(response.status).toBe(200);
         expect(response.body).toMatchObject({ imageUrl: null, learningOutcomes: [], requiredMaterials: [] });
+    });
+
+    it("clears planning data on a draft when it is omitted from the PUT", async () => {
+        const before = seedCourse();
+        const { name, summary, description } = validInput;
+        const response = await adminRequest("put", `/api/admin/courses/${before.id}`).send({ name, summary, description });
+        expect(response.status).toBe(200);
+        expect(response.body).toMatchObject({ capacity: null, price: null, instructor: null, schedule: null });
+    });
+
+    it.each(planningFields)("rejects clearing %s on a published course without modifying it", async (field) => {
+        const before = seedCourse(STATUS.PUBLISHED);
+        const response = await adminRequest("put", `/api/admin/courses/${before.id}`).send({ ...validInput, [field]: null });
+        expectValidation(response, field);
+        expect((await adminRequest("get", `/api/admin/courses/${before.id}`)).body).toEqual(before);
+        expect((await request(app).get("/api/courses")).body).toEqual([before]);
+    });
+
+    it("rejects invalid planning data on PUT without modifying the course", async () => {
+        const before = seedCourse();
+        expectValidation(await adminRequest("put", `/api/admin/courses/${before.id}`).send({ ...validInput, capacity: 0 }), "capacity");
+        expect((await adminRequest("get", `/api/admin/courses/${before.id}`)).body).toEqual(before);
     });
 
     it.each([
@@ -297,6 +379,47 @@ describe("status transitions, archiving and unarchiving", () => {
         expect((await request(app).get("/api/courses")).body).toEqual(target === STATUS.PUBLISHED ? [changed.body] : []);
     });
 
+    it("rejects publishing a draft with incomplete planning data and keeps it hidden", async () => {
+        const before = seedCourse();
+        const incomplete = { ...before, price: null, instructor: null };
+        fake.courses.set(before.id, incomplete);
+        const response = await adminRequest("patch", `/api/admin/courses/${before.id}/status`).send({ status: STATUS.PUBLISHED });
+        expect(response.status).toBe(400);
+        expect(response.body.message).toMatch(/validation/i);
+        expect(response.body.errors).toEqual([
+            expect.stringContaining("price"), expect.stringContaining("instructor")
+        ]);
+        expect((await adminRequest("get", `/api/admin/courses/${before.id}`)).body).toEqual(incomplete);
+        expect((await request(app).get("/api/courses")).body).toEqual([]);
+    });
+
+    it("lists every missing planning field when a legacy course without planning data is published", async () => {
+        const { capacity, price, instructor, schedule, ...legacy } = seedCourse();
+        fake.courses.set(legacy.id, legacy);
+        const response = await adminRequest("patch", `/api/admin/courses/${legacy.id}/status`).send({ status: STATUS.PUBLISHED });
+        expect(response.status).toBe(400);
+        expect(response.body.errors).toHaveLength(planningFields.length);
+        planningFields.forEach(field =>
+            expect(response.body.errors).toEqual(expect.arrayContaining([expect.stringContaining(field)])));
+    });
+
+    it("publishes once the missing planning data is saved", async () => {
+        const incomplete = { ...seedCourse(), capacity: null };
+        fake.courses.set(incomplete.id, incomplete);
+        expect((await adminRequest("patch", `/api/admin/courses/${incomplete.id}/status`).send({ status: STATUS.PUBLISHED })).status).toBe(400);
+        expect((await adminRequest("put", `/api/admin/courses/${incomplete.id}`).send(validInput)).status).toBe(200);
+        const published = await adminRequest("patch", `/api/admin/courses/${incomplete.id}/status`).send({ status: STATUS.PUBLISHED });
+        expect(published.status).toBe(200);
+        expect(published.body).toMatchObject({ status: STATUS.PUBLISHED, capacity: 12 });
+    });
+
+    it("does not require planning data to archive or restore a course", async () => {
+        const { capacity, price, instructor, schedule, ...legacy } = seedCourse(STATUS.PUBLISHED);
+        fake.courses.set(legacy.id, legacy);
+        expect((await adminRequest("patch", `/api/admin/courses/${legacy.id}/status`).send({ status: STATUS.ARCHIVED })).status).toBe(200);
+        expect((await adminRequest("patch", `/api/admin/courses/${legacy.id}/status`).send({ status: STATUS.DRAFT })).status).toBe(200);
+    });
+
     it("archives instead of removing a course and excludes it from the public listing", async () => {
         const before = seedCourse(STATUS.PUBLISHED);
         const response = await adminRequest("patch", `/api/admin/courses/${before.id}/status`).send({ status: STATUS.ARCHIVED });
@@ -318,6 +441,12 @@ describe("public courses", () => {
         expect(response.status).toBe(200);
         expect(response.body).toEqual([published]);
         expect(fake.verifyIdToken).not.toHaveBeenCalled();
+    });
+
+    it("exposes the planning data of published courses to visitors", async () => {
+        seedCourse(STATUS.PUBLISHED, "published-course");
+        const [course] = (await request(app).get("/api/courses")).body;
+        expect(course).toMatchObject({ capacity: 12, price: 45000, instructor: "Yamilena Blanco Chaves", schedule: validInput.schedule });
     });
 
     it("cannot expose drafts by accepting a public status query", async () => {
