@@ -22,8 +22,46 @@ const COURSE_LIMITS = {
     requiredMaterials: {
         maxItems: 30,
         maxLength: 150
+    },
+
+    // Planning data (HU-A02). Price is a whole number of Costa Rican colones.
+    capacity: {
+        min: 1,
+        max: 100
+    },
+
+    price: {
+        min: 0,
+        max: 10000000
+    },
+
+    instructor: {
+        min: 3,
+        max: 120
+    },
+
+    scheduleDescription: {
+        min: 3,
+        max: 200
     }
 };
+
+// Planning fields that must be complete before a course is published.
+export const PLANNING_FIELDS = Object.freeze([
+    "capacity",
+    "schedule",
+    "price",
+    "instructor"
+]);
+
+// Returns the planning fields that are still empty in a course.
+export function getMissingPlanningFields(course) {
+    return PLANNING_FIELDS.filter(
+        (field) =>
+            course?.[field] === undefined ||
+            course?.[field] === null
+    );
+}
 
 // Validates a required string and returns its trimmed value.
 function validateRequiredString(
@@ -166,6 +204,137 @@ function validateStringArray(
     return normalizedValues;
 }
 
+
+// Validates an optional whole number inside an inclusive range.
+function validateOptionalInteger(
+    value,
+    fieldName,
+    min,
+    max,
+    errors
+) {
+    if (value === undefined || value === null) {
+        return null;
+    }
+
+    if (!Number.isInteger(value)) {
+        errors.push(
+            `${fieldName} must be a whole number.`
+        );
+
+        return null;
+    }
+
+    if (value < min || value > max) {
+        errors.push(
+            `${fieldName} must be between ${min} and ${max}.`
+        );
+
+        return null;
+    }
+
+    return value;
+}
+
+// Validates an optional string; empty values are stored as null.
+function validateOptionalString(
+    value,
+    fieldName,
+    minLength,
+    maxLength,
+    errors
+) {
+    if (
+        value === undefined ||
+        value === null ||
+        (typeof value === "string" && value.trim() === "")
+    ) {
+        return null;
+    }
+
+    return validateRequiredString(
+        value,
+        fieldName,
+        minLength,
+        maxLength,
+        errors
+    );
+}
+
+// Checks that a value is a real calendar date in YYYY-MM-DD format.
+function isValidIsoDate(value) {
+    if (
+        typeof value !== "string" ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(value)
+    ) {
+        return false;
+    }
+
+    const date = new Date(`${value}T00:00:00.000Z`);
+
+    return (
+        !Number.isNaN(date.getTime()) &&
+        date.toISOString().slice(0, 10) === value
+    );
+}
+
+// Validates the optional schedule object of a course.
+function validateSchedule(value, errors) {
+    if (value === undefined || value === null) {
+        return null;
+    }
+
+    if (typeof value !== "object" || Array.isArray(value)) {
+        errors.push("schedule must be an object.");
+
+        return null;
+    }
+
+    let startDate = null;
+
+    if (!isValidIsoDate(value.startDate)) {
+        errors.push(
+            "schedule.startDate must be a valid date in YYYY-MM-DD format."
+        );
+    } else {
+        startDate = value.startDate;
+    }
+
+    let endDate = null;
+
+    if (
+        value.endDate !== undefined &&
+        value.endDate !== null &&
+        value.endDate !== ""
+    ) {
+        if (!isValidIsoDate(value.endDate)) {
+            errors.push(
+                "schedule.endDate must be a valid date in YYYY-MM-DD format."
+            );
+        } else if (startDate && value.endDate < startDate) {
+            errors.push(
+                "schedule.endDate must not be earlier than schedule.startDate."
+            );
+        } else {
+            endDate = value.endDate;
+        }
+    }
+
+    const description = validateRequiredString(
+        value.description,
+        "schedule.description",
+        COURSE_LIMITS.scheduleDescription.min,
+        COURSE_LIMITS.scheduleDescription.max,
+        errors
+    );
+
+    return {
+        startDate,
+        endDate,
+        description
+    };
+}
+
 // Validates and normalizes the data required to create a course.
 export function validateCourseInput(input = {}) {
     const errors = [];
@@ -217,6 +386,35 @@ export function validateCourseInput(input = {}) {
             errors
         );
 
+    const capacity = validateOptionalInteger(
+        input.capacity,
+        "capacity",
+        COURSE_LIMITS.capacity.min,
+        COURSE_LIMITS.capacity.max,
+        errors
+    );
+
+    const price = validateOptionalInteger(
+        input.price,
+        "price",
+        COURSE_LIMITS.price.min,
+        COURSE_LIMITS.price.max,
+        errors
+    );
+
+    const instructor = validateOptionalString(
+        input.instructor,
+        "instructor",
+        COURSE_LIMITS.instructor.min,
+        COURSE_LIMITS.instructor.max,
+        errors
+    );
+
+    const schedule = validateSchedule(
+        input.schedule,
+        errors
+    );
+
     return {
         valid: errors.length === 0,
 
@@ -228,7 +426,11 @@ export function validateCourseInput(input = {}) {
             description,
             imageUrl,
             learningOutcomes,
-            requiredMaterials
+            requiredMaterials,
+            capacity,
+            price,
+            instructor,
+            schedule
         }
     };
 }
