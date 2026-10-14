@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
     ArrowLeft,
+    CalendarDays,
     GraduationCap,
     ImageOff,
     Package,
@@ -14,7 +15,7 @@ import StateMessage, { RetryButton } from "../../components/ui/StateMessage";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { getAdminCourseById } from "../../services/courses.service";
 import { COURSE_STATUS, canEditCourse } from "../../constants/course";
-import { formatDateTime } from "../../utils/format";
+import { formatCapacity, formatDate, formatDateTime, formatPrice } from "../../utils/format";
 
 import styles from "./CourseDetail.module.css";
 
@@ -167,6 +168,41 @@ function CourseDetail() {
                         <p className={styles.description}>{course.description}</p>
                     </section>
                 )}
+
+                <section className={styles.block}>
+                    <h2>
+                        <CalendarDays size={18} aria-hidden="true" className={styles.blockIcon} />
+                        Información de planificación
+                    </h2>
+                    <dl className={styles.planning}>
+                        <div>
+                            <dt>Instructor</dt>
+                            <dd>{course.instructor ?? "Sin asignar"}</dd>
+                        </div>
+                        <div>
+                            <dt>Capacidad</dt>
+                            <dd>{formatCapacity(course.capacity)}</dd>
+                        </div>
+                        <div>
+                            <dt>Precio</dt>
+                            <dd>{course.price == null ? "Sin definir" : formatPrice(course.price)}</dd>
+                        </div>
+                        <div className={styles.schedule}>
+                            <dt>Horario</dt>
+                            <dd>
+                                {course.schedule == null ? "Sin definir" : (
+                                    <>
+                                        <p className={styles.scheduleDescription}>{course.schedule.description}</p>
+                                        <p>Inicio: {formatDate(course.schedule.startDate)}</p>
+                                        {course.schedule.endDate != null && (
+                                            <p>Fin: {formatDate(course.schedule.endDate)}</p>
+                                        )}
+                                    </>
+                                )}
+                            </dd>
+                        </div>
+                    </dl>
+                </section>
 
                 <div className={styles.lists}>
                     <ItemList
