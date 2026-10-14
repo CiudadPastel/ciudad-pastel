@@ -8,7 +8,7 @@ import StateMessage, { RetryButton } from "../../components/ui/StateMessage";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { getAdminCourses } from "../../services/courses.service";
 import { COURSE_STATUS, canEditCourse } from "../../constants/course";
-import { formatDateTime } from "../../utils/format";
+import { formatCapacity, formatDateTime, formatPrice } from "../../utils/format";
 
 import styles from "./CoursesList.module.css";
 
@@ -217,6 +217,11 @@ function CoursesList() {
                                                     <span className={styles.secondary}>
                                                         {course.summary}
                                                     </span>
+                                                    <div className={styles.planning}>
+                                                        <span><strong>Instructor:</strong> {course.instructor ?? "Sin asignar"}</span>
+                                                        <span><strong>Capacidad:</strong> {formatCapacity(course.capacity)}</span>
+                                                        <span><strong>Precio:</strong> {course.price == null ? "Sin definir" : formatPrice(course.price)}</span>
+                                                    </div>
                                                     <span className={styles.meta}>
                                                         {countLabel(course.learningOutcomes, "aprendizaje", "aprendizajes")}
                                                         {" · "}

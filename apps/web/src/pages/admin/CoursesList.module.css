@@ -138,6 +138,21 @@
   font-weight: 600;
 }
 
+.planning {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.75rem;
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--cp-muted);
+  overflow-wrap: anywhere;
+}
+
+.courseCell > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .courseCell {
   display: flex;
   align-items: center;

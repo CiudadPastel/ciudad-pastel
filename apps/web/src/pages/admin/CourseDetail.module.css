@@ -139,6 +139,33 @@
   color: var(--cp-mint-600);
 }
 
+.planning {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 0;
+}
+
+.planning dt {
+  color: var(--cp-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.planning dd {
+  margin: 0.25rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.schedule {
+  grid-column: 1 / -1;
+}
+
+.scheduleDescription {
+  font-weight: 600;
+  white-space: pre-line;
+}
+
 .lists {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -164,7 +191,8 @@
 
 @media (max-width: 700px) {
   .top,
-  .lists {
+  .lists,
+  .planning {
     grid-template-columns: 1fr;
   }
 

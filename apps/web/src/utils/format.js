@@ -22,6 +22,10 @@ export function formatPrice(value) {
     return typeof value === "number" ? currencyFormatter.format(value) : "—";
 }
 
+export function formatCapacity(value) {
+    return value == null ? "Sin definir" : `${value} ${value === 1 ? "persona" : "personas"}`;
+}
+
 /** Fecha "YYYY-MM-DD" sin desfase por zona horaria. */
 export function formatDate(isoDate) {
     if (!isoDate) return "—";
