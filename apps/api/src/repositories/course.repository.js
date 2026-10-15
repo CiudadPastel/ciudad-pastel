@@ -1,5 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 
+import { normalizeSchedule } from "../models/course.model.js";
+
 import { db } from "../config/firebase.js";
 
 const COURSE_COLLECTION = "courses";
@@ -10,11 +12,19 @@ function mapCourseDocument(documentSnapshot) {
 
     return {
         ...courseData,
-        // Courses created before HU-A02 do not have planning data yet.
+        // Supply defaults for legacy courses.
+        courseType: courseData.courseType ?? null,
+        whatYouWillLearn: courseData.whatYouWillLearn ?? null,
+        location: courseData.location ?? null,
+        address: courseData.address ?? null,
+        materialsNote: courseData.materialsNote ?? null,
+        prerequisites: courseData.prerequisites ?? null,
+        reservationAmount: courseData.reservationAmount ?? null,
+        priceNote: courseData.priceNote ?? null,
         capacity: courseData.capacity ?? null,
         price: courseData.price ?? null,
         instructor: courseData.instructor ?? null,
-        schedule: courseData.schedule ?? null,
+        schedule: normalizeSchedule(courseData.schedule),
         id: documentSnapshot.id,
         createdAt: courseData.createdAt.toDate().toISOString(),
         updatedAt: courseData.updatedAt.toDate().toISOString()
@@ -95,6 +105,14 @@ export async function updateCourse(id, courseData) {
             imageUrl: courseData.imageUrl,
             learningOutcomes: courseData.learningOutcomes,
             requiredMaterials: courseData.requiredMaterials,
+            courseType: courseData.courseType,
+            whatYouWillLearn: courseData.whatYouWillLearn,
+            location: courseData.location,
+            address: courseData.address,
+            materialsNote: courseData.materialsNote,
+            prerequisites: courseData.prerequisites,
+            reservationAmount: courseData.reservationAmount,
+            priceNote: courseData.priceNote,
             capacity: courseData.capacity,
             price: courseData.price,
             instructor: courseData.instructor,

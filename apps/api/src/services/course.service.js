@@ -3,8 +3,7 @@ import { randomUUID } from "node:crypto";
 import { buildCourse, COURSE_STATUS } from "../models/course.model.js";
 
 import {
-    validateCourseInput,
-    getMissingPlanningFields
+    validateCourseInput
 } from "../validators/course.validator.js";
 
 import {
@@ -21,19 +20,16 @@ const COURSE_STATUS_TRANSITIONS = {
     [COURSE_STATUS.ARCHIVED]: [COURSE_STATUS.DRAFT]
 };
 
-// Builds the error reported when a published course lacks planning data.
-function buildPlanningDataError(missingFields) {
-    const error = new Error(
-        "Course publication validation failed."
-    );
-
-    error.name = "ValidationError";
-    error.details = missingFields.map(
-        (field) =>
-            `${field} is required for a published course.`
-    );
-
-    return error;
+// Publication requires only a valid price; zero means a free course.
+function validatePublicationPrice(course) {
+    if (course.price == null || !Number.isInteger(course.price) || course.price < 0) {
+        const error = new Error("Course publication validation failed.");
+        error.name = "ValidationError";
+        error.details = [course.price == null
+            ? "price is required for a published course."
+            : "price must be a non-negative whole number for a published course."];
+        throw error;
+    }
 }
 
 // Lists only published courses for public access.
@@ -72,13 +68,8 @@ export async function updateCourseStatus(id, input) {
             throw error;
         }
 
-        // A course can only be published with its planning data complete.
         if (status === COURSE_STATUS.PUBLISHED) {
-            const missingFields = getMissingPlanningFields(currentCourse);
-
-            if (missingFields.length > 0) {
-                throw buildPlanningDataError(missingFields);
-            }
+            validatePublicationPrice(currentCourse);
         }
     });
 
@@ -141,14 +132,10 @@ export async function updateCourse(id, input) {
         throw error;
     }
 
-    // A published course must keep its planning data complete.
-    const missingFields = getMissingPlanningFields(validation.data);
-
-    if (missingFields.length > 0) {
+    if (validation.data.price == null) {
         const currentCourse = await getCourseByIdRepository(id);
-
         if (currentCourse?.status === COURSE_STATUS.PUBLISHED) {
-            throw buildPlanningDataError(missingFields);
+            validatePublicationPrice(validation.data);
         }
     }
 
