@@ -6,6 +6,9 @@ const fake = vi.hoisted(() => ({
   clock: 0,
   verifyIdToken: vi.fn(),
   healthQuery: vi.fn(),
+  collection: vi.fn(),
+  serverTimestamp: vi.fn(),
+  runTransaction: vi.fn(),
   repository: {
     createCourse: vi.fn(),
     getCourses: vi.fn(),
@@ -20,12 +23,10 @@ vi.mock("dotenv", () => ({ default: { config: vi.fn() } }));
 vi.mock("firebase-admin/app", () => {
   throw new Error("Real Firebase app access is forbidden.");
 });
-vi.mock("firebase-admin/firestore", () => {
-  throw new Error("Real Firestore access is forbidden.");
-});
+vi.mock("firebase-admin/firestore", () => ({ FieldValue: { serverTimestamp: fake.serverTimestamp } }));
 vi.mock("../src/config/firebase.js", () => ({
   auth: { verifyIdToken: fake.verifyIdToken },
-  db: { collection: () => ({ limit: () => ({ get: fake.healthQuery }) }) },
+  db: { collection: (...args) => fake.collection(...args), runTransaction: (...args) => fake.runTransaction(...args) },
 }));
 vi.mock("../src/repositories/course.repository.js", () => fake.repository);
 
@@ -41,6 +42,14 @@ const validInput = {
   imageUrl: "https://example.com/pastel.jpg",
   learningOutcomes: ["Preparar masas básicas", "Decorar un pastel"],
   requiredMaterials: ["Delantal", "Espátula"],
+  courseType: "workshop",
+  whatYouWillLearn: "Preparar masas y cremas desde cero.",
+  location: "Ciudad Pastel — Florencia",
+  address: "100 m norte de la escuela",
+  materialsNote: "Los materiales principales están incluidos.",
+  prerequisites: "haber llevado el básico",
+  reservationAmount: 10000,
+  priceNote: "Incluye ingredientes",
   capacity: 6,
   price: 45000,
   instructor: "Yamilena Blanco Chaves",
@@ -49,10 +58,11 @@ const validInput = {
     endDate: "2026-11-24",
     startTime: "18:00",
     endTime: "21:00",
-    description: "Martes de 6:00 p. m. a 9:00 p. m.",
+    frequency: "weekly",
+    weekday: "tuesday",
+    scheduleNote: "Martes de 6:00 p. m. a 9:00 p. m.",
   },
 };
-const planningFields = ["capacity", "price", "instructor", "schedule"];
 const editableFields = Object.keys(validInput);
 
 function timestamp() {
@@ -91,6 +101,7 @@ beforeEach(() => {
   fake.clock = 0;
   vi.spyOn(console, "error").mockImplementation(() => {});
   fake.healthQuery.mockResolvedValue({ docs: [] });
+  fake.collection.mockImplementation(() => ({ limit: () => ({ get: fake.healthQuery }) }));
   fake.verifyIdToken.mockImplementation(async (token) => {
     if (token === "admin-token")
       return { uid: "admin-1", email: "admin@example.com", admin: true };
@@ -245,7 +256,10 @@ describe("course creation", () => {
       instructor: "  Yamilena Blanco  ",
       schedule: {
         startDate: "2026-11-03",
-        description: "  Martes por la noche  ",
+        startTime: "18:00",
+        endTime: "21:00",
+        frequency: "single",
+        scheduleNote: "  Martes por la noche  ",
       },
     });
     expect(response.status).toBe(201);
@@ -253,15 +267,17 @@ describe("course creation", () => {
     expect(response.body.schedule).toEqual({
       startDate: "2026-11-03",
       endDate: null,
-      startTime: null,
-      endTime: null,
-      description: "Martes por la noche",
+      startTime: "18:00",
+      endTime: "21:00",
+      frequency: "single",
+      weekday: null,
+      scheduleNote: "Martes por la noche",
     });
   });
 
   it.each([
     ["zero capacity", { capacity: 0 }, "capacity"],
-    ["capacity above the limit", { capacity: 9 }, "capacity"],
+    ["negative capacity", { capacity: -1 }, "capacity"],
     ["decimal capacity", { capacity: 6.5 }, "capacity"],
     ["text capacity", { capacity: "6" }, "capacity"],
     ["negative price", { price: -1 }, "price"],
@@ -279,6 +295,7 @@ describe("course creation", () => {
       "impossible start date",
       {
         schedule: {
+          ...validInput.schedule,
           startDate: "2026-02-30",
           description: "Martes por la noche",
         },
@@ -289,6 +306,7 @@ describe("course creation", () => {
       "malformed start date",
       {
         schedule: {
+          ...validInput.schedule,
           startDate: "03/11/2026",
           description: "Martes por la noche",
         },
@@ -299,6 +317,7 @@ describe("course creation", () => {
       "end date before start date",
       {
         schedule: {
+          ...validInput.schedule,
           startDate: "2026-11-10",
           endDate: "2026-11-03",
           description: "Martes por la noche",
@@ -307,19 +326,20 @@ describe("course creation", () => {
       "schedule.endDate",
     ],
     [
-      "schedule without description",
-      { schedule: { startDate: "2026-11-03" } },
-      "schedule.description",
+      "schedule without frequency",
+      { schedule: { ...validInput.schedule, frequency: undefined } },
+      "schedule.frequency",
     ],
     [
-      "too-short schedule description",
-      { schedule: { startDate: "2026-11-03", description: "ab" } },
-      "schedule.description",
+      "non-text schedule note",
+      { schedule: { ...validInput.schedule, scheduleNote: 123 } },
+      "schedule.scheduleNote",
     ],
     [
       "malformed start time",
       {
         schedule: {
+          ...validInput.schedule,
           startDate: "2026-11-03",
           startTime: "1pm",
           description: "Martes por la noche",
@@ -331,6 +351,7 @@ describe("course creation", () => {
       "end time before start time",
       {
         schedule: {
+          ...validInput.schedule,
           startDate: "2026-11-03",
           startTime: "17:00",
           endTime: "13:00",
@@ -445,11 +466,14 @@ describe("course updates", () => {
         price: 60000,
         instructor: "Denia González Alfaro",
         schedule: {
+          ...validInput.schedule,
           startDate: "2026-12-01",
           endDate: null,
           startTime: "17:00",
           endTime: "20:00",
-          description: "Jueves de 5:00 p. m. a 8:00 p. m.",
+          frequency: "single",
+          weekday: null,
+          scheduleNote: "Jueves de 5:00 p. m. a 8:00 p. m.",
         },
       };
       const response = await adminRequest(
@@ -465,6 +489,7 @@ describe("course updates", () => {
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
         ...before,
+        ...Object.fromEntries(["courseType", "whatYouWillLearn", "location", "address", "materialsNote", "prerequisites", "reservationAmount", "priceNote"].map(field => [field, null])),
         ...changes,
         updatedAt: expect.any(String),
       });
@@ -510,7 +535,7 @@ describe("course updates", () => {
     });
   });
 
-  it.each(planningFields)(
+  it.each(["price"])(
     "rejects clearing %s on a published course without modifying it",
     async (field) => {
       const before = seedCourse(STATUS.PUBLISHED);
@@ -702,7 +727,7 @@ describe("status transitions, archiving and unarchiving", () => {
     },
   );
 
-  it("rejects publishing a draft with incomplete planning data and keeps it hidden", async () => {
+  it("rejects publishing a draft without price and keeps it hidden", async () => {
     const before = seedCourse();
     const incomplete = { ...before, price: null, instructor: null };
     fake.courses.set(before.id, incomplete);
@@ -714,7 +739,6 @@ describe("status transitions, archiving and unarchiving", () => {
     expect(response.body.message).toMatch(/validation/i);
     expect(response.body.errors).toEqual([
       expect.stringContaining("price"),
-      expect.stringContaining("instructor"),
     ]);
     expect(
       (await adminRequest("get", `/api/admin/courses/${before.id}`)).body,
@@ -722,7 +746,7 @@ describe("status transitions, archiving and unarchiving", () => {
     expect((await request(app).get("/api/courses")).body).toEqual([]);
   });
 
-  it("lists every missing planning field when a legacy course without planning data is published", async () => {
+  it("reports only missing price when a legacy course is published", async () => {
     const { capacity, price, instructor, schedule, ...legacy } = seedCourse();
     fake.courses.set(legacy.id, legacy);
     const response = await adminRequest(
@@ -730,16 +754,11 @@ describe("status transitions, archiving and unarchiving", () => {
       `/api/admin/courses/${legacy.id}/status`,
     ).send({ status: STATUS.PUBLISHED });
     expect(response.status).toBe(400);
-    expect(response.body.errors).toHaveLength(planningFields.length);
-    planningFields.forEach((field) =>
-      expect(response.body.errors).toEqual(
-        expect.arrayContaining([expect.stringContaining(field)]),
-      ),
-    );
+    expect(response.body.errors).toEqual(["price is required for a published course."]);
   });
 
-  it("publishes once the missing planning data is saved", async () => {
-    const incomplete = { ...seedCourse(), capacity: null };
+  it("publishes once the missing price is saved", async () => {
+    const incomplete = { ...seedCourse(), price: null };
     fake.courses.set(incomplete.id, incomplete);
     expect(
       (
@@ -966,5 +985,280 @@ describe("application routes and isolation", () => {
     const response = await request(app).get("/api/docs").redirects(1);
     expect(response.status).toBe(200);
     expect(response.text).toContain("Swagger UI");
+  });
+});
+
+const optionalTextFields = ["whatYouWillLearn", "location", "address", "materialsNote", "prerequisites", "priceNote"];
+const newFields = ["courseType", ...optionalTextFields, "reservationAmount"];
+const singleSchedule = {
+  startDate: "2026-11-03", endDate: null, startTime: "09:00", endTime: "12:00",
+  frequency: "single", weekday: null, scheduleNote: null,
+};
+
+describe("Sprint Review input contract", () => {
+  it.each(["basic", "workshop", "demonstrative", "semi_demonstrative", "multi_week", "other", null])(
+    "accepts courseType %s", async (courseType) => {
+      const response = await adminRequest("post", "/api/admin/courses").send({ ...validInput, courseType });
+      expect(response.status).toBe(201);
+      expect(response.body.courseType).toBe(courseType);
+    },
+  );
+
+  it.each(["unknown", "", "BASIC", 42, [], {}])("rejects invalid courseType %j", async (courseType) => {
+    expectValidation(await adminRequest("post", "/api/admin/courses").send({ ...validInput, courseType }), "courseType");
+    expect(fake.courses.size).toBe(0);
+  });
+
+  it.each(optionalTextFields)("trims %s and preserves free text", async (field) => {
+    const response = await adminRequest("post", "/api/admin/courses").send({ ...validInput, [field]: "  Texto libre con instrucciones.  " });
+    expect(response.status).toBe(201);
+    expect(response.body[field]).toBe("Texto libre con instrucciones.");
+  });
+
+  it.each([...optionalTextFields, "instructor"])("normalizes blank %s to null", async (field) => {
+    const response = await adminRequest("post", "/api/admin/courses").send({ ...validInput, [field]: " \n " });
+    expect(response.status).toBe(201);
+    expect(response.body[field]).toBeNull();
+  });
+
+  it.each(optionalTextFields)("rejects non-text and oversized %s", async (field) => {
+    for (const value of [123, "x".repeat(5001)]) {
+      expectValidation(await adminRequest("post", "/api/admin/courses").send({ ...validInput, [field]: value }), field);
+    }
+  });
+
+  it("retains long whatYouWillLearn independently of learningOutcomes", async () => {
+    const text = "x".repeat(5000);
+    const response = await adminRequest("post", "/api/admin/courses").send({ ...validInput, whatYouWillLearn: text });
+    expect(response.status).toBe(201);
+    expect(response.body.whatYouWillLearn).toBe(text);
+    expect(response.body.learningOutcomes).toEqual(validInput.learningOutcomes);
+    expect(response.body.requiredMaterials).toEqual(validInput.requiredMaterials);
+  });
+
+  it.each([
+    ["capacity", 1], ["capacity", 8], ["capacity", 101], ["capacity", 1000000000], ["capacity", null],
+    ["price", null], ["price", 0], ["price", 50000], ["price", 1000000000],
+    ["reservationAmount", null], ["reservationAmount", 0], ["reservationAmount", 10000], ["reservationAmount", 1000000000],
+  ])("accepts %s = %s", async (field, value) => {
+    const response = await adminRequest("post", "/api/admin/courses").send({ ...validInput, [field]: value });
+    expect(response.status).toBe(201);
+    expect(response.body[field]).toBe(value);
+  });
+
+  it.each([-1, 0.5, "1000", {}, []])("rejects invalid reservationAmount %j", async (reservationAmount) => {
+    expectValidation(await adminRequest("post", "/api/admin/courses").send({ ...validInput, reservationAmount }), "reservationAmount");
+  });
+
+  it.each([
+    null,
+    singleSchedule,
+    { ...singleSchedule, endDate: singleSchedule.startDate },
+    { ...singleSchedule, endDate: "2026-11-04" },
+    validInput.schedule,
+    { ...validInput.schedule, endDate: "2027-11-03" },
+    { ...singleSchedule, startDate: "2028-02-29" },
+  ])("accepts coherent schedule %j", async (schedule) => {
+    const response = await adminRequest("post", "/api/admin/courses").send({ ...validInput, schedule });
+    expect(response.status).toBe(201);
+    expect(response.body.schedule).toEqual(schedule);
+  });
+
+  it.each([
+    ["frequency", undefined], ["frequency", null], ["frequency", "monthly"],
+    ["weekday", undefined], ["weekday", null], ["weekday", "martes"], ["weekday", 2],
+    ["startDate", "2026-02-30"], ["startDate", "2026-2-03"], ["startDate", null],
+    ["endDate", "2026-02-30"], ["endDate", "2026-11-02"], ["endDate", null], ["endDate", undefined],
+    ["startTime", "24:00"], ["startTime", "9:00"], ["startTime", "18:60"],
+    ["startTime", null], ["startTime", undefined], ["startTime", ""],
+    ["endTime", "23:60"], ["endTime", null], ["endTime", undefined],
+    ["endTime", "18:00"], ["endTime", "17:59"],
+    ["scheduleNote", 100], ["scheduleNote", "x".repeat(5001)],
+  ])("rejects invalid schedule.%s (%s)", async (field, value) => {
+    expectValidation(await adminRequest("post", "/api/admin/courses").send({
+      ...validInput, schedule: { ...validInput.schedule, [field]: value },
+    }), `schedule.${field}`);
+    expect(fake.courses.size).toBe(0);
+  });
+
+  it.each([undefined, null, "   "])("normalizes optional scheduleNote %j", async (scheduleNote) => {
+    const response = await adminRequest("post", "/api/admin/courses").send({
+      ...validInput, schedule: { ...singleSchedule, scheduleNote },
+    });
+    expect(response.status).toBe(201);
+    expect(response.body.schedule.scheduleNote).toBeNull();
+  });
+
+  it("writes only the new schedule shape and trims scheduleNote", async () => {
+    const response = await adminRequest("post", "/api/admin/courses").send({
+      ...validInput, schedule: { ...singleSchedule, description: "obsolete", scheduleNote: "  Traer delantal  " },
+    });
+    expect(response.status).toBe(201);
+    expect(response.body.schedule).toEqual({ ...singleSchedule, scheduleNote: "Traer delantal" });
+  });
+
+  it.each([0, 45000])("publishes with price %s and every other optional field null", async (price) => {
+    const { name, summary, description } = validInput;
+    const created = await adminRequest("post", "/api/admin/courses").send({ name, summary, description, price });
+    expect(created.status).toBe(201);
+    for (const field of [...newFields, "capacity", "instructor", "schedule"]) expect(created.body[field]).toBeNull();
+    const response = await adminRequest("patch", `/api/admin/courses/${created.body.id}/status`).send({ status: STATUS.PUBLISHED });
+    expect(response.status).toBe(200);
+    expect(response.body.price).toBe(price);
+    expect((await request(app).get("/api/courses")).body).toEqual([response.body]);
+  });
+
+  it.each([undefined, null, -1, 1.5, "0"])("rejects publishing stored invalid price %j without mutation", async (price) => {
+    const course = { ...seedCourse(), price };
+    fake.courses.set(course.id, course);
+    expectValidation(await adminRequest("patch", `/api/admin/courses/${course.id}/status`).send({ status: STATUS.PUBLISHED }), "price");
+    expect(fake.courses.get(course.id)).toEqual(course);
+  });
+
+  it.each(["capacity", "instructor", "schedule"])("allows clearing %s on a published course", async (field) => {
+    const before = seedCourse(STATUS.PUBLISHED);
+    const response = await adminRequest("put", `/api/admin/courses/${before.id}`).send({ ...validInput, [field]: null });
+    expect(response.status).toBe(200);
+    expect(response.body[field]).toBeNull();
+    expect(response.body.status).toBe(STATUS.PUBLISHED);
+    expect(response.body.price).toBe(validInput.price);
+  });
+
+  it("rejects full PUT omitting price on a published course without mutation", async () => {
+    const before = seedCourse(STATUS.PUBLISHED);
+    const { name, summary, description } = validInput;
+    expectValidation(await adminRequest("put", `/api/admin/courses/${before.id}`).send({ name, summary, description }), "price");
+    expect(fake.courses.get(before.id)).toEqual(before);
+  });
+
+  it("replaces new fields and clears omitted fields on full PUT", async () => {
+    const before = seedCourse();
+    const changes = Object.fromEntries(optionalTextFields.map(field => [field, "Nueva información libre"]));
+    const response = await adminRequest("put", `/api/admin/courses/${before.id}`).send({
+      ...validInput, ...changes, courseType: "multi_week", reservationAmount: 0,
+    });
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ ...changes, courseType: "multi_week", reservationAmount: 0 });
+    const { name, summary, description } = validInput;
+    const cleared = await adminRequest("put", `/api/admin/courses/${before.id}`).send({ name, summary, description });
+    expect(cleared.status).toBe(200);
+    for (const field of newFields) expect(cleared.body[field]).toBeNull();
+  });
+
+  it("rejects invalid new fields on PUT without mutation", async () => {
+    const before = seedCourse();
+    for (const changes of [{ courseType: "invalid" }, { reservationAmount: -1 }, { prerequisites: [] }, { schedule: { ...singleSchedule, endTime: "00:00" } }]) {
+      const response = await adminRequest("put", `/api/admin/courses/${before.id}`).send({ ...validInput, ...changes });
+      expect(response.status).toBe(400);
+      expect(fake.courses.get(before.id)).toEqual(before);
+    }
+  });
+});
+
+describe("real repository with isolated Firestore", () => {
+  let documents;
+  let writes;
+  let repository;
+
+  beforeEach(async () => {
+    repository = await vi.importActual("../src/repositories/course.repository.js");
+    documents = new Map();
+    writes = [];
+    const snapshot = id => ({ id, exists: documents.has(id), data: () => documents.get(id) });
+    const doc = id => ({
+      get: async () => snapshot(id),
+      set: async data => { writes.push({ id, data }); documents.set(id, data); },
+      update: async data => { writes.push({ id, data }); documents.set(id, { ...documents.get(id), ...data }); },
+    });
+    const query = status => ({
+      doc,
+      where: (_field, _operator, value) => query(value),
+      get: async () => ({ docs: [...documents.keys()].filter(id => status === undefined || documents.get(id).status === status).map(snapshot) }),
+    });
+    fake.collection.mockImplementation(() => query());
+    fake.serverTimestamp.mockImplementation(() => {
+      const date = new Date(timestamp());
+      return { toDate: () => date };
+    });
+    fake.runTransaction.mockImplementation(async callback => callback({
+      get: ref => ref.get(), update: (ref, data) => ref.update(data),
+    }));
+    for (const method of Object.keys(fake.repository)) fake.repository[method].mockImplementation(repository[method]);
+  });
+
+  it("persists and retrieves new fields in admin and public responses", async () => {
+    const created = await adminRequest("post", "/api/admin/courses").send(validInput);
+    expect(created.status).toBe(201);
+    expect(documents.get(created.body.id)).toMatchObject(validInput);
+    expect(created.body).toMatchObject(validInput);
+    expect((await adminRequest("get", `/api/admin/courses/${created.body.id}`)).body).toEqual(created.body);
+    expect((await adminRequest("get", "/api/admin/courses")).body).toEqual([created.body]);
+    const published = await adminRequest("patch", `/api/admin/courses/${created.body.id}/status`).send({ status: STATUS.PUBLISHED });
+    expect(published.status).toBe(200);
+    expect((await request(app).get("/api/courses")).body).toEqual([published.body]);
+  });
+
+  it("persists full PUT, metadata protection and clearing optional fields", async () => {
+    const created = (await adminRequest("post", "/api/admin/courses").send(validInput)).body;
+    const changes = { ...validInput, ...Object.fromEntries(optionalTextFields.map(field => [field, "Información actualizada"])), courseType: "basic", price: 0, reservationAmount: 0, schedule: singleSchedule };
+    const updated = await adminRequest("put", `/api/admin/courses/${created.id}`).send({ ...changes, id: "forged", status: STATUS.PUBLISHED, createdAt: "forged", updatedAt: "forged" });
+    expect(updated.status).toBe(200);
+    expect(updated.body).toMatchObject({ ...changes, id: created.id, status: STATUS.DRAFT, createdAt: created.createdAt });
+    expect(documents.get(created.id)).toMatchObject(changes);
+    expect(updated.body.updatedAt).not.toBe(created.updatedAt);
+    const { name, summary, description } = validInput;
+    const cleared = await adminRequest("put", `/api/admin/courses/${created.id}`).send({ name, summary, description });
+    expect(cleared.status).toBe(200);
+    for (const field of [...newFields, "capacity", "price", "instructor", "schedule"]) {
+      expect(cleared.body[field]).toBeNull();
+      expect(documents.get(created.id)[field]).toBeNull();
+    }
+  });
+
+  it.each([undefined, null, { startDate: "2026-11-03", endDate: null, description: "Martes por la noche" }])(
+    "normalizes legacy documents and schedule %j without writes", async (schedule) => {
+      const legacy = {
+        name: validInput.name, summary: validInput.summary, description: validInput.description,
+        learningOutcomes: validInput.learningOutcomes, requiredMaterials: validInput.requiredMaterials,
+        status: STATUS.PUBLISHED,
+        createdAt: { toDate: () => new Date(CREATED_AT) }, updatedAt: { toDate: () => new Date(CREATED_AT) },
+        ...(schedule === undefined ? {} : { schedule }),
+      };
+      documents.set("legacy", legacy);
+      const detail = await adminRequest("get", "/api/admin/courses/legacy");
+      expect(detail.status).toBe(200);
+      for (const field of [...newFields, "capacity", "price", "instructor"]) expect(detail.body[field]).toBeNull();
+      expect(detail.body).toMatchObject({ id: "legacy", status: STATUS.PUBLISHED, createdAt: CREATED_AT, updatedAt: CREATED_AT,
+        learningOutcomes: validInput.learningOutcomes, requiredMaterials: validInput.requiredMaterials });
+      expect(detail.body.whatYouWillLearn).toBeNull();
+      expect(detail.body.schedule).toEqual(schedule ? {
+        startDate: schedule.startDate, endDate: null, startTime: null, endTime: null,
+        frequency: null, weekday: null, scheduleNote: schedule.description,
+      } : null);
+      expect((await adminRequest("get", "/api/admin/courses")).body).toEqual([detail.body]);
+      expect((await request(app).get("/api/courses")).body).toEqual([detail.body]);
+      expect(writes).toEqual([]);
+      expect(documents.get("legacy")).toBe(legacy);
+      if (schedule) expect(legacy.schedule.description).toBe("Martes por la noche");
+    },
+  );
+
+  it.each([null, "Nota nueva"])("preserves explicit scheduleNote %j over legacy description", async (scheduleNote) => {
+    documents.set("legacy", { ...validInput, schedule: { startDate: "2026-11-03", endDate: "2026-11-24", description: "Nota antigua", scheduleNote },
+      status: STATUS.DRAFT, createdAt: { toDate: () => new Date(CREATED_AT) }, updatedAt: { toDate: () => new Date(CREATED_AT) } });
+    const course = await repository.getCourseById("legacy");
+    expect(course.schedule.scheduleNote).toBe(scheduleNote);
+    expect(course.schedule.endDate).toBe("2026-11-24");
+    expect(writes).toEqual([]);
+  });
+
+  it("preserves archived to draft with the existing transaction", async () => {
+    const created = (await adminRequest("post", "/api/admin/courses").send(validInput)).body;
+    expect((await adminRequest("patch", `/api/admin/courses/${created.id}/status`).send({ status: STATUS.ARCHIVED })).status).toBe(200);
+    const restored = await adminRequest("patch", `/api/admin/courses/${created.id}/status`).send({ status: STATUS.DRAFT });
+    expect(restored.status).toBe(200);
+    expect(restored.body).toMatchObject({ ...validInput, id: created.id, status: STATUS.DRAFT, createdAt: created.createdAt });
+    expect(fake.runTransaction).toHaveBeenCalledTimes(2);
+    expect(Object.keys(writes.at(-1).data).sort()).toEqual(["status", "updatedAt"]);
   });
 });

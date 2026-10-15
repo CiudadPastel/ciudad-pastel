@@ -1,3 +1,5 @@
+import { COURSE_TYPE, SCHEDULE_FREQUENCY, WEEKDAY } from "../models/course.model.js";
+
 const COURSE_LIMITS = {
   name: {
     min: 3,
@@ -27,12 +29,10 @@ const COURSE_LIMITS = {
   // Planning data (HU-A02). Price is a whole number of Costa Rican colones.
   capacity: {
     min: 1,
-    max: 8,
   },
 
   price: {
     min: 0,
-    max: 10000000,
   },
 
   instructor: {
@@ -40,26 +40,10 @@ const COURSE_LIMITS = {
     max: 120,
   },
 
-  scheduleDescription: {
-    min: 3,
-    max: 200,
-  },
+  optionalText: { min: 1, max: 5000 },
+  location: { min: 1, max: 240 },
+  address: { min: 1, max: 1000 },
 };
-
-// Planning fields that must be complete before a course is published.
-export const PLANNING_FIELDS = Object.freeze([
-  "capacity",
-  "schedule",
-  "price",
-  "instructor",
-]);
-
-// Returns the planning fields that are still empty in a course.
-export function getMissingPlanningFields(course) {
-  return PLANNING_FIELDS.filter(
-    (field) => course?.[field] === undefined || course?.[field] === null,
-  );
-}
 
 // Validates a required string and returns its trimmed value.
 function validateRequiredString(
@@ -172,8 +156,8 @@ function validateStringArray(
   return normalizedValues;
 }
 
-// Validates an optional whole number inside an inclusive range.
-function validateOptionalInteger(value, fieldName, min, max, errors) {
+// Validates an optional integer without an arbitrary upper bound.
+function validateOptionalInteger(value, fieldName, min, errors) {
   if (value === undefined || value === null) {
     return null;
   }
@@ -184,8 +168,8 @@ function validateOptionalInteger(value, fieldName, min, max, errors) {
     return null;
   }
 
-  if (value < min || value > max) {
-    errors.push(`${fieldName} must be between ${min} and ${max}.`);
+  if (value < min) {
+    errors.push(`${fieldName} must be at least ${min}.`);
 
     return null;
   }
@@ -225,12 +209,8 @@ function isValidIsoDate(value) {
   );
 }
 
-// Validates an optional time of day in 24-hour HH:mm format (e.g. "13:00").
-function validateOptionalTime(value, fieldName, errors) {
-  if (value === undefined || value === null || value === "") {
-    return null;
-  }
-
+// Validates a required time of day in 24-hour HH:mm format (e.g. "13:00").
+function validateTime(value, fieldName, errors) {
   if (typeof value !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) {
     errors.push(`${fieldName} must be a valid time in HH:mm format.`);
 
@@ -282,12 +262,12 @@ function validateSchedule(value, errors) {
     }
   }
 
-  const startTime = validateOptionalTime(
+  const startTime = validateTime(
     value.startTime,
     "schedule.startTime",
     errors,
   );
-  const endTime = validateOptionalTime(
+  const endTime = validateTime(
     value.endTime,
     "schedule.endTime",
     errors,
@@ -297,21 +277,26 @@ function validateSchedule(value, errors) {
     errors.push("schedule.endTime must be later than schedule.startTime.");
   }
 
-  const description = validateRequiredString(
-    value.description,
-    "schedule.description",
-    COURSE_LIMITS.scheduleDescription.min,
-    COURSE_LIMITS.scheduleDescription.max,
-    errors,
-  );
+  const frequency = validateEnum(value.frequency, "schedule.frequency", SCHEDULE_FREQUENCY, errors, true);
+  const weekday = validateEnum(value.weekday, "schedule.weekday", WEEKDAY, errors,
+    frequency === SCHEDULE_FREQUENCY.WEEKLY);
+  if (frequency === SCHEDULE_FREQUENCY.WEEKLY && endDate === null) {
+    errors.push("schedule.endDate is required for a weekly course.");
+  }
+  const scheduleNote = validateOptionalString(value.scheduleNote, "schedule.scheduleNote",
+    COURSE_LIMITS.optionalText.min, COURSE_LIMITS.optionalText.max, errors);
 
-  return {
-    startDate,
-    endDate,
-    startTime,
-    endTime,
-    description,
-  };
+  return { startDate, endDate, startTime, endTime, frequency, weekday, scheduleNote };
+}
+
+// Enum values are stable API identifiers, not free text.
+function validateEnum(value, fieldName, values, errors, required = false) {
+  if (value == null && !required) return null;
+  if (!Object.values(values).includes(value)) {
+    errors.push(fieldName + " must be one of: " + Object.values(values).join(", ") + ".");
+    return null;
+  }
+  return value;
 }
 
 // Validates and normalizes the data required to create a course.
@@ -364,7 +349,6 @@ export function validateCourseInput(input = {}) {
     input.capacity,
     "capacity",
     COURSE_LIMITS.capacity.min,
-    COURSE_LIMITS.capacity.max,
     errors,
   );
 
@@ -372,7 +356,6 @@ export function validateCourseInput(input = {}) {
     input.price,
     "price",
     COURSE_LIMITS.price.min,
-    COURSE_LIMITS.price.max,
     errors,
   );
 
@@ -385,6 +368,13 @@ export function validateCourseInput(input = {}) {
   );
 
   const schedule = validateSchedule(input.schedule, errors);
+  const courseType = validateEnum(input.courseType, "courseType", COURSE_TYPE, errors);
+  const reservationAmount = validateOptionalInteger(input.reservationAmount, "reservationAmount", 0, errors);
+  const textFields = ["whatYouWillLearn", "location", "address", "materialsNote", "prerequisites", "priceNote"];
+  const optionalText = Object.fromEntries(textFields.map((field) => {
+    const limits = COURSE_LIMITS[field] ?? COURSE_LIMITS.optionalText;
+    return [field, validateOptionalString(input[field], field, limits.min, limits.max, errors)];
+  }));
 
   return {
     valid: errors.length === 0,
@@ -398,6 +388,9 @@ export function validateCourseInput(input = {}) {
       imageUrl,
       learningOutcomes,
       requiredMaterials,
+      ...optionalText,
+      courseType,
+      reservationAmount,
       capacity,
       price,
       instructor,
