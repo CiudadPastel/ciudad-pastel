@@ -1,436 +1,375 @@
 const COURSE_LIMITS = {
-    name: {
-        min: 3,
-        max: 120
-    },
+  name: {
+    min: 3,
+    max: 120,
+  },
 
-    summary: {
-        min: 10,
-        max: 240
-    },
+  summary: {
+    min: 10,
+    max: 240,
+  },
 
-    description: {
-        min: 20,
-        max: 5000
-    },
+  description: {
+    min: 20,
+    max: 5000,
+  },
 
-    learningOutcomes: {
-        maxItems: 15,
-        maxLength: 200
-    },
+  learningOutcomes: {
+    maxItems: 15,
+    maxLength: 200,
+  },
 
-    requiredMaterials: {
-        maxItems: 30,
-        maxLength: 150
-    },
+  requiredMaterials: {
+    maxItems: 30,
+    maxLength: 150,
+  },
 
-    // Planning data (HU-A02). Price is a whole number of Costa Rican colones.
-    capacity: {
-        min: 1,
-        max: 100
-    },
+  // Planning data (HU-A02). Price is a whole number of Costa Rican colones.
+  capacity: {
+    min: 1,
+    max: 8,
+  },
 
-    price: {
-        min: 0,
-        max: 10000000
-    },
+  price: {
+    min: 0,
+    max: 10000000,
+  },
 
-    instructor: {
-        min: 3,
-        max: 120
-    },
+  instructor: {
+    min: 3,
+    max: 120,
+  },
 
-    scheduleDescription: {
-        min: 3,
-        max: 200
-    }
+  scheduleDescription: {
+    min: 3,
+    max: 200,
+  },
 };
 
 // Planning fields that must be complete before a course is published.
 export const PLANNING_FIELDS = Object.freeze([
-    "capacity",
-    "schedule",
-    "price",
-    "instructor"
+  "capacity",
+  "schedule",
+  "price",
+  "instructor",
 ]);
 
 // Returns the planning fields that are still empty in a course.
 export function getMissingPlanningFields(course) {
-    return PLANNING_FIELDS.filter(
-        (field) =>
-            course?.[field] === undefined ||
-            course?.[field] === null
-    );
+  return PLANNING_FIELDS.filter(
+    (field) => course?.[field] === undefined || course?.[field] === null,
+  );
 }
 
 // Validates a required string and returns its trimmed value.
 function validateRequiredString(
-    value,
-    fieldName,
-    minLength,
-    maxLength,
-    errors
+  value,
+  fieldName,
+  minLength,
+  maxLength,
+  errors,
 ) {
-    if (typeof value !== "string") {
-        errors.push(
-            `${fieldName} must be a string.`
-        );
+  if (typeof value !== "string") {
+    errors.push(`${fieldName} must be a string.`);
 
-        return "";
-    }
+    return "";
+  }
 
-    const normalizedValue = value.trim();
+  const normalizedValue = value.trim();
 
-    if (normalizedValue.length < minLength) {
-        errors.push(
-            `${fieldName} must contain at least ${minLength} characters.`
-        );
-    }
+  if (normalizedValue.length < minLength) {
+    errors.push(`${fieldName} must contain at least ${minLength} characters.`);
+  }
 
-    if (normalizedValue.length > maxLength) {
-        errors.push(
-            `${fieldName} must not exceed ${maxLength} characters.`
-        );
-    }
+  if (normalizedValue.length > maxLength) {
+    errors.push(`${fieldName} must not exceed ${maxLength} characters.`);
+  }
 
-    return normalizedValue;
+  return normalizedValue;
 }
 
 // Validates an optional HTTP or HTTPS image URL.
 function validateOptionalUrl(value, errors) {
-    if (
-        value === undefined ||
-        value === null ||
-        value === ""
-    ) {
-        return null;
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    errors.push("imageUrl must be a string or null.");
+
+    return null;
+  }
+
+  const normalizedUrl = value.trim();
+
+  try {
+    const url = new URL(normalizedUrl);
+
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      errors.push("imageUrl must use HTTP or HTTPS.");
+
+      return null;
     }
 
-    if (typeof value !== "string") {
-        errors.push(
-            "imageUrl must be a string or null."
-        );
+    return normalizedUrl;
+  } catch {
+    errors.push("imageUrl must be a valid URL.");
 
-        return null;
-    }
-
-    const normalizedUrl = value.trim();
-
-    try {
-        const url = new URL(normalizedUrl);
-
-        if (
-            url.protocol !== "http:" &&
-            url.protocol !== "https:"
-        ) {
-            errors.push(
-                "imageUrl must use HTTP or HTTPS."
-            );
-
-            return null;
-        }
-
-        return normalizedUrl;
-    } catch {
-        errors.push(
-            "imageUrl must be a valid URL."
-        );
-
-        return null;
-    }
+    return null;
+  }
 }
 
 // Validates and normalizes an optional array of strings.
 function validateStringArray(
-    value,
-    fieldName,
-    maxItems,
-    maxItemLength,
-    errors
+  value,
+  fieldName,
+  maxItems,
+  maxItemLength,
+  errors,
 ) {
-    if (
-        value === undefined ||
-        value === null
-    ) {
-        return [];
+  if (value === undefined || value === null) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    errors.push(`${fieldName} must be an array.`);
+
+    return [];
+  }
+
+  if (value.length > maxItems) {
+    errors.push(`${fieldName} must not contain more than ${maxItems} items.`);
+  }
+
+  const normalizedValues = [];
+
+  value.forEach((item, index) => {
+    if (typeof item !== "string") {
+      errors.push(`${fieldName}[${index}] must be a string.`);
+
+      return;
     }
 
-    if (!Array.isArray(value)) {
-        errors.push(
-            `${fieldName} must be an array.`
-        );
+    const normalizedItem = item.trim();
 
-        return [];
+    if (!normalizedItem) {
+      errors.push(`${fieldName}[${index}] must not be empty.`);
+
+      return;
     }
 
-    if (value.length > maxItems) {
-        errors.push(
-            `${fieldName} must not contain more than ${maxItems} items.`
-        );
+    if (normalizedItem.length > maxItemLength) {
+      errors.push(
+        `${fieldName}[${index}] must not exceed ${maxItemLength} characters.`,
+      );
+
+      return;
     }
 
-    const normalizedValues = [];
+    normalizedValues.push(normalizedItem);
+  });
 
-    value.forEach((item, index) => {
-        if (typeof item !== "string") {
-            errors.push(
-                `${fieldName}[${index}] must be a string.`
-            );
-
-            return;
-        }
-
-        const normalizedItem = item.trim();
-
-        if (!normalizedItem) {
-            errors.push(
-                `${fieldName}[${index}] must not be empty.`
-            );
-
-            return;
-        }
-
-        if (normalizedItem.length > maxItemLength) {
-            errors.push(
-                `${fieldName}[${index}] must not exceed ${maxItemLength} characters.`
-            );
-
-            return;
-        }
-
-        normalizedValues.push(normalizedItem);
-    });
-
-    return normalizedValues;
+  return normalizedValues;
 }
 
-
 // Validates an optional whole number inside an inclusive range.
-function validateOptionalInteger(
-    value,
-    fieldName,
-    min,
-    max,
-    errors
-) {
-    if (value === undefined || value === null) {
-        return null;
-    }
+function validateOptionalInteger(value, fieldName, min, max, errors) {
+  if (value === undefined || value === null) {
+    return null;
+  }
 
-    if (!Number.isInteger(value)) {
-        errors.push(
-            `${fieldName} must be a whole number.`
-        );
+  if (!Number.isInteger(value)) {
+    errors.push(`${fieldName} must be a whole number.`);
 
-        return null;
-    }
+    return null;
+  }
 
-    if (value < min || value > max) {
-        errors.push(
-            `${fieldName} must be between ${min} and ${max}.`
-        );
+  if (value < min || value > max) {
+    errors.push(`${fieldName} must be between ${min} and ${max}.`);
 
-        return null;
-    }
+    return null;
+  }
 
-    return value;
+  return value;
 }
 
 // Validates an optional string; empty values are stored as null.
 function validateOptionalString(
-    value,
-    fieldName,
-    minLength,
-    maxLength,
-    errors
+  value,
+  fieldName,
+  minLength,
+  maxLength,
+  errors,
 ) {
-    if (
-        value === undefined ||
-        value === null ||
-        (typeof value === "string" && value.trim() === "")
-    ) {
-        return null;
-    }
+  if (
+    value === undefined ||
+    value === null ||
+    (typeof value === "string" && value.trim() === "")
+  ) {
+    return null;
+  }
 
-    return validateRequiredString(
-        value,
-        fieldName,
-        minLength,
-        maxLength,
-        errors
-    );
+  return validateRequiredString(value, fieldName, minLength, maxLength, errors);
 }
 
 // Checks that a value is a real calendar date in YYYY-MM-DD format.
 function isValidIsoDate(value) {
-    if (
-        typeof value !== "string" ||
-        !/^\d{4}-\d{2}-\d{2}$/.test(value)
-    ) {
-        return false;
-    }
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
 
-    const date = new Date(`${value}T00:00:00.000Z`);
+  const date = new Date(`${value}T00:00:00.000Z`);
 
-    return (
-        !Number.isNaN(date.getTime()) &&
-        date.toISOString().slice(0, 10) === value
-    );
+  return (
+    !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
+  );
 }
 
 // Validates the optional schedule object of a course.
 function validateSchedule(value, errors) {
-    if (value === undefined || value === null) {
-        return null;
-    }
+  if (value === undefined || value === null) {
+    return null;
+  }
 
-    if (typeof value !== "object" || Array.isArray(value)) {
-        errors.push("schedule must be an object.");
+  if (typeof value !== "object" || Array.isArray(value)) {
+    errors.push("schedule must be an object.");
 
-        return null;
-    }
+    return null;
+  }
 
-    let startDate = null;
+  let startDate = null;
 
-    if (!isValidIsoDate(value.startDate)) {
-        errors.push(
-            "schedule.startDate must be a valid date in YYYY-MM-DD format."
-        );
-    } else {
-        startDate = value.startDate;
-    }
-
-    let endDate = null;
-
-    if (
-        value.endDate !== undefined &&
-        value.endDate !== null &&
-        value.endDate !== ""
-    ) {
-        if (!isValidIsoDate(value.endDate)) {
-            errors.push(
-                "schedule.endDate must be a valid date in YYYY-MM-DD format."
-            );
-        } else if (startDate && value.endDate < startDate) {
-            errors.push(
-                "schedule.endDate must not be earlier than schedule.startDate."
-            );
-        } else {
-            endDate = value.endDate;
-        }
-    }
-
-    const description = validateRequiredString(
-        value.description,
-        "schedule.description",
-        COURSE_LIMITS.scheduleDescription.min,
-        COURSE_LIMITS.scheduleDescription.max,
-        errors
+  if (!isValidIsoDate(value.startDate)) {
+    errors.push(
+      "schedule.startDate must be a valid date in YYYY-MM-DD format.",
     );
+  } else {
+    startDate = value.startDate;
+  }
 
-    return {
-        startDate,
-        endDate,
-        description
-    };
+  let endDate = null;
+
+  if (
+    value.endDate !== undefined &&
+    value.endDate !== null &&
+    value.endDate !== ""
+  ) {
+    if (!isValidIsoDate(value.endDate)) {
+      errors.push(
+        "schedule.endDate must be a valid date in YYYY-MM-DD format.",
+      );
+    } else if (startDate && value.endDate < startDate) {
+      errors.push(
+        "schedule.endDate must not be earlier than schedule.startDate.",
+      );
+    } else {
+      endDate = value.endDate;
+    }
+  }
+
+  const description = validateRequiredString(
+    value.description,
+    "schedule.description",
+    COURSE_LIMITS.scheduleDescription.min,
+    COURSE_LIMITS.scheduleDescription.max,
+    errors,
+  );
+
+  return {
+    startDate,
+    endDate,
+    description,
+  };
 }
 
 // Validates and normalizes the data required to create a course.
 export function validateCourseInput(input = {}) {
-    const errors = [];
+  const errors = [];
 
-    const name = validateRequiredString(
-        input.name,
-        "name",
-        COURSE_LIMITS.name.min,
-        COURSE_LIMITS.name.max,
-        errors
-    );
+  const name = validateRequiredString(
+    input.name,
+    "name",
+    COURSE_LIMITS.name.min,
+    COURSE_LIMITS.name.max,
+    errors,
+  );
 
-    const summary = validateRequiredString(
-        input.summary,
-        "summary",
-        COURSE_LIMITS.summary.min,
-        COURSE_LIMITS.summary.max,
-        errors
-    );
+  const summary = validateRequiredString(
+    input.summary,
+    "summary",
+    COURSE_LIMITS.summary.min,
+    COURSE_LIMITS.summary.max,
+    errors,
+  );
 
-    const description = validateRequiredString(
-        input.description,
-        "description",
-        COURSE_LIMITS.description.min,
-        COURSE_LIMITS.description.max,
-        errors
-    );
+  const description = validateRequiredString(
+    input.description,
+    "description",
+    COURSE_LIMITS.description.min,
+    COURSE_LIMITS.description.max,
+    errors,
+  );
 
-    const imageUrl = validateOptionalUrl(
-        input.imageUrl,
-        errors
-    );
+  const imageUrl = validateOptionalUrl(input.imageUrl, errors);
 
-    const learningOutcomes =
-        validateStringArray(
-            input.learningOutcomes,
-            "learningOutcomes",
-            COURSE_LIMITS.learningOutcomes.maxItems,
-            COURSE_LIMITS.learningOutcomes.maxLength,
-            errors
-        );
+  const learningOutcomes = validateStringArray(
+    input.learningOutcomes,
+    "learningOutcomes",
+    COURSE_LIMITS.learningOutcomes.maxItems,
+    COURSE_LIMITS.learningOutcomes.maxLength,
+    errors,
+  );
 
-    const requiredMaterials =
-        validateStringArray(
-            input.requiredMaterials,
-            "requiredMaterials",
-            COURSE_LIMITS.requiredMaterials.maxItems,
-            COURSE_LIMITS.requiredMaterials.maxLength,
-            errors
-        );
+  const requiredMaterials = validateStringArray(
+    input.requiredMaterials,
+    "requiredMaterials",
+    COURSE_LIMITS.requiredMaterials.maxItems,
+    COURSE_LIMITS.requiredMaterials.maxLength,
+    errors,
+  );
 
-    const capacity = validateOptionalInteger(
-        input.capacity,
-        "capacity",
-        COURSE_LIMITS.capacity.min,
-        COURSE_LIMITS.capacity.max,
-        errors
-    );
+  const capacity = validateOptionalInteger(
+    input.capacity,
+    "capacity",
+    COURSE_LIMITS.capacity.min,
+    COURSE_LIMITS.capacity.max,
+    errors,
+  );
 
-    const price = validateOptionalInteger(
-        input.price,
-        "price",
-        COURSE_LIMITS.price.min,
-        COURSE_LIMITS.price.max,
-        errors
-    );
+  const price = validateOptionalInteger(
+    input.price,
+    "price",
+    COURSE_LIMITS.price.min,
+    COURSE_LIMITS.price.max,
+    errors,
+  );
 
-    const instructor = validateOptionalString(
-        input.instructor,
-        "instructor",
-        COURSE_LIMITS.instructor.min,
-        COURSE_LIMITS.instructor.max,
-        errors
-    );
+  const instructor = validateOptionalString(
+    input.instructor,
+    "instructor",
+    COURSE_LIMITS.instructor.min,
+    COURSE_LIMITS.instructor.max,
+    errors,
+  );
 
-    const schedule = validateSchedule(
-        input.schedule,
-        errors
-    );
+  const schedule = validateSchedule(input.schedule, errors);
 
-    return {
-        valid: errors.length === 0,
+  return {
+    valid: errors.length === 0,
 
-        errors,
+    errors,
 
-        data: {
-            name,
-            summary,
-            description,
-            imageUrl,
-            learningOutcomes,
-            requiredMaterials,
-            capacity,
-            price,
-            instructor,
-            schedule
-        }
-    };
+    data: {
+      name,
+      summary,
+      description,
+      imageUrl,
+      learningOutcomes,
+      requiredMaterials,
+      capacity,
+      price,
+      instructor,
+      schedule,
+    },
+  };
 }
