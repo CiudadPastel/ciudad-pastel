@@ -123,6 +123,19 @@ export async function updateCourseStatus(id, status) {
         if (!canChangeStatus(mockStore[index], status)) {
             throw new ApiError("Esta acción no es posible en el estado actual.", 409);
         }
+        // Igual que la API (HU-A02): no se publica sin planificación completa
+        if (status === COURSE_STATUS.PUBLISHED) {
+            const missing = ["capacity", "schedule", "price", "instructor"].filter(
+                (field) => mockStore[index][field] == null
+            );
+            if (missing.length > 0) {
+                throw new ApiError(
+                    "Algunos datos no son válidos. Revíselos e intente de nuevo.",
+                    400,
+                    missing.map((field) => `${field} is required for a published course.`)
+                );
+            }
+        }
 
         const updated = {
             ...mockStore[index],

@@ -100,7 +100,8 @@
 }
 
 .field input,
-.field textarea {
+.field textarea,
+.field select {
   width: 100%;
   padding: 0.65rem 0.8rem;
   font: inherit;
@@ -122,24 +123,28 @@
 }
 
 .field input:hover,
-.field textarea:hover {
+.field textarea:hover,
+.field select:hover {
   border-color: #c9c6be;
 }
 
 .field input:focus,
-.field textarea:focus {
+.field textarea:focus,
+.field select:focus {
   outline: none;
   border-color: var(--cp-mint-600);
   box-shadow: 0 0 0 3px rgba(98, 180, 150, 0.3);
 }
 
 .field input[aria-invalid="true"],
-.field textarea[aria-invalid="true"] {
+.field textarea[aria-invalid="true"],
+.field select[aria-invalid="true"] {
   border-color: var(--cp-danger);
 }
 
 .field input:disabled,
-.field textarea:disabled {
+.field textarea:disabled,
+.field select:disabled {
   background: #f3f2ee;
 }
 
@@ -164,6 +169,26 @@
 .hint {
   font-size: 0.8rem;
   color: var(--cp-muted);
+}
+
+.sectionHint {
+  font-size: 0.9rem;
+  color: var(--cp-muted);
+}
+
+.subheading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--cp-border);
+  font-size: 1rem;
+  color: var(--cp-navy);
+}
+
+.subheading svg {
+  color: var(--cp-mint-600);
 }
 
 .fieldError {
@@ -266,4 +291,132 @@
   .actions button {
     justify-content: center;
   }
+}
+
+/* Horario */
+.groupLabel {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--cp-navy);
+}
+
+.choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.6rem;
+}
+
+.choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--cp-border);
+  border-radius: 8px;
+  background: var(--cp-surface);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.choice:hover {
+  border-color: var(--cp-mint-600);
+}
+
+.choice:has(input:focus-visible) {
+  box-shadow: 0 0 0 3px rgba(98, 180, 150, 0.3);
+}
+
+.choiceActive {
+  border-color: var(--cp-mint-600);
+  background: var(--cp-mint-50);
+}
+
+/* Más específico que ".field input" para que el círculo no tome el estilo de caja de texto */
+.field .choice input {
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  margin: 0.2rem 0 0;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  accent-color: var(--cp-mint-600);
+}
+
+.choice span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.choice strong {
+  color: var(--cp-navy);
+  font-size: 0.95rem;
+}
+
+.choice small {
+  color: var(--cp-muted);
+  font-size: 0.8rem;
+}
+
+.computed {
+  padding: 0.65rem 0.8rem;
+  border-radius: 8px;
+  background: #fbfaf7;
+  border: 1px dashed var(--cp-border);
+  color: var(--cp-text);
+  min-height: 2.75rem;
+}
+
+.suggestion {
+  align-self: flex-start;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--cp-mint-600);
+  border-radius: 6px;
+  background: var(--cp-mint-50);
+  color: var(--cp-mint-700);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.suggestion:hover {
+  background: #d9efe6;
+}
+
+.schedulePreview {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  background: var(--cp-mint-50);
+  color: var(--cp-mint-700);
+}
+
+.schedulePreview svg {
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+}
+
+.schedulePreview div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.schedulePreview span {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.schedulePreview strong {
+  color: var(--cp-navy);
+  font-size: 1rem;
+}
+
+.schedulePreview small {
+  color: var(--cp-text);
+  font-size: 0.85rem;
 }

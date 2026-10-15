@@ -4,6 +4,7 @@ import { Archive, ArchiveRestore, Eye, EyeOff, LoaderCircle } from "lucide-react
 import ConfirmDialog from "../ui/ConfirmDialog";
 import { COURSE_STATUS, canChangeStatus } from "../../constants/course";
 import { updateCourseStatus } from "../../services/courses.service";
+import { describeMissingPlanning } from "../../utils/courseValidation";
 
 import styles from "./CourseStatusActions.module.css";
 
@@ -77,7 +78,8 @@ function CourseStatusActions({ course, compact = false, onChanged, onError }) {
             const message =
                 error.status === 409
                     ? "Este curso cambió de estado mientras usted lo veía. Actualice la página e intente de nuevo."
-                    : error.message;
+                    : (error.status === 400 && describeMissingPlanning(error.details))
+                        || error.message;
             onError?.(message);
         } finally {
             setPending(null);
