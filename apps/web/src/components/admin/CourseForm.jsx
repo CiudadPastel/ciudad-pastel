@@ -1,15 +1,26 @@
 import { useRef, useState } from "react";
-import { CalendarDays, CircleAlert, EyeOff, ImageOff, LoaderCircle, Save, X } from "lucide-react";
+import { CalendarCheck, CalendarDays, CircleAlert, EyeOff, ImageOff, LoaderCircle, Save, X } from "lucide-react";
 
 import ListEditor from "../ui/ListEditor";
 import {
     COURSE_LIMITS,
     EMPTY_COURSE_FORM,
+    getScheduleDescription,
+    getScheduleEndDate,
     isValidHttpUrl,
     mapApiValidationErrors,
     toCoursePayload,
     validateCourseForm
 } from "../../utils/courseValidation";
+import {
+    SCHEDULE_TYPE,
+    SESSION_LIMITS,
+    WEEKDAYS,
+    formatLongDate,
+    nextWeekday,
+    weekdayName,
+    weekdayOf
+} from "../../utils/schedule";
 
 import styles from "./CourseForm.module.css";
 
@@ -22,10 +33,34 @@ const FIELD_ORDER = [
     "instructor",
     "capacity",
     "price",
-    "scheduleDescription",
+    "scheduleType",
+    "scheduleWeekday",
+    "scheduleSessions",
     "scheduleStartDate",
-    "scheduleEndDate"
+    "scheduleStartTime",
+    "scheduleEndTime"
 ];
+
+const SCHEDULE_OPTIONS = [
+    { value: SCHEDULE_TYPE.NONE, label: "Todavía no", hint: "Lo define después" },
+    { value: SCHEDULE_TYPE.SINGLE, label: "Un solo día", hint: "Taller o clase única" },
+    { value: SCHEDULE_TYPE.WEEKLY, label: "Una vez por semana", hint: "Ej.: 6 lunes seguidos" }
+];
+
+/*
+ * En horario semanal, si ya hay fecha de inicio pero no día de la semana,
+ * el día se toma de la fecha (si empieza un lunes, son los lunes).
+ */
+function fillWeekday(values) {
+    if (
+        values.scheduleType === SCHEDULE_TYPE.WEEKLY &&
+        !values.scheduleWeekday &&
+        values.scheduleStartDate
+    ) {
+        return { ...values, scheduleWeekday: weekdayOf(values.scheduleStartDate) };
+    }
+    return values;
+}
 
 /**
  * Formulario de curso reutilizable (crear y editar).
@@ -60,13 +95,16 @@ function CourseForm({
     const nothingToSave = requireChanges && !isDirty;
 
     function updateValue(name, value) {
-        const nextValues = { ...values, [name]: value };
+        const nextValues = fillWeekday({ ...values, [name]: value });
         setValues(nextValues);
 
-        // Si el campo ya mostraba error, se revalida mientras escribe
-        if (touched[name]) {
-            setErrors(validateCourseForm(nextValues, { requirePlanning }));
-        }
+        // Se revalida mientras escribe; los errores solo se ven en campos ya visitados
+        setErrors(validateCourseForm(nextValues, { requirePlanning }));
+    }
+
+    function changeScheduleType(type) {
+        setTouched((prev) => ({ ...prev, scheduleType: true }));
+        updateValue("scheduleType", type);
     }
 
     function handleChange(event) {
@@ -90,7 +128,9 @@ function CourseForm({
 
         const firstInvalid = FIELD_ORDER.find((f) => validationErrors[f]);
         if (firstInvalid) {
-            formRef.current?.elements.namedItem(firstInvalid)?.focus();
+            const element = formRef.current?.elements.namedItem(firstInvalid);
+            // Los botones de opción vienen como lista: se enfoca el primero
+            (element instanceof RadioNodeList ? element[0] : element)?.focus();
             return;
         }
 
@@ -158,6 +198,20 @@ function CourseForm({
 
     const imageUrl = values.imageUrl.trim();
     const canPreview = imageUrl && isValidHttpUrl(imageUrl);
+
+    const hasScheduleType = values.scheduleType !== SCHEDULE_TYPE.NONE;
+    const isWeekly = values.scheduleType === SCHEDULE_TYPE.WEEKLY;
+    const endDate = getScheduleEndDate(values);
+    const scheduleDescription = getScheduleDescription(values);
+
+    // Si la fecha no cae en el día elegido, se ofrece la siguiente que sí
+    const suggestedStartDate =
+        isWeekly &&
+        values.scheduleWeekday &&
+        values.scheduleStartDate &&
+        weekdayOf(values.scheduleStartDate) !== values.scheduleWeekday
+            ? nextWeekday(values.scheduleStartDate, values.scheduleWeekday)
+            : null;
 
     // En un curso publicado la planificación es obligatoria
     const requiredStar = requirePlanning ? (
@@ -377,41 +431,141 @@ function CourseForm({
                     Horario
                 </h3>
 
-                <div className={styles.grid}>
-                    <div className={`${styles.field} ${styles.full}`}>
-                        <label htmlFor="course-scheduleDescription">
-                            ¿Cuándo se imparte?{requiredStar}
-                        </label>
-                        <input
-                            type="text"
-                            maxLength={COURSE_LIMITS.scheduleDescription.max}
-                            placeholder="Ej.: 5 sábados, de 9:00 a. m. a 3:00 p. m."
-                            {...fieldProps("scheduleDescription")}
-                        />
-                        {renderMessages(
-                            "scheduleDescription",
-                            "Días y horas de las clases, tal como los verá el público."
-                        )}
+                <div className={styles.field}>
+                    <span id="course-scheduleType-label" className={styles.groupLabel}>
+                        ¿Cómo son las clases?{requiredStar}
+                    </span>
+                    <div
+                        role="radiogroup"
+                        aria-labelledby="course-scheduleType-label"
+                        className={styles.choices}
+                    >
+                        {SCHEDULE_OPTIONS
+                            .filter((option) => !(requirePlanning && option.value === SCHEDULE_TYPE.NONE))
+                            .map((option) => (
+                                <label
+                                    key={option.value || "none"}
+                                    className={`${styles.choice} ${values.scheduleType === option.value ? styles.choiceActive : ""}`}
+                                >
+                                    <input
+                                        type="radio"
+                                        name="scheduleType"
+                                        value={option.value}
+                                        checked={values.scheduleType === option.value}
+                                        onChange={() => changeScheduleType(option.value)}
+                                        disabled={submitting}
+                                    />
+                                    <span>
+                                        <strong>{option.label}</strong>
+                                        <small>{option.hint}</small>
+                                    </span>
+                                </label>
+                            ))}
                     </div>
-
-                    <div className={styles.field}>
-                        <label htmlFor="course-scheduleStartDate">
-                            Fecha de inicio{requiredStar}
-                        </label>
-                        <input type="date" {...fieldProps("scheduleStartDate")} />
-                        {renderMessages("scheduleStartDate")}
-                    </div>
-
-                    <div className={styles.field}>
-                        <label htmlFor="course-scheduleEndDate">Fecha de fin</label>
-                        <input
-                            type="date"
-                            min={values.scheduleStartDate || undefined}
-                            {...fieldProps("scheduleEndDate")}
-                        />
-                        {renderMessages("scheduleEndDate", "Opcional.")}
-                    </div>
+                    {renderMessages("scheduleType")}
                 </div>
+
+                {isWeekly && (
+                    <div className={styles.grid}>
+                        <div className={styles.field}>
+                            <label htmlFor="course-scheduleWeekday">Día de la semana{requiredStar}</label>
+                            <select {...fieldProps("scheduleWeekday")}>
+                                <option value="">Elija un día</option>
+                                {WEEKDAYS.map((day) => (
+                                    <option key={day.value} value={day.value}>
+                                        {day.name.charAt(0).toUpperCase() + day.name.slice(1)}
+                                    </option>
+                                ))}
+                            </select>
+                            {renderMessages("scheduleWeekday")}
+                        </div>
+
+                        <div className={styles.field}>
+                            <label htmlFor="course-scheduleSessions">Cantidad de clases{requiredStar}</label>
+                            <input
+                                type="number"
+                                inputMode="numeric"
+                                min={SESSION_LIMITS.min}
+                                max={SESSION_LIMITS.max}
+                                step={1}
+                                placeholder="Ej.: 6"
+                                {...fieldProps("scheduleSessions")}
+                            />
+                            {renderMessages("scheduleSessions")}
+                        </div>
+                    </div>
+                )}
+
+                {hasScheduleType && (
+                    <div className={styles.grid}>
+                        <div className={styles.field}>
+                            <label htmlFor="course-scheduleStartDate">
+                                {isWeekly ? "Fecha de la primera clase" : "Fecha de la clase"}
+                                {requiredStar}
+                            </label>
+                            <input type="date" {...fieldProps("scheduleStartDate")} />
+                            {renderMessages(
+                                "scheduleStartDate",
+                                isWeekly && values.scheduleWeekday
+                                    ? `Debe ser un ${weekdayName(values.scheduleWeekday)}.`
+                                    : undefined
+                            )}
+                            {suggestedStartDate && (
+                                <button
+                                    type="button"
+                                    className={styles.suggestion}
+                                    onClick={() => updateValue("scheduleStartDate", suggestedStartDate)}
+                                    disabled={submitting}
+                                >
+                                    Usar el {formatLongDate(suggestedStartDate, { withYear: false })}
+                                </button>
+                            )}
+                        </div>
+
+                        <div className={styles.field}>
+                            <span className={styles.groupLabel}>
+                                {isWeekly ? "Última clase" : "Duración"}
+                            </span>
+                            <p className={styles.computed} aria-live="polite">
+                                {isWeekly
+                                    ? endDate
+                                        ? formatLongDate(endDate)
+                                        : suggestedStartDate
+                                            ? "Corrija la fecha de la primera clase."
+                                            : "Se calcula sola con el día, la cantidad de clases y la fecha de inicio."
+                                    : "Un solo día."}
+                            </p>
+                        </div>
+
+                        <div className={styles.field}>
+                            <label htmlFor="course-scheduleStartTime">Hora de inicio{requiredStar}</label>
+                            <input type="time" step={900} {...fieldProps("scheduleStartTime")} />
+                            {renderMessages("scheduleStartTime")}
+                        </div>
+
+                        <div className={styles.field}>
+                            <label htmlFor="course-scheduleEndTime">Hora de fin{requiredStar}</label>
+                            <input type="time" step={900} {...fieldProps("scheduleEndTime")} />
+                            {renderMessages("scheduleEndTime")}
+                        </div>
+                    </div>
+                )}
+
+                {scheduleDescription && (
+                    <div className={styles.schedulePreview} aria-live="polite">
+                        <CalendarCheck size={20} aria-hidden="true" />
+                        <div>
+                            <span>Así lo verá el público</span>
+                            <strong>{scheduleDescription}</strong>
+                            {isWeekly && endDate && (
+                                <small>
+                                    Del {formatLongDate(values.scheduleStartDate, { withYear: false })} al{" "}
+                                    {formatLongDate(endDate)}.
+                                </small>
+                            )}
+                        </div>
+                    </div>
+                )}
             </fieldset>
 
             {isNew && (

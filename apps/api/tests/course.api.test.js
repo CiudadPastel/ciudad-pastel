@@ -47,6 +47,8 @@ const validInput = {
   schedule: {
     startDate: "2026-11-03",
     endDate: "2026-11-24",
+    startTime: "18:00",
+    endTime: "21:00",
     description: "Martes de 6:00 p. m. a 9:00 p. m.",
   },
 };
@@ -251,6 +253,8 @@ describe("course creation", () => {
     expect(response.body.schedule).toEqual({
       startDate: "2026-11-03",
       endDate: null,
+      startTime: null,
+      endTime: null,
       description: "Martes por la noche",
     });
   });
@@ -311,6 +315,29 @@ describe("course creation", () => {
       "too-short schedule description",
       { schedule: { startDate: "2026-11-03", description: "ab" } },
       "schedule.description",
+    ],
+    [
+      "malformed start time",
+      {
+        schedule: {
+          startDate: "2026-11-03",
+          startTime: "1pm",
+          description: "Martes por la noche",
+        },
+      },
+      "schedule.startTime",
+    ],
+    [
+      "end time before start time",
+      {
+        schedule: {
+          startDate: "2026-11-03",
+          startTime: "17:00",
+          endTime: "13:00",
+          description: "Martes por la noche",
+        },
+      },
+      "schedule.endTime",
     ],
   ])("rejects %s without creating a course", async (_label, changes, field) => {
     expectValidation(
@@ -420,6 +447,8 @@ describe("course updates", () => {
         schedule: {
           startDate: "2026-12-01",
           endDate: null,
+          startTime: "17:00",
+          endTime: "20:00",
           description: "Jueves de 5:00 p. m. a 8:00 p. m.",
         },
       };

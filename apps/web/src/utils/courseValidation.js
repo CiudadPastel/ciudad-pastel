@@ -1,3 +1,14 @@
+import {
+    SCHEDULE_TYPE,
+    SESSION_LIMITS,
+    buildScheduleDescription,
+    computeEndDate,
+    formatLongDate,
+    scheduleToFormFields,
+    weekdayName,
+    weekdayOf
+} from "./schedule";
+
 /*
  * Reglas del formulario de curso (crear y editar).
  * Deben coincidir con apps/api/src/validators/course.validator.js:
@@ -29,9 +40,7 @@ export const EMPTY_COURSE_FORM = {
     instructor: "",
     capacity: "",
     price: "",
-    scheduleDescription: "",
-    scheduleStartDate: "",
-    scheduleEndDate: ""
+    ...scheduleToFormFields(null)
 };
 
 /** Convierte un curso de la API en valores para el formulario (al editar). */
@@ -46,9 +55,7 @@ export function courseToFormValues(course) {
         instructor: course.instructor ?? "",
         capacity: course.capacity == null ? "" : String(course.capacity),
         price: course.price == null ? "" : String(course.price),
-        scheduleDescription: course.schedule?.description ?? "",
-        scheduleStartDate: course.schedule?.startDate ?? "",
-        scheduleEndDate: course.schedule?.endDate ?? ""
+        ...scheduleToFormFields(course.schedule)
     };
 }
 
@@ -106,11 +113,7 @@ export function validateCourseForm(values, options = {}) {
 }
 
 function hasSchedule(values) {
-    return Boolean(
-        values.scheduleDescription.trim() ||
-        values.scheduleStartDate ||
-        values.scheduleEndDate
-    );
+    return values.scheduleType !== SCHEDULE_TYPE.NONE;
 }
 
 function checkWholeNumber(raw, { min, max }, label) {
@@ -120,6 +123,95 @@ function checkWholeNumber(raw, { min, max }, label) {
         return `${label} debe estar entre ${min.toLocaleString("es-CR")} y ${max.toLocaleString("es-CR")}.`;
     }
     return null;
+}
+
+function validateSchedule(values, requirePlanning, requiredMessage) {
+    const errors = {};
+    const type = values.scheduleType;
+
+    if (type === SCHEDULE_TYPE.NONE) {
+        if (requirePlanning) errors.scheduleType = requiredMessage;
+        return errors;
+    }
+
+    const weekly = type === SCHEDULE_TYPE.WEEKLY;
+
+    if (weekly) {
+        if (!values.scheduleWeekday) {
+            errors.scheduleWeekday = "Elija el día de la semana.";
+        }
+
+        const sessions = Number(values.scheduleSessions);
+        if (
+            !values.scheduleSessions ||
+            !Number.isInteger(sessions) ||
+            sessions < SESSION_LIMITS.min ||
+            sessions > SESSION_LIMITS.max
+        ) {
+            errors.scheduleSessions = `Indique cuántas clases son (de ${SESSION_LIMITS.min} a ${SESSION_LIMITS.max}).`;
+        }
+    }
+
+    if (!values.scheduleStartDate) {
+        errors.scheduleStartDate = weekly
+            ? "Elija la fecha de la primera clase."
+            : "Elija la fecha de la clase.";
+    } else if (
+        weekly &&
+        values.scheduleWeekday &&
+        weekdayOf(values.scheduleStartDate) !== values.scheduleWeekday
+    ) {
+        errors.scheduleStartDate =
+            `El ${formatLongDate(values.scheduleStartDate)} no es ${weekdayName(values.scheduleWeekday)}.`;
+    }
+
+    if (!values.scheduleStartTime) {
+        errors.scheduleStartTime = "Indique la hora de inicio.";
+    }
+
+    if (!values.scheduleEndTime) {
+        errors.scheduleEndTime = "Indique la hora de fin.";
+    } else if (values.scheduleStartTime && values.scheduleEndTime <= values.scheduleStartTime) {
+        errors.scheduleEndTime = "La hora de fin debe ser después de la de inicio.";
+    }
+
+    return errors;
+}
+
+/** Fecha de la última clase, o null si todavía faltan datos para calcularla. */
+export function getScheduleEndDate(values) {
+    if (!values.scheduleStartDate) return null;
+    if (values.scheduleType === SCHEDULE_TYPE.SINGLE) return values.scheduleStartDate;
+
+    const sessions = Number(values.scheduleSessions);
+    if (
+        values.scheduleType !== SCHEDULE_TYPE.WEEKLY ||
+        // Si la fecha no cae en el día elegido, el cálculo no tendría sentido
+        (values.scheduleWeekday && weekdayOf(values.scheduleStartDate) !== values.scheduleWeekday) ||
+        !Number.isInteger(sessions) ||
+        sessions < SESSION_LIMITS.min ||
+        sessions > SESSION_LIMITS.max
+    ) {
+        return null;
+    }
+
+    return computeEndDate(values.scheduleStartDate, sessions);
+}
+
+/** Texto del horario, o null si el horario todavía no está completo. */
+export function getScheduleDescription(values) {
+    if (!hasSchedule(values)) return null;
+    const errors = validateSchedule(values, false, "");
+    if (Object.keys(errors).length > 0) return null;
+
+    return buildScheduleDescription({
+        type: values.scheduleType,
+        weekday: values.scheduleWeekday,
+        sessions: Number(values.scheduleSessions),
+        startDate: values.scheduleStartDate,
+        startTime: values.scheduleStartTime,
+        endTime: values.scheduleEndTime
+    });
 }
 
 /*
@@ -154,31 +246,7 @@ function validatePlanning(values, { requirePlanning = false } = {}) {
         errors.price = requiredMessage;
     }
 
-    // El horario va completo o vacío: si se llena una parte, se piden las demás
-    if (hasSchedule(values) || requirePlanning) {
-        const description = values.scheduleDescription.trim();
-        const descriptionError = checkLength(
-            description,
-            COURSE_LIMITS.scheduleDescription,
-            requirePlanning && !hasSchedule(values)
-                ? requiredMessage
-                : "Describa cuándo se imparte el curso.",
-            "La descripción del horario"
-        );
-        if (descriptionError) errors.scheduleDescription = descriptionError;
-
-        if (!values.scheduleStartDate) {
-            errors.scheduleStartDate = "Indique la fecha de inicio.";
-        }
-
-        if (
-            values.scheduleEndDate &&
-            values.scheduleStartDate &&
-            values.scheduleEndDate < values.scheduleStartDate
-        ) {
-            errors.scheduleEndDate = "La fecha de fin no puede ser anterior a la de inicio.";
-        }
-    }
+    Object.assign(errors, validateSchedule(values, requirePlanning, requiredMessage));
 
     return errors;
 }
@@ -199,9 +267,11 @@ export function toCoursePayload(values) {
         price: values.price.trim() ? Number(values.price) : null,
         schedule: hasSchedule(values)
             ? {
-                description: values.scheduleDescription.trim(),
                 startDate: values.scheduleStartDate,
-                endDate: values.scheduleEndDate || null
+                endDate: getScheduleEndDate(values),
+                startTime: values.scheduleStartTime,
+                endTime: values.scheduleEndTime,
+                description: getScheduleDescription(values)
             }
             : null
     };
@@ -249,17 +319,21 @@ const API_FIELD_MESSAGES = {
     instructor: `El nombre del instructor debe tener entre ${COURSE_LIMITS.instructor.min} y ${COURSE_LIMITS.instructor.max} caracteres.`,
     capacity: `El cupo debe ser un número entero entre ${COURSE_LIMITS.capacity.min} y ${COURSE_LIMITS.capacity.max}.`,
     price: "El precio debe ser un número entero de colones, sin decimales.",
-    scheduleDescription: `La descripción del horario debe tener entre ${COURSE_LIMITS.scheduleDescription.min} y ${COURSE_LIMITS.scheduleDescription.max} caracteres.`,
+    scheduleType: "Revise el horario del curso.",
+    scheduleSessions: "Revise la cantidad de clases.",
     scheduleStartDate: "La fecha de inicio no es válida.",
-    scheduleEndDate: "La fecha de fin no es válida o es anterior a la de inicio."
+    scheduleStartTime: "La hora de inicio no es válida.",
+    scheduleEndTime: "La hora de fin debe ser después de la de inicio."
 };
 
 // Nombres de la API -> nombres de los campos del formulario
 const API_FIELD_ALIASES = {
-    "schedule.description": "scheduleDescription",
+    "schedule.description": "scheduleType",
     "schedule.startDate": "scheduleStartDate",
-    "schedule.endDate": "scheduleEndDate",
-    schedule: "scheduleDescription"
+    "schedule.endDate": "scheduleSessions",
+    "schedule.startTime": "scheduleStartTime",
+    "schedule.endTime": "scheduleEndTime",
+    schedule: "scheduleType"
 };
 
 export function mapApiValidationErrors(details) {

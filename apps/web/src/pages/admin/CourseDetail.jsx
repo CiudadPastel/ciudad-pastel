@@ -194,7 +194,8 @@ function CourseDetail() {
                                     <>
                                         <p className={styles.scheduleDescription}>{course.schedule.description}</p>
                                         <p>Inicio: {formatDate(course.schedule.startDate)}</p>
-                                        {course.schedule.endDate != null && (
+                                        {course.schedule.endDate != null &&
+                                            course.schedule.endDate !== course.schedule.startDate && (
                                             <p>Fin: {formatDate(course.schedule.endDate)}</p>
                                         )}
                                     </>

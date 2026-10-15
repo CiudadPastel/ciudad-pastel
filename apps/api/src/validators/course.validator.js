@@ -225,6 +225,21 @@ function isValidIsoDate(value) {
   );
 }
 
+// Validates an optional time of day in 24-hour HH:mm format (e.g. "13:00").
+function validateOptionalTime(value, fieldName, errors) {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+
+  if (typeof value !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) {
+    errors.push(`${fieldName} must be a valid time in HH:mm format.`);
+
+    return null;
+  }
+
+  return value;
+}
+
 // Validates the optional schedule object of a course.
 function validateSchedule(value, errors) {
   if (value === undefined || value === null) {
@@ -267,6 +282,21 @@ function validateSchedule(value, errors) {
     }
   }
 
+  const startTime = validateOptionalTime(
+    value.startTime,
+    "schedule.startTime",
+    errors,
+  );
+  const endTime = validateOptionalTime(
+    value.endTime,
+    "schedule.endTime",
+    errors,
+  );
+
+  if (startTime && endTime && endTime <= startTime) {
+    errors.push("schedule.endTime must be later than schedule.startTime.");
+  }
+
   const description = validateRequiredString(
     value.description,
     "schedule.description",
@@ -278,6 +308,8 @@ function validateSchedule(value, errors) {
   return {
     startDate,
     endDate,
+    startTime,
+    endTime,
     description,
   };
 }

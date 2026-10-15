@@ -18,6 +18,8 @@ import { COURSE_STATUS } from "../constants/course";
  *   schedule: null | {
  *     startDate: string,          // YYYY-MM-DD
  *     endDate: string | null,     // YYYY-MM-DD, opcional
+ *     startTime: string | null,   // HH:mm, ej. "13:00"
+ *     endTime: string | null,     // HH:mm
  *     description: string        // descripción del horario
  *   },
  *   status: "draft" | "published" | "archived",
@@ -45,7 +47,9 @@ export const mockCourses = [
         schedule: {
             startDate: "2026-11-07",
             endDate: "2026-11-28",
-            description: "Sábados de 9:00 a. m. a 12:00 m."
+            startTime: "09:00",
+            endTime: "12:00",
+            description: "4 sábados, de 9:00 a. m. a 12:00 m."
         },
         status: COURSE_STATUS.PUBLISHED,
         createdAt: "2026-09-20T15:00:00Z",
@@ -69,7 +73,9 @@ export const mockCourses = [
         schedule: {
             startDate: "2026-11-10",
             endDate: null,
-            description: "Martes de 2:00 p. m. a 5:00 p. m."
+            startTime: "14:00",
+            endTime: "17:00",
+            description: "Martes 10 de noviembre, de 2:00 p. m. a 5:00 p. m."
         },
         status: COURSE_STATUS.PUBLISHED,
         createdAt: "2026-09-22T16:10:00Z",
