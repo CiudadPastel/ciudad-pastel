@@ -12,7 +12,8 @@ export const COURSE_LIMITS = {
     learningOutcomes: { maxItems: 15, maxLength: 200 },
     requiredMaterials: { maxItems: 30, maxLength: 150 },
     // Planificación (HU-A02). El precio es un número entero de colones.
-    capacity: { min: 1, max: 100 },
+    // Las clases son pequeñas. La API todavía acepta hasta 100: pedir a backend que lo baje.
+    capacity: { min: 1, max: 8 },
     price: { min: 0, max: 10000000 },
     instructor: { min: 3, max: 120 },
     scheduleDescription: { min: 3, max: 200 }

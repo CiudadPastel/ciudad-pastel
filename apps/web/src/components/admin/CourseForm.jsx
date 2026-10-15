@@ -10,7 +10,6 @@ import {
     toCoursePayload,
     validateCourseForm
 } from "../../utils/courseValidation";
-import { formatPrice } from "../../utils/format";
 
 import styles from "./CourseForm.module.css";
 
@@ -159,12 +158,6 @@ function CourseForm({
 
     const imageUrl = values.imageUrl.trim();
     const canPreview = imageUrl && isValidHttpUrl(imageUrl);
-
-    const priceNumber = Number(values.price);
-    const pricePreview =
-        values.price.trim() && Number.isInteger(priceNumber) && priceNumber >= 0
-            ? formatPrice(priceNumber)
-            : "";
 
     // En un curso publicado la planificación es obligatoria
     const requiredStar = requirePlanning ? (
@@ -356,10 +349,7 @@ function CourseForm({
                             placeholder="Ej.: 6"
                             {...fieldProps("capacity")}
                         />
-                        {renderMessages(
-                            "capacity",
-                            `Cantidad máxima de estudiantes (de ${COURSE_LIMITS.capacity.min} a ${COURSE_LIMITS.capacity.max}).`
-                        )}
+                        {renderMessages("capacity")}
                     </div>
 
                     <div className={styles.field}>
@@ -378,12 +368,7 @@ function CourseForm({
                                 {...fieldProps("price")}
                             />
                         </div>
-                        {renderMessages(
-                            "price",
-                            pricePreview
-                                ? `En colones, sin decimales. Se mostrará como ${pricePreview}.`
-                                : "En colones, sin decimales."
-                        )}
+                        {renderMessages("price")}
                     </div>
                 </div>
 
