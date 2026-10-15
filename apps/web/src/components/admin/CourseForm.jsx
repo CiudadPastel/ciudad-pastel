@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { CircleAlert, EyeOff, ImageOff, LoaderCircle, Save, X } from "lucide-react";
+import { CalendarDays, CircleAlert, EyeOff, ImageOff, LoaderCircle, Save, X } from "lucide-react";
 
 import ListEditor from "../ui/ListEditor";
 import {
@@ -10,11 +10,23 @@ import {
     toCoursePayload,
     validateCourseForm
 } from "../../utils/courseValidation";
+import { formatPrice } from "../../utils/format";
 
 import styles from "./CourseForm.module.css";
 
 // Orden de los campos con validación, para enfocar el primer error
-const FIELD_ORDER = ["name", "summary", "description", "imageUrl"];
+const FIELD_ORDER = [
+    "name",
+    "summary",
+    "description",
+    "imageUrl",
+    "instructor",
+    "capacity",
+    "price",
+    "scheduleDescription",
+    "scheduleStartDate",
+    "scheduleEndDate"
+];
 
 /**
  * Formulario de curso reutilizable (crear y editar).
@@ -24,6 +36,7 @@ const FIELD_ORDER = ["name", "summary", "description", "imageUrl"];
  *   onSubmit(payload): async; si falla, el error se muestra en el formulario
  *   onCancel(): se llama al cancelar
  *   requireChanges: true al editar; el botón Guardar se activa solo si hay cambios
+ *   requirePlanning: true si el curso está publicado (la planificación es obligatoria)
  */
 function CourseForm({
     initialValues = EMPTY_COURSE_FORM,
@@ -31,7 +44,8 @@ function CourseForm({
     submitLabel = "Guardar curso",
     onSubmit,
     onCancel,
-    requireChanges = false
+    requireChanges = false,
+    requirePlanning = false
 }) {
     const [values, setValues] = useState(initialValues);
     const [errors, setErrors] = useState({});
@@ -52,7 +66,7 @@ function CourseForm({
 
         // Si el campo ya mostraba error, se revalida mientras escribe
         if (touched[name]) {
-            setErrors(validateCourseForm(nextValues));
+            setErrors(validateCourseForm(nextValues, { requirePlanning }));
         }
     }
 
@@ -63,7 +77,7 @@ function CourseForm({
     function handleBlur(event) {
         const { name } = event.target;
         setTouched((prev) => ({ ...prev, [name]: true }));
-        setErrors(validateCourseForm(values));
+        setErrors(validateCourseForm(values, { requirePlanning }));
     }
 
     async function handleSubmit(event) {
@@ -71,7 +85,7 @@ function CourseForm({
         setServerError("");
         setServerDetails([]);
 
-        const validationErrors = validateCourseForm(values);
+        const validationErrors = validateCourseForm(values, { requirePlanning });
         setErrors(validationErrors);
         setTouched(Object.fromEntries(FIELD_ORDER.map((f) => [f, true])));
 
@@ -145,6 +159,20 @@ function CourseForm({
 
     const imageUrl = values.imageUrl.trim();
     const canPreview = imageUrl && isValidHttpUrl(imageUrl);
+
+    const priceNumber = Number(values.price);
+    const pricePreview =
+        values.price.trim() && Number.isInteger(priceNumber) && priceNumber >= 0
+            ? formatPrice(priceNumber)
+            : "";
+
+    // En un curso publicado la planificación es obligatoria
+    const requiredStar = requirePlanning ? (
+        <>
+            {" "}
+            <span className={styles.star} aria-hidden="true">*</span>
+        </>
+    ) : null;
 
     return (
         <form ref={formRef} onSubmit={handleSubmit} className={styles.form} noValidate>
@@ -291,6 +319,116 @@ function CourseForm({
                 />
             </fieldset>
 
+            <fieldset className={styles.section}>
+                <legend>Planificación</legend>
+
+                <p className={styles.sectionHint}>
+                    {requirePlanning
+                        ? "Este curso está publicado: la planificación debe estar completa."
+                        : "Puede completarla después, pero es obligatoria para publicar el curso."}
+                </p>
+
+                <div className={styles.grid}>
+                    <div className={`${styles.field} ${styles.full}`}>
+                        <label htmlFor="course-instructor">
+                            Instructor{requiredStar}
+                        </label>
+                        <input
+                            type="text"
+                            maxLength={COURSE_LIMITS.instructor.max}
+                            placeholder="Ej.: Ana Rodríguez"
+                            autoComplete="off"
+                            {...fieldProps("instructor")}
+                        />
+                        {renderMessages("instructor")}
+                    </div>
+
+                    <div className={styles.field}>
+                        <label htmlFor="course-capacity">
+                            Cupo{requiredStar}
+                        </label>
+                        <input
+                            type="number"
+                            inputMode="numeric"
+                            min={COURSE_LIMITS.capacity.min}
+                            max={COURSE_LIMITS.capacity.max}
+                            step={1}
+                            placeholder="Ej.: 6"
+                            {...fieldProps("capacity")}
+                        />
+                        {renderMessages(
+                            "capacity",
+                            `Cantidad máxima de estudiantes (de ${COURSE_LIMITS.capacity.min} a ${COURSE_LIMITS.capacity.max}).`
+                        )}
+                    </div>
+
+                    <div className={styles.field}>
+                        <label htmlFor="course-price">
+                            Precio{requiredStar}
+                        </label>
+                        <div className={styles.prefixed}>
+                            <span className={styles.prefix} aria-hidden="true">₡</span>
+                            <input
+                                type="number"
+                                inputMode="numeric"
+                                min={COURSE_LIMITS.price.min}
+                                max={COURSE_LIMITS.price.max}
+                                step={1}
+                                placeholder="Ej.: 30000"
+                                {...fieldProps("price")}
+                            />
+                        </div>
+                        {renderMessages(
+                            "price",
+                            pricePreview
+                                ? `En colones, sin decimales. Se mostrará como ${pricePreview}.`
+                                : "En colones, sin decimales."
+                        )}
+                    </div>
+                </div>
+
+                <h3 className={styles.subheading}>
+                    <CalendarDays size={18} aria-hidden="true" />
+                    Horario
+                </h3>
+
+                <div className={styles.grid}>
+                    <div className={`${styles.field} ${styles.full}`}>
+                        <label htmlFor="course-scheduleDescription">
+                            ¿Cuándo se imparte?{requiredStar}
+                        </label>
+                        <input
+                            type="text"
+                            maxLength={COURSE_LIMITS.scheduleDescription.max}
+                            placeholder="Ej.: 5 sábados, de 9:00 a. m. a 3:00 p. m."
+                            {...fieldProps("scheduleDescription")}
+                        />
+                        {renderMessages(
+                            "scheduleDescription",
+                            "Días y horas de las clases, tal como los verá el público."
+                        )}
+                    </div>
+
+                    <div className={styles.field}>
+                        <label htmlFor="course-scheduleStartDate">
+                            Fecha de inicio{requiredStar}
+                        </label>
+                        <input type="date" {...fieldProps("scheduleStartDate")} />
+                        {renderMessages("scheduleStartDate")}
+                    </div>
+
+                    <div className={styles.field}>
+                        <label htmlFor="course-scheduleEndDate">Fecha de fin</label>
+                        <input
+                            type="date"
+                            min={values.scheduleStartDate || undefined}
+                            {...fieldProps("scheduleEndDate")}
+                        />
+                        {renderMessages("scheduleEndDate", "Opcional.")}
+                    </div>
+                </div>
+            </fieldset>
+
             {isNew && (
                 <p className={styles.note}>
                     <EyeOff size={16} aria-hidden="true" />
@@ -321,6 +459,9 @@ function CourseForm({
                 <button
                     type="submit"
                     className="btn btn-primary"
+                    // Evita que el campo pierda el foco antes del clic: al perderlo
+                    // aparece su mensaje de error, el botón se mueve y el clic falla.
+                    onMouseDown={(event) => event.preventDefault()}
                     disabled={submitting || nothingToSave}
                     title={nothingToSave ? "No hay cambios para guardar" : undefined}
                 >

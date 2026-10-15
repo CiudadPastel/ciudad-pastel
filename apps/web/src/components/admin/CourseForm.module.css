@@ -166,6 +166,26 @@
   color: var(--cp-muted);
 }
 
+.sectionHint {
+  font-size: 0.9rem;
+  color: var(--cp-muted);
+}
+
+.subheading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--cp-border);
+  font-size: 1rem;
+  color: var(--cp-navy);
+}
+
+.subheading svg {
+  color: var(--cp-mint-600);
+}
+
 .fieldError {
   display: flex;
   align-items: center;

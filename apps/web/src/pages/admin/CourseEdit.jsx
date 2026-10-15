@@ -6,7 +6,7 @@ import CourseForm from "../../components/admin/CourseForm";
 import StateMessage, { RetryButton } from "../../components/ui/StateMessage";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { getAdminCourseById, updateCourse } from "../../services/courses.service";
-import { canEditCourse } from "../../constants/course";
+import { COURSE_STATUS, canEditCourse } from "../../constants/course";
 import { courseToFormValues } from "../../utils/courseValidation";
 
 import styles from "./CourseCreate.module.css";
@@ -145,6 +145,7 @@ function CourseEdit() {
                 initialValues={courseToFormValues(course)}
                 submitLabel="Guardar cambios"
                 requireChanges
+                requirePlanning={course.status === COURSE_STATUS.PUBLISHED}
                 onSubmit={handleSubmit}
                 onCancel={() => navigate(detailUrl, { state: { from: listUrl } })}
             />
