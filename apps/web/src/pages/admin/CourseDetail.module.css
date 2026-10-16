@@ -205,3 +205,30 @@
 .editButton {
   margin-left: auto;
 }
+
+.typeTag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: var(--cp-navy-50);
+  color: var(--cp-navy);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.subtle {
+  margin-top: 0.2rem;
+  font-size: 0.9rem;
+  color: var(--cp-muted);
+  white-space: pre-line;
+}
+
+.strong {
+  font-weight: 700;
+  color: var(--cp-navy);
+}
+
+.preLine {
+  white-space: pre-line;
+}

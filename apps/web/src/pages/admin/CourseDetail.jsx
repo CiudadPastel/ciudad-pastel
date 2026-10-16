@@ -4,6 +4,8 @@ import {
     CalendarDays,
     GraduationCap,
     ImageOff,
+    ListChecks,
+    MapPin,
     Package,
     Pencil
 } from "lucide-react";
@@ -14,8 +16,9 @@ import Notice from "../../components/ui/Notice";
 import StateMessage, { RetryButton } from "../../components/ui/StateMessage";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { getAdminCourseById } from "../../services/courses.service";
-import { COURSE_STATUS, canEditCourse } from "../../constants/course";
+import { COURSE_STATUS, canEditCourse, courseTypeLabel } from "../../constants/course";
 import { formatCapacity, formatDate, formatDateTime, formatPrice } from "../../utils/format";
+import { formatScheduleRange, formatScheduleSummary } from "../../utils/schedule";
 
 import styles from "./CourseDetail.module.css";
 
@@ -118,7 +121,11 @@ function CourseDetail() {
             {backLink}
 
             {notice && (
-                <Notice variant={notice.variant} onClose={() => setNotice(null)}>
+                <Notice
+                    variant={notice.variant}
+                    action={notice.action}
+                    onClose={() => setNotice(null)}
+                >
                     {notice.text}
                 </Notice>
             )}
@@ -131,6 +138,9 @@ function CourseDetail() {
                         <header className={styles.header}>
                             <h1>{course.name}</h1>
                             <StatusBadge status={course.status} />
+                            {courseTypeLabel(course.courseType) && (
+                                <span className={styles.typeTag}>{courseTypeLabel(course.courseType)}</span>
+                            )}
                             {canEditCourse(course) && (
                                 <Link
                                     to={`/admin/cursos/${course.id}/editar`}
@@ -153,7 +163,7 @@ function CourseDetail() {
                                 setState((prev) => ({ ...prev, course: updated }));
                                 setNotice({ variant: "success", text: message });
                             }}
-                            onError={(message) => setNotice({ variant: "error", text: message })}
+                            onError={(message, action) => setNotice({ variant: "error", text: message, action })}
                         />
 
                         {course.summary && (
@@ -185,40 +195,66 @@ function CourseDetail() {
                         </div>
                         <div>
                             <dt>Precio</dt>
-                            <dd>{course.price == null ? "Sin definir" : formatPrice(course.price)}</dd>
+                            <dd>
+                                {course.price == null
+                                    ? "Sin definir (necesario para publicar)"
+                                    : course.price === 0 ? "Gratis" : formatPrice(course.price)}
+                                {course.reservationAmount != null && (
+                                    <p className={styles.subtle}>
+                                        Reserva: {formatPrice(course.reservationAmount)}
+                                    </p>
+                                )}
+                                {course.priceNote && (
+                                    <p className={styles.subtle}>{course.priceNote}</p>
+                                )}
+                            </dd>
                         </div>
                         <div className={styles.schedule}>
                             <dt>Horario</dt>
                             <dd>
-                                {course.schedule == null ? "Sin definir" : (
-                                    <>
-                                        <p className={styles.scheduleDescription}>{course.schedule.description}</p>
-                                        <p>Inicio: {formatDate(course.schedule.startDate)}</p>
-                                        {course.schedule.endDate != null &&
-                                            course.schedule.endDate !== course.schedule.startDate && (
-                                            <p>Fin: {formatDate(course.schedule.endDate)}</p>
-                                        )}
-                                    </>
-                                )}
+                                <ScheduleText schedule={course.schedule} />
                             </dd>
                         </div>
                     </dl>
                 </section>
+
+                {(course.location || course.address) && (
+                    <section className={styles.block}>
+                        <h2>
+                            <MapPin size={18} aria-hidden="true" className={styles.blockIcon} />
+                            Lugar
+                        </h2>
+                        {course.location && <p className={styles.strong}>{course.location}</p>}
+                        {course.address && <p className={styles.preLine}>{course.address}</p>}
+                    </section>
+                )}
 
                 <div className={styles.lists}>
                     <ItemList
                         icon={GraduationCap}
                         title="¿Qué aprenderá el estudiante?"
                         items={course.learningOutcomes}
+                        note={course.whatYouWillLearn}
                         emptyText="No se han agregado aprendizajes."
                     />
                     <ItemList
                         icon={Package}
                         title="Materiales que debe traer"
                         items={course.requiredMaterials}
+                        note={course.materialsNote}
                         emptyText="No se han agregado materiales."
                     />
                 </div>
+
+                {course.prerequisites && (
+                    <section className={styles.block}>
+                        <h2>
+                            <ListChecks size={18} aria-hidden="true" className={styles.blockIcon} />
+                            Requisitos previos
+                        </h2>
+                        <p className={styles.preLine}>{course.prerequisites}</p>
+                    </section>
+                )}
 
                 <footer className={styles.meta}>
                     <span>Creado: {formatDateTime(course.createdAt)}</span>
@@ -251,22 +287,53 @@ function CourseImage({ url, name }) {
     );
 }
 
-function ItemList({ icon: Icon, title, items = [], emptyText }) {
+/*
+ * Horario legible: "Todos los lunes, de 1:00 p. m. a 5:00 p. m." y debajo las
+ * fechas. Los cursos viejos (sin horas ni frecuencia) muestran su nota y fechas.
+ */
+function ScheduleText({ schedule }) {
+    if (schedule == null) return "Sin definir";
+
+    const summary = formatScheduleSummary(schedule);
+    const range = formatScheduleRange(schedule);
+
+    return (
+        <>
+            {summary && <p className={styles.scheduleDescription}>{summary}</p>}
+            {range && <p>{range}</p>}
+            {!summary && (
+                <>
+                    <p>Inicio: {formatDate(schedule.startDate)}</p>
+                    {schedule.endDate != null && schedule.endDate !== schedule.startDate && (
+                        <p>Fin: {formatDate(schedule.endDate)}</p>
+                    )}
+                </>
+            )}
+            {schedule.scheduleNote && (
+                <p className={styles.subtle}>{schedule.scheduleNote}</p>
+            )}
+        </>
+    );
+}
+
+function ItemList({ icon: Icon, title, items = [], note, emptyText }) {
     return (
         <section className={styles.block}>
             <h2>
                 <Icon size={18} aria-hidden="true" className={styles.blockIcon} />
                 {title}
             </h2>
-            {items.length === 0 ? (
+            {items.length === 0 && !note && (
                 <p className={styles.empty}>{emptyText}</p>
-            ) : (
+            )}
+            {items.length > 0 && (
                 <ul className={styles.itemList}>
                     {items.map((item) => (
                         <li key={item}>{item}</li>
                     ))}
                 </ul>
             )}
+            {note && <p className={styles.preLine}>{note}</p>}
         </section>
     );
 }
