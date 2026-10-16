@@ -145,7 +145,7 @@ function CourseEdit() {
                 initialValues={courseToFormValues(course)}
                 submitLabel="Guardar cambios"
                 requireChanges
-                requirePlanning={course.status === COURSE_STATUS.PUBLISHED}
+                requirePrice={course.status === COURSE_STATUS.PUBLISHED}
                 onSubmit={handleSubmit}
                 onCancel={() => navigate(detailUrl, { state: { from: listUrl } })}
             />

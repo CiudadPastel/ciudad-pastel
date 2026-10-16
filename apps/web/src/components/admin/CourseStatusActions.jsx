@@ -4,7 +4,7 @@ import { Archive, ArchiveRestore, Eye, EyeOff, LoaderCircle } from "lucide-react
 import ConfirmDialog from "../ui/ConfirmDialog";
 import { COURSE_STATUS, canChangeStatus } from "../../constants/course";
 import { updateCourseStatus } from "../../services/courses.service";
-import { describeMissingPlanning } from "../../utils/courseValidation";
+import { describePublishError } from "../../utils/courseValidation";
 
 import styles from "./CourseStatusActions.module.css";
 
@@ -54,7 +54,8 @@ const ACTIONS = [
  *   course: curso actual
  *   compact: true en la lista (solo íconos con texto de ayuda)
  *   onChanged(cursoActualizado, mensaje): se llama al terminar bien
- *   onError(mensaje): se llama si la API rechaza el cambio
+ *   onError(mensaje, accion): se llama si la API rechaza el cambio; si falta
+ *     el precio, accion = { to, label } lleva al campo para completarlo
  */
 function CourseStatusActions({ course, compact = false, onChanged, onError }) {
     const [pending, setPending] = useState(null);
@@ -75,12 +76,22 @@ function CourseStatusActions({ course, compact = false, onChanged, onError }) {
             const updated = await updateCourseStatus(course.id, action.target);
             onChanged?.(updated, action.success(updated.name ?? course.name));
         } catch (error) {
-            const message =
-                error.status === 409
-                    ? "Este curso cambió de estado mientras usted lo veía. Actualice la página e intente de nuevo."
-                    : (error.status === 400 && describeMissingPlanning(error.details))
-                        || error.message;
-            onError?.(message);
+            if (error.status === 409) {
+                onError?.("Este curso cambió de estado mientras usted lo veía. Actualice la página e intente de nuevo.");
+                return;
+            }
+
+            const publishProblem = error.status === 400 && describePublishError(error.details);
+            if (publishProblem) {
+                // Lleva directo al campo del precio en el formulario de edición
+                onError?.(publishProblem, {
+                    to: `/admin/cursos/${course.id}/editar#course-price`,
+                    label: "Agregar precio"
+                });
+                return;
+            }
+
+            onError?.(error.message);
         } finally {
             setPending(null);
         }

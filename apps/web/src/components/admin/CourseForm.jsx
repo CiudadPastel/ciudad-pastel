@@ -1,22 +1,35 @@
-import { useRef, useState } from "react";
-import { CalendarCheck, CalendarDays, CircleAlert, EyeOff, ImageOff, LoaderCircle, Save, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import {
+    CalendarCheck,
+    CalendarDays,
+    CircleAlert,
+    EyeOff,
+    ImageOff,
+    LoaderCircle,
+    Save,
+    X
+} from "lucide-react";
 
 import ListEditor from "../ui/ListEditor";
+import { COURSE_TYPES, getCourseType } from "../../constants/course";
 import {
     COURSE_LIMITS,
     EMPTY_COURSE_FORM,
-    getScheduleDescription,
     getScheduleEndDate,
     isValidHttpUrl,
     mapApiValidationErrors,
     toCoursePayload,
+    toSchedulePayload,
     validateCourseForm
 } from "../../utils/courseValidation";
+import { formatPrice } from "../../utils/format";
 import {
     SCHEDULE_TYPE,
     SESSION_LIMITS,
     WEEKDAYS,
     formatLongDate,
+    formatScheduleRange,
+    formatScheduleSummary,
     nextWeekday,
     weekdayName,
     weekdayOf
@@ -27,25 +40,41 @@ import styles from "./CourseForm.module.css";
 // Orden de los campos con validación, para enfocar el primer error
 const FIELD_ORDER = [
     "name",
+    "courseType",
     "summary",
     "description",
     "imageUrl",
+    "whatYouWillLearn",
+    "materialsNote",
+    "prerequisites",
+    "location",
+    "address",
     "instructor",
     "capacity",
     "price",
+    "reservationAmount",
+    "priceNote",
     "scheduleType",
     "scheduleWeekday",
     "scheduleSessions",
     "scheduleStartDate",
     "scheduleStartTime",
-    "scheduleEndTime"
+    "scheduleEndTime",
+    "scheduleNote"
 ];
+
+const SCHEDULE_FIELDS = FIELD_ORDER.filter((field) => field.startsWith("schedule"));
 
 const SCHEDULE_OPTIONS = [
     { value: SCHEDULE_TYPE.NONE, label: "Todavía no", hint: "Lo define después" },
-    { value: SCHEDULE_TYPE.SINGLE, label: "Un solo día", hint: "Taller o clase única" },
-    { value: SCHEDULE_TYPE.WEEKLY, label: "Una vez por semana", hint: "Ej.: 6 lunes seguidos" }
+    { value: SCHEDULE_TYPE.SINGLE, label: "Un solo día", hint: "Taller, demostrativo o semidemostrativo" },
+    { value: SCHEDULE_TYPE.WEEKLY, label: "Una vez por semana", hint: "Básico o varias semanas" }
 ];
+
+const SCHEDULE_TEXT = {
+    [SCHEDULE_TYPE.SINGLE]: "de un solo día",
+    [SCHEDULE_TYPE.WEEKLY]: "de una clase por semana"
+};
 
 /*
  * En horario semanal, si ya hay fecha de inicio pero no día de la semana,
@@ -62,6 +91,12 @@ function fillWeekday(values) {
     return values;
 }
 
+// Vista previa del monto en colones mientras se escribe
+function moneyPreview(raw) {
+    const value = Number(raw);
+    return raw.trim() && Number.isInteger(value) && value >= 0 ? formatPrice(value) : "";
+}
+
 /**
  * Formulario de curso reutilizable (crear y editar).
  *   initialValues: valores iniciales (vacío al crear, datos del curso al editar)
@@ -70,7 +105,7 @@ function fillWeekday(values) {
  *   onSubmit(payload): async; si falla, el error se muestra en el formulario
  *   onCancel(): se llama al cancelar
  *   requireChanges: true al editar; el botón Guardar se activa solo si hay cambios
- *   requirePlanning: true si el curso está publicado (la planificación es obligatoria)
+ *   requirePrice: true si el curso está publicado (la API exige precio)
  */
 function CourseForm({
     initialValues = EMPTY_COURSE_FORM,
@@ -79,7 +114,7 @@ function CourseForm({
     onSubmit,
     onCancel,
     requireChanges = false,
-    requirePlanning = false
+    requirePrice = false
 }) {
     const [values, setValues] = useState(initialValues);
     const [errors, setErrors] = useState({});
@@ -93,13 +128,37 @@ function CourseForm({
 
     const isDirty = JSON.stringify(values) !== JSON.stringify(initialValues);
     const nothingToSave = requireChanges && !isDirty;
+    const validationOptions = { requirePrice };
+
+    /*
+     * Si se llega con un enlace como ".../editar#course-price" (desde el aviso
+     * "falta el precio"), se lleva a la persona directo a ese campo.
+     */
+    useEffect(() => {
+        const id = window.location.hash.slice(1);
+        if (!id.startsWith("course-")) return;
+
+        const element = document.getElementById(id);
+        if (element) {
+            element.scrollIntoView({ block: "center" });
+            element.focus({ preventScroll: true });
+        }
+    }, []);
 
     function updateValue(name, value) {
-        const nextValues = fillWeekday({ ...values, [name]: value });
+        let nextValues = { ...values, [name]: value };
+
+        // Al elegir el tipo de curso, el horario se elige solo (taller = un día, etc.)
+        if (name === "courseType") {
+            const suggested = getCourseType(value)?.schedule;
+            if (suggested) nextValues.scheduleType = suggested;
+        }
+
+        nextValues = fillWeekday(nextValues);
         setValues(nextValues);
 
         // Se revalida mientras escribe; los errores solo se ven en campos ya visitados
-        setErrors(validateCourseForm(nextValues, { requirePlanning }));
+        setErrors(validateCourseForm(nextValues, validationOptions));
     }
 
     function changeScheduleType(type) {
@@ -114,7 +173,7 @@ function CourseForm({
     function handleBlur(event) {
         const { name } = event.target;
         setTouched((prev) => ({ ...prev, [name]: true }));
-        setErrors(validateCourseForm(values, { requirePlanning }));
+        setErrors(validateCourseForm(values, validationOptions));
     }
 
     async function handleSubmit(event) {
@@ -122,7 +181,7 @@ function CourseForm({
         setServerError("");
         setServerDetails([]);
 
-        const validationErrors = validateCourseForm(values, { requirePlanning });
+        const validationErrors = validateCourseForm(values, validationOptions);
         setErrors(validationErrors);
         setTouched(Object.fromEntries(FIELD_ORDER.map((f) => [f, true])));
 
@@ -202,7 +261,11 @@ function CourseForm({
     const hasScheduleType = values.scheduleType !== SCHEDULE_TYPE.NONE;
     const isWeekly = values.scheduleType === SCHEDULE_TYPE.WEEKLY;
     const endDate = getScheduleEndDate(values);
-    const scheduleDescription = getScheduleDescription(values);
+
+    // Vista previa del horario solo cuando está completo y sin errores
+    const currentErrors = validateCourseForm(values, validationOptions);
+    const scheduleComplete = hasScheduleType && !SCHEDULE_FIELDS.some((field) => currentErrors[field]);
+    const schedulePreview = scheduleComplete ? toSchedulePayload(values) : null;
 
     // Si la fecha no cae en el día elegido, se ofrece la siguiente que sí
     const suggestedStartDate =
@@ -213,13 +276,17 @@ function CourseForm({
             ? nextWeekday(values.scheduleStartDate, values.scheduleWeekday)
             : null;
 
-    // En un curso publicado la planificación es obligatoria
-    const requiredStar = requirePlanning ? (
-        <>
-            {" "}
-            <span className={styles.star} aria-hidden="true">*</span>
-        </>
-    ) : null;
+    // Aviso según el tipo de curso: "Los talleres son de un solo día."
+    const courseType = getCourseType(values.courseType);
+    const scheduleHint = courseType?.schedule
+        ? values.scheduleType === courseType.schedule
+            ? `Elegido según el tipo de curso: los ${courseType.plural} son ${SCHEDULE_TEXT[courseType.schedule]}.`
+            : `Normalmente los ${courseType.plural} son ${SCHEDULE_TEXT[courseType.schedule]}.`
+        : undefined;
+
+    const star = <span className={styles.star} aria-hidden="true">*</span>;
+    const pricePreview = moneyPreview(values.price);
+    const reservationPreview = moneyPreview(values.reservationAmount);
 
     return (
         <form ref={formRef} onSubmit={handleSubmit} className={styles.form} noValidate>
@@ -247,24 +314,35 @@ function CourseForm({
             <fieldset className={styles.section}>
                 <legend>Información general</legend>
 
-                <div className={styles.field}>
-                    <label htmlFor="course-name">
-                        Nombre del curso <span className={styles.star} aria-hidden="true">*</span>
-                    </label>
-                    <input
-                        type="text"
-                        maxLength={COURSE_LIMITS.name.max}
-                        placeholder="Ej.: Repostería básica"
-                        required
-                        {...fieldProps("name")}
-                    />
-                    {renderMessages("name")}
+                <div className={styles.grid}>
+                    <div className={styles.field}>
+                        <label htmlFor="course-name">Nombre del curso {star}</label>
+                        <input
+                            type="text"
+                            maxLength={COURSE_LIMITS.name.max}
+                            placeholder="Ej.: Repostería básica"
+                            required
+                            {...fieldProps("name")}
+                        />
+                        {renderMessages("name")}
+                    </div>
+
+                    <div className={styles.field}>
+                        <label htmlFor="course-courseType">Tipo de curso</label>
+                        <select {...fieldProps("courseType")}>
+                            <option value="">Sin definir</option>
+                            {COURSE_TYPES.map((type) => (
+                                <option key={type.value} value={type.value}>
+                                    {type.label}
+                                </option>
+                            ))}
+                        </select>
+                        {renderMessages("courseType")}
+                    </div>
                 </div>
 
                 <div className={styles.field}>
-                    <label htmlFor="course-summary">
-                        Resumen <span className={styles.star} aria-hidden="true">*</span>
-                    </label>
+                    <label htmlFor="course-summary">Resumen {star}</label>
                     <input
                         type="text"
                         maxLength={COURSE_LIMITS.summary.max}
@@ -279,9 +357,7 @@ function CourseForm({
                 </div>
 
                 <div className={styles.field}>
-                    <label htmlFor="course-description">
-                        Descripción <span className={styles.star} aria-hidden="true">*</span>
-                    </label>
+                    <label htmlFor="course-description">Descripción {star}</label>
                     <textarea
                         rows={5}
                         maxLength={COURSE_LIMITS.description.max}
@@ -352,6 +428,17 @@ function CourseForm({
                     emptyText="Todavía no hay aprendizajes agregados."
                 />
 
+                <div className={styles.field}>
+                    <label htmlFor="course-whatYouWillLearn">Más detalle de lo que aprenderá</label>
+                    <textarea
+                        rows={3}
+                        maxLength={COURSE_LIMITS.longText.max}
+                        placeholder="Ej.: Prepararemos masas y cremas desde cero, paso a paso."
+                        {...fieldProps("whatYouWillLearn")}
+                    />
+                    {renderMessages("whatYouWillLearn", "Opcional. Texto libre que complementa la lista.")}
+                </div>
+
                 <ListEditor
                     id="course-requiredMaterials"
                     label="Materiales que debe traer"
@@ -364,26 +451,72 @@ function CourseForm({
                     disabled={submitting}
                     emptyText="Todavía no hay materiales agregados."
                 />
+
+                <div className={styles.field}>
+                    <label htmlFor="course-materialsNote">Nota sobre los materiales</label>
+                    <textarea
+                        rows={2}
+                        maxLength={COURSE_LIMITS.longText.max}
+                        placeholder="Ej.: Los ingredientes principales están incluidos."
+                        {...fieldProps("materialsNote")}
+                    />
+                    {renderMessages("materialsNote", "Opcional.")}
+                </div>
+
+                <div className={styles.field}>
+                    <label htmlFor="course-prerequisites">Requisitos previos</label>
+                    <textarea
+                        rows={2}
+                        maxLength={COURSE_LIMITS.longText.max}
+                        placeholder="Ej.: Haber llevado el curso básico."
+                        {...fieldProps("prerequisites")}
+                    />
+                    {renderMessages("prerequisites", "Opcional. Déjelo vacío si no se necesita experiencia.")}
+                </div>
+            </fieldset>
+
+            <fieldset className={styles.section}>
+                <legend>Lugar</legend>
+
+                <div className={styles.field}>
+                    <label htmlFor="course-location">Lugar</label>
+                    <input
+                        type="text"
+                        maxLength={COURSE_LIMITS.location.max}
+                        placeholder="Ej.: Ciudad Pastel — Florencia"
+                        {...fieldProps("location")}
+                    />
+                    {renderMessages("location", "Opcional.")}
+                </div>
+
+                <div className={styles.field}>
+                    <label htmlFor="course-address">Dirección</label>
+                    <textarea
+                        rows={2}
+                        maxLength={COURSE_LIMITS.address.max}
+                        placeholder="Ej.: 100 m norte de la escuela"
+                        {...fieldProps("address")}
+                    />
+                    {renderMessages("address", "Opcional. Señas para llegar.")}
+                </div>
             </fieldset>
 
             <fieldset className={styles.section}>
                 <legend>Planificación</legend>
 
                 <p className={styles.sectionHint}>
-                    {requirePlanning
-                        ? "Este curso está publicado: la planificación debe estar completa."
-                        : "Puede completarla después, pero es obligatoria para publicar el curso."}
+                    {requirePrice
+                        ? "Este curso está publicado: debe tener precio (₡0 si es gratis)."
+                        : "Para publicar el curso solo se necesita el precio. Lo demás es opcional."}
                 </p>
 
                 <div className={styles.grid}>
                     <div className={`${styles.field} ${styles.full}`}>
-                        <label htmlFor="course-instructor">
-                            Instructor{requiredStar}
-                        </label>
+                        <label htmlFor="course-instructor">Instructor</label>
                         <input
                             type="text"
                             maxLength={COURSE_LIMITS.instructor.max}
-                            placeholder="Ej.: Ana Rodríguez"
+                            placeholder="Ej.: Yamilena Blanco"
                             autoComplete="off"
                             {...fieldProps("instructor")}
                         />
@@ -391,14 +524,11 @@ function CourseForm({
                     </div>
 
                     <div className={styles.field}>
-                        <label htmlFor="course-capacity">
-                            Cupo{requiredStar}
-                        </label>
+                        <label htmlFor="course-capacity">Cupo</label>
                         <input
                             type="number"
                             inputMode="numeric"
                             min={COURSE_LIMITS.capacity.min}
-                            max={COURSE_LIMITS.capacity.max}
                             step={1}
                             placeholder="Ej.: 6"
                             {...fieldProps("capacity")}
@@ -408,7 +538,7 @@ function CourseForm({
 
                     <div className={styles.field}>
                         <label htmlFor="course-price">
-                            Precio{requiredStar}
+                            Precio{requirePrice && <> {star}</>}
                         </label>
                         <div className={styles.prefixed}>
                             <span className={styles.prefix} aria-hidden="true">₡</span>
@@ -416,13 +546,39 @@ function CourseForm({
                                 type="number"
                                 inputMode="numeric"
                                 min={COURSE_LIMITS.price.min}
-                                max={COURSE_LIMITS.price.max}
                                 step={1}
                                 placeholder="Ej.: 30000"
                                 {...fieldProps("price")}
                             />
                         </div>
-                        {renderMessages("price")}
+                        {renderMessages("price", pricePreview || "Necesario para publicar. 0 si es gratis.")}
+                    </div>
+
+                    <div className={styles.field}>
+                        <label htmlFor="course-reservationAmount">Monto para reservar</label>
+                        <div className={styles.prefixed}>
+                            <span className={styles.prefix} aria-hidden="true">₡</span>
+                            <input
+                                type="number"
+                                inputMode="numeric"
+                                min={COURSE_LIMITS.reservationAmount.min}
+                                step={1}
+                                placeholder="Ej.: 10000"
+                                {...fieldProps("reservationAmount")}
+                            />
+                        </div>
+                        {renderMessages("reservationAmount", reservationPreview || "Opcional.")}
+                    </div>
+
+                    <div className={styles.field}>
+                        <label htmlFor="course-priceNote">Nota del precio</label>
+                        <input
+                            type="text"
+                            maxLength={COURSE_LIMITS.longText.max}
+                            placeholder="Ej.: ₡10 000 matrícula + ₡20 000 por clase"
+                            {...fieldProps("priceNote")}
+                        />
+                        {renderMessages("priceNote", "Opcional. Para casos especiales.")}
                     </div>
                 </div>
 
@@ -433,42 +589,40 @@ function CourseForm({
 
                 <div className={styles.field}>
                     <span id="course-scheduleType-label" className={styles.groupLabel}>
-                        ¿Cómo son las clases?{requiredStar}
+                        ¿Cómo son las clases?
                     </span>
                     <div
                         role="radiogroup"
                         aria-labelledby="course-scheduleType-label"
                         className={styles.choices}
                     >
-                        {SCHEDULE_OPTIONS
-                            .filter((option) => !(requirePlanning && option.value === SCHEDULE_TYPE.NONE))
-                            .map((option) => (
-                                <label
-                                    key={option.value || "none"}
-                                    className={`${styles.choice} ${values.scheduleType === option.value ? styles.choiceActive : ""}`}
-                                >
-                                    <input
-                                        type="radio"
-                                        name="scheduleType"
-                                        value={option.value}
-                                        checked={values.scheduleType === option.value}
-                                        onChange={() => changeScheduleType(option.value)}
-                                        disabled={submitting}
-                                    />
-                                    <span>
-                                        <strong>{option.label}</strong>
-                                        <small>{option.hint}</small>
-                                    </span>
-                                </label>
-                            ))}
+                        {SCHEDULE_OPTIONS.map((option) => (
+                            <label
+                                key={option.value || "none"}
+                                className={`${styles.choice} ${values.scheduleType === option.value ? styles.choiceActive : ""}`}
+                            >
+                                <input
+                                    type="radio"
+                                    name="scheduleType"
+                                    value={option.value}
+                                    checked={values.scheduleType === option.value}
+                                    onChange={() => changeScheduleType(option.value)}
+                                    disabled={submitting}
+                                />
+                                <span>
+                                    <strong>{option.label}</strong>
+                                    <small>{option.hint}</small>
+                                </span>
+                            </label>
+                        ))}
                     </div>
-                    {renderMessages("scheduleType")}
+                    {renderMessages("scheduleType", scheduleHint)}
                 </div>
 
                 {isWeekly && (
                     <div className={styles.grid}>
                         <div className={styles.field}>
-                            <label htmlFor="course-scheduleWeekday">Día de la semana{requiredStar}</label>
+                            <label htmlFor="course-scheduleWeekday">Día de la semana {star}</label>
                             <select {...fieldProps("scheduleWeekday")}>
                                 <option value="">Elija un día</option>
                                 {WEEKDAYS.map((day) => (
@@ -481,7 +635,7 @@ function CourseForm({
                         </div>
 
                         <div className={styles.field}>
-                            <label htmlFor="course-scheduleSessions">Cantidad de clases{requiredStar}</label>
+                            <label htmlFor="course-scheduleSessions">Cantidad de clases {star}</label>
                             <input
                                 type="number"
                                 inputMode="numeric"
@@ -500,8 +654,7 @@ function CourseForm({
                     <div className={styles.grid}>
                         <div className={styles.field}>
                             <label htmlFor="course-scheduleStartDate">
-                                {isWeekly ? "Fecha de la primera clase" : "Fecha de la clase"}
-                                {requiredStar}
+                                {isWeekly ? "Fecha de la primera clase" : "Fecha de la clase"} {star}
                             </label>
                             <input type="date" {...fieldProps("scheduleStartDate")} />
                             {renderMessages(
@@ -538,30 +691,38 @@ function CourseForm({
                         </div>
 
                         <div className={styles.field}>
-                            <label htmlFor="course-scheduleStartTime">Hora de inicio{requiredStar}</label>
+                            <label htmlFor="course-scheduleStartTime">Hora de inicio {star}</label>
                             <input type="time" step={900} {...fieldProps("scheduleStartTime")} />
                             {renderMessages("scheduleStartTime")}
                         </div>
 
                         <div className={styles.field}>
-                            <label htmlFor="course-scheduleEndTime">Hora de fin{requiredStar}</label>
+                            <label htmlFor="course-scheduleEndTime">Hora de fin {star}</label>
                             <input type="time" step={900} {...fieldProps("scheduleEndTime")} />
                             {renderMessages("scheduleEndTime")}
+                        </div>
+
+                        <div className={`${styles.field} ${styles.full}`}>
+                            <label htmlFor="course-scheduleNote">Nota del horario</label>
+                            <textarea
+                                rows={2}
+                                maxLength={COURSE_LIMITS.longText.max}
+                                placeholder="Ej.: No hay clase el 2 de noviembre (feriado)."
+                                {...fieldProps("scheduleNote")}
+                            />
+                            {renderMessages("scheduleNote", "Opcional.")}
                         </div>
                     </div>
                 )}
 
-                {scheduleDescription && (
+                {schedulePreview && (
                     <div className={styles.schedulePreview} aria-live="polite">
                         <CalendarCheck size={20} aria-hidden="true" />
                         <div>
-                            <span>Así lo verá el público</span>
-                            <strong>{scheduleDescription}</strong>
-                            {isWeekly && endDate && (
-                                <small>
-                                    Del {formatLongDate(values.scheduleStartDate, { withYear: false })} al{" "}
-                                    {formatLongDate(endDate)}.
-                                </small>
+                            <span>Así se mostrará el horario</span>
+                            <strong>{formatScheduleSummary(schedulePreview)}</strong>
+                            {formatScheduleRange(schedulePreview) && (
+                                <small>{formatScheduleRange(schedulePreview)}</small>
                             )}
                         </div>
                     </div>

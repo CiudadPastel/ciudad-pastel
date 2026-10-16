@@ -2,9 +2,9 @@
  * Cálculos del horario de un curso (HU-A02).
  *
  * La API guarda el horario así:
- *   { startDate, endDate, startTime, endTime, description }
- * El tipo de horario (un día o semanal), el día de la semana y la cantidad
- * de clases no se guardan: se deducen de las fechas al editar.
+ *   { startDate, endDate, startTime, endTime,
+ *     frequency: "single" | "weekly", weekday: "monday"… | null, scheduleNote }
+ * La cantidad de clases no se guarda: se deduce de las fechas al editar.
  *
  * Las fechas son textos "YYYY-MM-DD" y se calculan en UTC para que la zona
  * horaria no cambie el día.
@@ -16,18 +16,21 @@ export const SCHEDULE_TYPE = {
     WEEKLY: "weekly"
 };
 
-export const SESSION_LIMITS = { min: 2, max: 20 };
+export const SESSION_LIMITS = { min: 2, max: 52 };
 
-// value = número de getUTCDay() (0 = domingo). Se muestran de lunes a domingo.
+// value = valor de la API (WEEKDAY en apps/api/src/models/course.model.js).
+// jsDay = número de getUTCDay() (0 = domingo). Se muestran de lunes a domingo.
 export const WEEKDAYS = [
-    { value: "1", name: "lunes", plural: "lunes" },
-    { value: "2", name: "martes", plural: "martes" },
-    { value: "3", name: "miércoles", plural: "miércoles" },
-    { value: "4", name: "jueves", plural: "jueves" },
-    { value: "5", name: "viernes", plural: "viernes" },
-    { value: "6", name: "sábado", plural: "sábados" },
-    { value: "0", name: "domingo", plural: "domingos" }
+    { value: "monday", jsDay: 1, name: "lunes", plural: "lunes" },
+    { value: "tuesday", jsDay: 2, name: "martes", plural: "martes" },
+    { value: "wednesday", jsDay: 3, name: "miércoles", plural: "miércoles" },
+    { value: "thursday", jsDay: 4, name: "jueves", plural: "jueves" },
+    { value: "friday", jsDay: 5, name: "viernes", plural: "viernes" },
+    { value: "saturday", jsDay: 6, name: "sábado", plural: "sábados" },
+    { value: "sunday", jsDay: 0, name: "domingo", plural: "domingos" }
 ];
+
+const MONTHS_SHORT = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "set", "oct", "nov", "dic"];
 
 const MONTHS = [
     "enero", "febrero", "marzo", "abril", "mayo", "junio",
@@ -50,12 +53,14 @@ export function isIsoDate(value) {
     return !Number.isNaN(date.getTime()) && toIso(date) === value;
 }
 
+/** Día de la semana de una fecha, en formato de la API ("monday"…). */
 export function weekdayOf(isoDate) {
-    return String(toUtcDate(isoDate).getUTCDay());
+    const jsDay = toUtcDate(isoDate).getUTCDay();
+    return WEEKDAYS.find((d) => d.jsDay === jsDay).value;
 }
 
 export function weekdayName(weekday) {
-    return WEEKDAYS.find((d) => d.value === String(weekday))?.name ?? "";
+    return WEEKDAYS.find((d) => d.value === weekday)?.name ?? "";
 }
 
 function addDays(isoDate, days) {
@@ -69,14 +74,21 @@ export function computeEndDate(startDate, sessions) {
 
 /** Primera fecha igual o posterior a isoDate que cae en ese día de la semana. */
 export function nextWeekday(isoDate, weekday) {
-    const diff = (Number(weekday) - Number(weekdayOf(isoDate)) + 7) % 7;
+    const target = WEEKDAYS.find((d) => d.value === weekday).jsDay;
+    const diff = (target - toUtcDate(isoDate).getUTCDay() + 7) % 7;
     return addDays(isoDate, diff);
+}
+
+/** Cantidad de clases semanales entre dos fechas (inclusive). */
+export function countWeeklySessions(startDate, endDate) {
+    return Math.floor((toUtcDate(endDate) - toUtcDate(startDate)) / (7 * DAY_MS)) + 1;
 }
 
 /** "2026-10-19" -> "lunes 19 de octubre de 2026" */
 export function formatLongDate(isoDate, { withYear = true } = {}) {
     const date = toUtcDate(isoDate);
-    const text = `${weekdayName(date.getUTCDay())} ${date.getUTCDate()} de ${MONTHS[date.getUTCMonth()]}`;
+    const day = WEEKDAYS.find((d) => d.jsDay === date.getUTCDay()).name;
+    const text = `${day} ${date.getUTCDate()} de ${MONTHS[date.getUTCMonth()]}`;
     return withYear ? `${text} de ${date.getUTCFullYear()}` : text;
 }
 
@@ -92,20 +104,42 @@ function capitalize(text) {
     return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-/**
- * Texto del horario que verá el público, por ejemplo:
- *   "6 lunes, de 1:00 p. m. a 5:00 p. m."
- *   "Sábado 13 de junio, de 9:00 a. m. a 3:00 p. m."
- */
-export function buildScheduleDescription({ type, weekday, sessions, startDate, startTime, endTime }) {
-    const hours = `de ${formatTime(startTime)} a ${formatTime(endTime)}`;
+/** "2026-10-19" -> "19 oct" */
+function formatShortDate(isoDate, { withYear = false } = {}) {
+    const date = toUtcDate(isoDate);
+    const text = `${date.getUTCDate()} ${MONTHS_SHORT[date.getUTCMonth()]}`;
+    return withYear ? `${text} ${date.getUTCFullYear()}` : text;
+}
 
-    if (type === SCHEDULE_TYPE.SINGLE) {
-        return `${capitalize(formatLongDate(startDate, { withYear: false }))}, ${hours}`;
+/**
+ * Horario en una línea para leerlo rápido, por ejemplo:
+ *   "Todos los lunes, de 1:00 p. m. a 5:00 p. m."
+ *   "Sábado 13 de junio de 2026, de 9:00 a. m. a 12:00 m."
+ * Devuelve null si faltan datos (cursos viejos sin horas o sin frecuencia).
+ */
+export function formatScheduleSummary(schedule) {
+    if (!schedule?.startDate || !schedule.startTime || !schedule.endTime || !schedule.frequency) {
+        return null;
     }
 
-    const day = WEEKDAYS.find((d) => d.value === String(weekday));
-    return `${sessions} ${day.plural}, ${hours}`;
+    const hours = `de ${formatTime(schedule.startTime)} a ${formatTime(schedule.endTime)}`;
+
+    if (schedule.frequency === SCHEDULE_TYPE.SINGLE) {
+        return `${capitalize(formatLongDate(schedule.startDate))}, ${hours}`;
+    }
+
+    const day = WEEKDAYS.find((d) => d.value === schedule.weekday);
+    return day ? `Todos los ${day.plural}, ${hours}` : null;
+}
+
+/** "19 oct – 23 nov 2026 · 6 clases" para horarios semanales. */
+export function formatScheduleRange(schedule) {
+    if (schedule?.frequency !== SCHEDULE_TYPE.WEEKLY || !schedule.startDate || !schedule.endDate) {
+        return null;
+    }
+
+    const sessions = countWeeklySessions(schedule.startDate, schedule.endDate);
+    return `${formatShortDate(schedule.startDate)} – ${formatShortDate(schedule.endDate, { withYear: true })} · ${sessions} ${sessions === 1 ? "clase" : "clases"}`;
 }
 
 /** Horario de la API -> campos del formulario. */
@@ -116,29 +150,34 @@ export function scheduleToFormFields(schedule) {
         scheduleSessions: "",
         scheduleStartDate: "",
         scheduleStartTime: "",
-        scheduleEndTime: ""
+        scheduleEndTime: "",
+        scheduleNote: ""
     };
 
     if (!schedule?.startDate) return empty;
 
     const { startDate, endDate } = schedule;
-    const times = {
+    const common = {
+        ...empty,
         scheduleStartDate: startDate,
         scheduleStartTime: schedule.startTime ?? "",
-        scheduleEndTime: schedule.endTime ?? ""
+        scheduleEndTime: schedule.endTime ?? "",
+        scheduleNote: schedule.scheduleNote ?? ""
     };
 
-    if (!endDate || endDate === startDate) {
-        return { ...empty, ...times, scheduleType: SCHEDULE_TYPE.SINGLE };
+    // Cursos viejos no tienen frecuencia: se deduce de las fechas
+    const weekly = schedule.frequency
+        ? schedule.frequency === SCHEDULE_TYPE.WEEKLY
+        : Boolean(endDate && endDate !== startDate);
+
+    if (!weekly) {
+        return { ...common, scheduleType: SCHEDULE_TYPE.SINGLE };
     }
 
-    const weeks = Math.floor((toUtcDate(endDate) - toUtcDate(startDate)) / (7 * DAY_MS));
-
     return {
-        ...empty,
-        ...times,
+        ...common,
         scheduleType: SCHEDULE_TYPE.WEEKLY,
-        scheduleWeekday: weekdayOf(startDate),
-        scheduleSessions: String(weeks + 1)
+        scheduleWeekday: schedule.weekday ?? weekdayOf(startDate),
+        scheduleSessions: endDate ? String(countWeeklySessions(startDate, endDate)) : ""
     };
 }

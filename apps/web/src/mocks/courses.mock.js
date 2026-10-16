@@ -12,15 +12,22 @@ import { COURSE_STATUS } from "../constants/course";
  *   imageUrl: string | null,
  *   learningOutcomes: string[],   // lo que aprenderá el estudiante
  *   requiredMaterials: string[],  // lo que debe traer el estudiante
- *   capacity: integer | null,    // de 1 a 100 personas
- *   price: integer | null,       // colones CRC enteros, de 0 a 10 000 000
- *   instructor: string | null,   // de 3 a 120 caracteres
+ *   courseType: "basic" | "workshop" | "demonstrative" | "semi_demonstrative"
+ *               | "multi_week" | "other" | null,
+ *   whatYouWillLearn, materialsNote, prerequisites, location, address,
+ *   priceNote: string | null,     // textos libres opcionales
+ *   capacity: integer | null,     // 1 o más, sin máximo
+ *   price: integer | null,        // colones enteros; obligatorio para publicar (0 = gratis)
+ *   reservationAmount: integer | null,
+ *   instructor: string | null,
  *   schedule: null | {
  *     startDate: string,          // YYYY-MM-DD
- *     endDate: string | null,     // YYYY-MM-DD, opcional
- *     startTime: string | null,   // HH:mm, ej. "13:00"
- *     endTime: string | null,     // HH:mm
- *     description: string        // descripción del horario
+ *     endDate: string | null,     // obligatorio si es semanal
+ *     startTime: string,          // HH:mm, ej. "13:00"
+ *     endTime: string,
+ *     frequency: "single" | "weekly",
+ *     weekday: "monday" … "sunday" | null,
+ *     scheduleNote: string | null
  *   },
  *   status: "draft" | "published" | "archived",
  *   createdAt: string,            // ISO (lo agrega el backend)
@@ -41,7 +48,15 @@ export const mockCourses = [
             "Cubrir un queque con buttercream"
         ],
         requiredMaterials: ["Delantal", "Recipiente plástico con tapa", "Espátula"],
-        capacity: 12,
+        courseType: "multi_week",
+        whatYouWillLearn: null,
+        materialsNote: null,
+        prerequisites: null,
+        location: "Ciudad Pastel — Florencia",
+        address: null,
+        reservationAmount: 10000,
+        priceNote: null,
+        capacity: 6,
         price: 45000,
         instructor: "María Vargas",
         schedule: {
@@ -49,7 +64,9 @@ export const mockCourses = [
             endDate: "2026-11-28",
             startTime: "09:00",
             endTime: "12:00",
-            description: "4 sábados, de 9:00 a. m. a 12:00 m."
+            frequency: "weekly",
+            weekday: "saturday",
+            scheduleNote: null
         },
         status: COURSE_STATUS.PUBLISHED,
         createdAt: "2026-09-20T15:00:00Z",
@@ -67,6 +84,14 @@ export const mockCourses = [
             "Amasar y formar distintos tipos de pan"
         ],
         requiredMaterials: ["Delantal", "Paño de cocina"],
+        courseType: null,
+        whatYouWillLearn: null,
+        materialsNote: null,
+        prerequisites: null,
+        location: null,
+        address: null,
+        reservationAmount: null,
+        priceNote: null,
         capacity: 10,
         price: 0,
         instructor: "Carlos Solís",
@@ -75,7 +100,9 @@ export const mockCourses = [
             endDate: null,
             startTime: "14:00",
             endTime: "17:00",
-            description: "Martes 10 de noviembre, de 2:00 p. m. a 5:00 p. m."
+            frequency: "single",
+            weekday: null,
+            scheduleNote: null
         },
         status: COURSE_STATUS.PUBLISHED,
         createdAt: "2026-09-22T16:10:00Z",
@@ -90,6 +117,14 @@ export const mockCourses = [
         imageUrl: null,
         learningOutcomes: ["Forrar un queque con fondant", "Modelar figuras sencillas"],
         requiredMaterials: ["Rodillo", "Cúter de precisión"],
+        courseType: null,
+        whatYouWillLearn: null,
+        materialsNote: null,
+        prerequisites: null,
+        location: null,
+        address: null,
+        reservationAmount: null,
+        priceNote: null,
         capacity: 1,
         price: null,
         instructor: null,
@@ -106,6 +141,14 @@ export const mockCourses = [
         imageUrl: null,
         learningOutcomes: [],
         requiredMaterials: [],
+        courseType: null,
+        whatYouWillLearn: null,
+        materialsNote: null,
+        prerequisites: null,
+        location: null,
+        address: null,
+        reservationAmount: null,
+        priceNote: null,
         capacity: null,
         price: null,
         instructor: null,

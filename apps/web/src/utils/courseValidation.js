@@ -1,7 +1,7 @@
+import { COURSE_TYPES } from "../constants/course";
 import {
     SCHEDULE_TYPE,
     SESSION_LIMITS,
-    buildScheduleDescription,
     computeEndDate,
     formatLongDate,
     scheduleToFormFields,
@@ -22,39 +22,73 @@ export const COURSE_LIMITS = {
     imageUrlMax: 500,
     learningOutcomes: { maxItems: 15, maxLength: 200 },
     requiredMaterials: { maxItems: 30, maxLength: 150 },
-    // Planificación (HU-A02). El precio es un número entero de colones.
-    // Las clases son pequeñas. La API todavía acepta hasta 100: pedir a backend que lo baje.
-    capacity: { min: 1, max: 8 },
-    price: { min: 0, max: 10000000 },
+    // Planificación (HU-A02). Cupo y montos sin máximo fijo (pedido de la cliente).
+    capacity: { min: 1 },
+    price: { min: 0 },
+    reservationAmount: { min: 0 },
     instructor: { min: 3, max: 120 },
-    scheduleDescription: { min: 3, max: 200 }
+    // Textos libres opcionales (reunión con la cliente del 13 de octubre)
+    location: { max: 240 },
+    address: { max: 1000 },
+    longText: { max: 5000 }
 };
+
+// Cupo sugerido al crear un curso nuevo
+export const DEFAULT_CAPACITY = "6";
+
+// Textos opcionales: la API guarda null si quedan vacíos
+const OPTIONAL_TEXT_FIELDS = [
+    "whatYouWillLearn",
+    "location",
+    "address",
+    "materialsNote",
+    "prerequisites",
+    "priceNote"
+];
 
 export const EMPTY_COURSE_FORM = {
     name: "",
+    courseType: "",
     summary: "",
     description: "",
     imageUrl: "",
     learningOutcomes: [],
+    whatYouWillLearn: "",
     requiredMaterials: [],
+    materialsNote: "",
+    prerequisites: "",
+    location: "",
+    address: "",
     instructor: "",
-    capacity: "",
+    capacity: DEFAULT_CAPACITY,
     price: "",
+    reservationAmount: "",
+    priceNote: "",
     ...scheduleToFormFields(null)
 };
+
+const numberToField = (value) => (value == null ? "" : String(value));
 
 /** Convierte un curso de la API en valores para el formulario (al editar). */
 export function courseToFormValues(course) {
     return {
         name: course.name ?? "",
+        courseType: course.courseType ?? "",
         summary: course.summary ?? "",
         description: course.description ?? "",
         imageUrl: course.imageUrl ?? "",
         learningOutcomes: course.learningOutcomes ?? [],
+        whatYouWillLearn: course.whatYouWillLearn ?? "",
         requiredMaterials: course.requiredMaterials ?? [],
+        materialsNote: course.materialsNote ?? "",
+        prerequisites: course.prerequisites ?? "",
+        location: course.location ?? "",
+        address: course.address ?? "",
         instructor: course.instructor ?? "",
-        capacity: course.capacity == null ? "" : String(course.capacity),
-        price: course.price == null ? "" : String(course.price),
+        capacity: numberToField(course.capacity),
+        price: numberToField(course.price),
+        reservationAmount: numberToField(course.reservationAmount),
+        priceNote: course.priceNote ?? "",
         ...scheduleToFormFields(course.schedule)
     };
 }
@@ -70,36 +104,32 @@ export function isValidHttpUrl(value) {
 
 function checkLength(value, { min, max }, emptyMessage, label) {
     if (!value) return emptyMessage;
-    if (value.length < min) return `${label} debe tener al menos ${min} caracteres.`;
-    if (value.length > max) return `${label} puede tener como máximo ${max} caracteres.`;
+    if (min && value.length < min) return `${label} debe tener al menos ${min} caracteres.`;
+    if (value.length > max) return `${label} puede tener como máximo ${max.toLocaleString("es-CR")} caracteres.`;
     return null;
 }
 
-export function validateCourseForm(values, options = {}) {
+function checkWholeNumber(raw, { min }, label) {
+    const value = Number(raw);
+    if (!Number.isInteger(value)) return `${label} debe ser un número entero, sin decimales.`;
+    if (value < min) return `${label} debe ser de ${min} o más.`;
+    return null;
+}
+
+/**
+ * Valida el formulario. Con requirePrice: true (curso publicado) el precio
+ * es obligatorio, igual que en la API. Puede ser ₡0 si el curso es gratis.
+ */
+export function validateCourseForm(values, { requirePrice = false } = {}) {
     const errors = {};
 
-    const nameError = checkLength(
-        values.name.trim(),
-        COURSE_LIMITS.name,
-        "Escriba el nombre del curso.",
-        "El nombre"
-    );
+    const nameError = checkLength(values.name.trim(), COURSE_LIMITS.name, "Escriba el nombre del curso.", "El nombre");
     if (nameError) errors.name = nameError;
 
-    const summaryError = checkLength(
-        values.summary.trim(),
-        COURSE_LIMITS.summary,
-        "Escriba un resumen corto del curso.",
-        "El resumen"
-    );
+    const summaryError = checkLength(values.summary.trim(), COURSE_LIMITS.summary, "Escriba un resumen corto del curso.", "El resumen");
     if (summaryError) errors.summary = summaryError;
 
-    const descriptionError = checkLength(
-        values.description.trim(),
-        COURSE_LIMITS.description,
-        "Escriba la descripción del curso.",
-        "La descripción"
-    );
+    const descriptionError = checkLength(values.description.trim(), COURSE_LIMITS.description, "Escriba la descripción del curso.", "La descripción");
     if (descriptionError) errors.description = descriptionError;
 
     const imageUrl = values.imageUrl.trim();
@@ -107,7 +137,50 @@ export function validateCourseForm(values, options = {}) {
         errors.imageUrl = "La dirección debe empezar con https:// o http://";
     }
 
-    Object.assign(errors, validatePlanning(values, options));
+    if (values.courseType && !COURSE_TYPES.some((type) => type.value === values.courseType)) {
+        errors.courseType = "Elija un tipo de curso de la lista.";
+    }
+
+    const textLimits = {
+        location: [COURSE_LIMITS.location, "El lugar"],
+        address: [COURSE_LIMITS.address, "La dirección"],
+        whatYouWillLearn: [COURSE_LIMITS.longText, "El texto"],
+        materialsNote: [COURSE_LIMITS.longText, "La nota"],
+        prerequisites: [COURSE_LIMITS.longText, "El texto"],
+        priceNote: [COURSE_LIMITS.longText, "La nota"]
+    };
+    for (const [field, [limits, label]] of Object.entries(textLimits)) {
+        const error = values[field].trim() && checkLength(values[field].trim(), limits, "", label);
+        if (error) errors[field] = error;
+    }
+
+    const instructor = values.instructor.trim();
+    if (instructor) {
+        const error = checkLength(instructor, COURSE_LIMITS.instructor, "", "El nombre del instructor");
+        if (error) errors.instructor = error;
+    }
+
+    const capacity = values.capacity.trim();
+    if (capacity) {
+        const error = checkWholeNumber(capacity, COURSE_LIMITS.capacity, "El cupo");
+        if (error) errors.capacity = error;
+    }
+
+    const price = values.price.trim();
+    if (price) {
+        const error = checkWholeNumber(price, COURSE_LIMITS.price, "El precio");
+        if (error) errors.price = error;
+    } else if (requirePrice) {
+        errors.price = "Un curso publicado necesita precio. Si es gratis, escriba 0.";
+    }
+
+    const reservation = values.reservationAmount.trim();
+    if (reservation) {
+        const error = checkWholeNumber(reservation, COURSE_LIMITS.reservationAmount, "El monto de reserva");
+        if (error) errors.reservationAmount = error;
+    }
+
+    Object.assign(errors, validateSchedule(values));
 
     return errors;
 }
@@ -116,25 +189,12 @@ function hasSchedule(values) {
     return values.scheduleType !== SCHEDULE_TYPE.NONE;
 }
 
-function checkWholeNumber(raw, { min, max }, label) {
-    const value = Number(raw);
-    if (!Number.isInteger(value)) return `${label} debe ser un número entero, sin decimales.`;
-    if (value < min || value > max) {
-        return `${label} debe estar entre ${min.toLocaleString("es-CR")} y ${max.toLocaleString("es-CR")}.`;
-    }
-    return null;
-}
-
-function validateSchedule(values, requirePlanning, requiredMessage) {
+/* El horario es opcional, pero si se elige un tipo hay que completarlo. */
+function validateSchedule(values) {
     const errors = {};
-    const type = values.scheduleType;
+    if (!hasSchedule(values)) return errors;
 
-    if (type === SCHEDULE_TYPE.NONE) {
-        if (requirePlanning) errors.scheduleType = requiredMessage;
-        return errors;
-    }
-
-    const weekly = type === SCHEDULE_TYPE.WEEKLY;
+    const weekly = values.scheduleType === SCHEDULE_TYPE.WEEKLY;
 
     if (weekly) {
         if (!values.scheduleWeekday) {
@@ -175,6 +235,11 @@ function validateSchedule(values, requirePlanning, requiredMessage) {
         errors.scheduleEndTime = "La hora de fin debe ser después de la de inicio.";
     }
 
+    const note = values.scheduleNote.trim();
+    if (note.length > COURSE_LIMITS.longText.max) {
+        errors.scheduleNote = `La nota puede tener como máximo ${COURSE_LIMITS.longText.max.toLocaleString("es-CR")} caracteres.`;
+    }
+
     return errors;
 }
 
@@ -198,110 +263,55 @@ export function getScheduleEndDate(values) {
     return computeEndDate(values.scheduleStartDate, sessions);
 }
 
-/** Texto del horario, o null si el horario todavía no está completo. */
-export function getScheduleDescription(values) {
+/** Horario en el formato de la API, o null si no hay horario. */
+export function toSchedulePayload(values) {
     if (!hasSchedule(values)) return null;
-    const errors = validateSchedule(values, false, "");
-    if (Object.keys(errors).length > 0) return null;
+    const weekly = values.scheduleType === SCHEDULE_TYPE.WEEKLY;
 
-    return buildScheduleDescription({
-        type: values.scheduleType,
-        weekday: values.scheduleWeekday,
-        sessions: Number(values.scheduleSessions),
+    return {
         startDate: values.scheduleStartDate,
+        endDate: getScheduleEndDate(values),
         startTime: values.scheduleStartTime,
-        endTime: values.scheduleEndTime
-    });
-}
-
-/*
- * Planificación (HU-A02): puede quedar vacía en un borrador, pero un curso
- * publicado debe tenerla completa (con requirePlanning: true).
- */
-function validatePlanning(values, { requirePlanning = false } = {}) {
-    const errors = {};
-    const requiredMessage = "Obligatorio para un curso publicado.";
-
-    const instructor = values.instructor.trim();
-    if (instructor) {
-        const error = checkLength(instructor, COURSE_LIMITS.instructor, "", "El nombre del instructor");
-        if (error) errors.instructor = error;
-    } else if (requirePlanning) {
-        errors.instructor = requiredMessage;
-    }
-
-    const capacity = values.capacity.trim();
-    if (capacity) {
-        const error = checkWholeNumber(capacity, COURSE_LIMITS.capacity, "El cupo");
-        if (error) errors.capacity = error;
-    } else if (requirePlanning) {
-        errors.capacity = requiredMessage;
-    }
-
-    const price = values.price.trim();
-    if (price) {
-        const error = checkWholeNumber(price, COURSE_LIMITS.price, "El precio");
-        if (error) errors.price = error;
-    } else if (requirePlanning) {
-        errors.price = requiredMessage;
-    }
-
-    Object.assign(errors, validateSchedule(values, requirePlanning, requiredMessage));
-
-    return errors;
+        endTime: values.scheduleEndTime,
+        frequency: values.scheduleType,
+        weekday: weekly ? values.scheduleWeekday : null,
+        scheduleNote: values.scheduleNote.trim() || null
+    };
 }
 
 /** Convierte los valores del formulario al formato que espera la API. */
 export function toCoursePayload(values) {
     const cleanList = (items) => items.map((item) => item.trim()).filter(Boolean);
+    const toNumber = (raw) => (raw.trim() ? Number(raw) : null);
 
     return {
         name: values.name.trim(),
+        courseType: values.courseType || null,
         summary: values.summary.trim(),
         description: values.description.trim(),
         imageUrl: values.imageUrl.trim() || null,
         learningOutcomes: cleanList(values.learningOutcomes),
         requiredMaterials: cleanList(values.requiredMaterials),
+        ...Object.fromEntries(OPTIONAL_TEXT_FIELDS.map((field) => [field, values[field].trim() || null])),
         instructor: values.instructor.trim() || null,
-        capacity: values.capacity.trim() ? Number(values.capacity) : null,
-        price: values.price.trim() ? Number(values.price) : null,
-        schedule: hasSchedule(values)
-            ? {
-                startDate: values.scheduleStartDate,
-                endDate: getScheduleEndDate(values),
-                startTime: values.scheduleStartTime,
-                endTime: values.scheduleEndTime,
-                description: getScheduleDescription(values)
-            }
-            : null
+        capacity: toNumber(values.capacity),
+        price: toNumber(values.price),
+        reservationAmount: toNumber(values.reservationAmount),
+        schedule: toSchedulePayload(values)
     };
 }
 
-const PLANNING_FIELD_LABELS = {
-    instructor: "instructor",
-    capacity: "cupo",
-    price: "precio",
-    schedule: "horario"
-};
-
 /**
- * Convierte errores como "capacity is required for a published course."
- * en un mensaje en español. Devuelve null si no son de planificación.
+ * Si la API rechazó publicar porque falta el precio, devuelve el mensaje
+ * en español. Si el error es otro, devuelve null.
  */
-export function describeMissingPlanning(details) {
+export function describePublishError(details) {
     const list = Array.isArray(details) ? details : [];
-    const missing = list
-        .filter((detail) => /is required for a published course/.test(String(detail)))
-        .map((detail) => PLANNING_FIELD_LABELS[String(detail).split(" ")[0]])
-        .filter(Boolean);
+    const priceProblem = list.some((detail) => /^price\b/.test(String(detail)));
 
-    if (missing.length === 0) return null;
-
-    const names = missing.length === 1
-        ? missing[0]
-        : `${missing.slice(0, -1).join(", ")} y ${missing.at(-1)}`;
-
-    return `Para publicar este curso falta completar su planificación: ${names}.`;
+    return priceProblem
+        ? "Para publicar este curso falta el precio. Si es gratis, puede poner ₡0."
+        : null;
 }
 
 /*
@@ -314,25 +324,37 @@ const API_FIELD_MESSAGES = {
     summary: `El resumen debe tener entre ${COURSE_LIMITS.summary.min} y ${COURSE_LIMITS.summary.max} caracteres.`,
     description: `La descripción debe tener entre ${COURSE_LIMITS.description.min} y ${COURSE_LIMITS.description.max} caracteres.`,
     imageUrl: "La dirección de la imagen no es válida.",
+    courseType: "Elija un tipo de curso de la lista.",
     learningOutcomes: `Revise los aprendizajes: máximo ${COURSE_LIMITS.learningOutcomes.maxItems}, de hasta ${COURSE_LIMITS.learningOutcomes.maxLength} caracteres cada uno.`,
     requiredMaterials: `Revise los materiales: máximo ${COURSE_LIMITS.requiredMaterials.maxItems}, de hasta ${COURSE_LIMITS.requiredMaterials.maxLength} caracteres cada uno.`,
+    whatYouWillLearn: "Revise este texto.",
+    materialsNote: "Revise la nota de materiales.",
+    prerequisites: "Revise los requisitos.",
+    location: `El lugar puede tener como máximo ${COURSE_LIMITS.location.max} caracteres.`,
+    address: `La dirección puede tener como máximo ${COURSE_LIMITS.address.max} caracteres.`,
     instructor: `El nombre del instructor debe tener entre ${COURSE_LIMITS.instructor.min} y ${COURSE_LIMITS.instructor.max} caracteres.`,
-    capacity: `El cupo debe ser un número entero entre ${COURSE_LIMITS.capacity.min} y ${COURSE_LIMITS.capacity.max}.`,
+    capacity: "El cupo debe ser un número entero de 1 o más.",
     price: "El precio debe ser un número entero de colones, sin decimales.",
+    reservationAmount: "El monto de reserva debe ser un número entero de colones, sin decimales.",
+    priceNote: "Revise la nota del precio.",
     scheduleType: "Revise el horario del curso.",
+    scheduleWeekday: "Elija el día de la semana.",
     scheduleSessions: "Revise la cantidad de clases.",
     scheduleStartDate: "La fecha de inicio no es válida.",
     scheduleStartTime: "La hora de inicio no es válida.",
-    scheduleEndTime: "La hora de fin debe ser después de la de inicio."
+    scheduleEndTime: "La hora de fin debe ser después de la de inicio.",
+    scheduleNote: "Revise la nota del horario."
 };
 
 // Nombres de la API -> nombres de los campos del formulario
 const API_FIELD_ALIASES = {
-    "schedule.description": "scheduleType",
     "schedule.startDate": "scheduleStartDate",
     "schedule.endDate": "scheduleSessions",
     "schedule.startTime": "scheduleStartTime",
     "schedule.endTime": "scheduleEndTime",
+    "schedule.frequency": "scheduleType",
+    "schedule.weekday": "scheduleWeekday",
+    "schedule.scheduleNote": "scheduleNote",
     schedule: "scheduleType"
 };
 
@@ -348,7 +370,7 @@ export function mapApiValidationErrors(details) {
         if (!field || !API_FIELD_MESSAGES[field]) continue;
 
         fieldErrors[field] = /is required for a published course/.test(text)
-            ? "Obligatorio para un curso publicado."
+            ? "Un curso publicado necesita precio. Si es gratis, escriba 0."
             : API_FIELD_MESSAGES[field];
     }
 

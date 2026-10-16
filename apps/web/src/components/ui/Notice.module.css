@@ -42,3 +42,14 @@
 .close:hover {
   background: rgba(0, 0, 0, 0.06);
 }
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: 0.5rem;
+  font-weight: 700;
+  color: inherit;
+  text-decoration: underline;
+  white-space: nowrap;
+}

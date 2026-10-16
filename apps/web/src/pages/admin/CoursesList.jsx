@@ -7,7 +7,7 @@ import Notice from "../../components/ui/Notice";
 import StateMessage, { RetryButton } from "../../components/ui/StateMessage";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { getAdminCourses } from "../../services/courses.service";
-import { COURSE_STATUS, canEditCourse } from "../../constants/course";
+import { COURSE_STATUS, COURSE_TYPES, canEditCourse, courseTypeLabel } from "../../constants/course";
 import { formatCapacity, formatDateTime, formatPrice } from "../../utils/format";
 
 import styles from "./CoursesList.module.css";
@@ -36,6 +36,16 @@ function matchesFilter(course, filter) {
     return filter === "todos" || course.status === FILTER_STATUS[filter];
 }
 
+// Filtro por tipo de curso (?tipo=workshop). "sin-tipo" = cursos sin tipo asignado.
+const TYPE_ALL = "";
+const TYPE_NONE = "sin-tipo";
+
+function matchesType(course, type) {
+    if (type === TYPE_ALL) return true;
+    if (type === TYPE_NONE) return !course.courseType;
+    return course.courseType === type;
+}
+
 function CoursesList() {
     const [state, setState] = useState({ status: "loading", courses: [], error: null });
     const [reloadKey, setReloadKey] = useState(0);
@@ -47,6 +57,12 @@ function CoursesList() {
     const filter = FILTERS.some((f) => f.value === searchParams.get("estado"))
         ? searchParams.get("estado")
         : "todos";
+
+    const typeParam = searchParams.get("tipo") ?? TYPE_ALL;
+    const typeFilter =
+        typeParam === TYPE_NONE || COURSE_TYPES.some((t) => t.value === typeParam)
+            ? typeParam
+            : TYPE_ALL;
 
     const navigate = useNavigate();
 
@@ -79,8 +95,8 @@ function CoursesList() {
         setNotice({ variant: "success", text: message });
     }
 
-    function handleStatusError(message) {
-        setNotice({ variant: "error", text: message });
+    function handleStatusError(message, action) {
+        setNotice({ variant: "error", text: message, action });
     }
 
     function changeFilter(value) {
@@ -90,14 +106,32 @@ function CoursesList() {
         setSearchParams(next, { replace: true });
     }
 
+    function changeType(value) {
+        const next = new URLSearchParams(searchParams);
+        if (value === TYPE_ALL) next.delete("tipo");
+        else next.set("tipo", value);
+        setSearchParams(next, { replace: true });
+    }
+
+    function clearFilters() {
+        setSearchParams(new URLSearchParams(), { replace: true });
+    }
+
+    // Los contadores de estado respetan el tipo elegido, y viceversa
+    const ofType = state.courses.filter((c) => matchesType(c, typeFilter));
+    const ofStatus = state.courses.filter((c) => matchesFilter(c, filter));
+
     const counts = {
-        todos: state.courses.length,
-        publicados: state.courses.filter((c) => matchesFilter(c, "publicados")).length,
-        borradores: state.courses.filter((c) => matchesFilter(c, "borradores")).length,
-        archivados: state.courses.filter((c) => matchesFilter(c, "archivados")).length
+        todos: ofType.length,
+        publicados: ofType.filter((c) => matchesFilter(c, "publicados")).length,
+        borradores: ofType.filter((c) => matchesFilter(c, "borradores")).length,
+        archivados: ofType.filter((c) => matchesFilter(c, "archivados")).length
     };
 
-    const visibleCourses = state.courses.filter((c) => matchesFilter(c, filter));
+    const typeCount = (value) => ofStatus.filter((c) => matchesType(c, value)).length;
+    const hasUntyped = state.courses.some((c) => !c.courseType);
+
+    const visibleCourses = ofType.filter((c) => matchesFilter(c, filter));
     const detailState = { from: `/admin/cursos${searchParams.size ? `?${searchParams}` : ""}` };
 
     return (
@@ -117,11 +151,16 @@ function CoursesList() {
             </header>
 
             {notice && (
-                <Notice variant={notice.variant} onClose={() => setNotice(null)}>
+                <Notice
+                    variant={notice.variant}
+                    action={notice.action}
+                    onClose={() => setNotice(null)}
+                >
                     {notice.text}
                 </Notice>
             )}
 
+            <div className={styles.filterBar}>
             <div
                 className={styles.filters}
                 role="group"
@@ -142,6 +181,29 @@ function CoursesList() {
                         )}
                     </button>
                 ))}
+            </div>
+
+                <label className={styles.typeFilter}>
+                    <span>Tipo de curso</span>
+                    <select
+                        value={typeFilter}
+                        onChange={(event) => changeType(event.target.value)}
+                        disabled={state.status !== "success"}
+                    >
+                        <option value={TYPE_ALL}>Todos los tipos</option>
+                        {COURSE_TYPES.map((type) => (
+                            <option key={type.value} value={type.value}>
+                                {type.label}
+                                {state.status === "success" ? ` (${typeCount(type.value)})` : ""}
+                            </option>
+                        ))}
+                        {hasUntyped && (
+                            <option value={TYPE_NONE}>
+                                Sin tipo ({typeCount(TYPE_NONE)})
+                            </option>
+                        )}
+                    </select>
+                </label>
             </div>
 
             {state.status === "loading" && <LoadingTable />}
@@ -172,13 +234,17 @@ function CoursesList() {
                 state.courses.length > 0 &&
                 visibleCourses.length === 0 && (
                     <StateMessage
-                        title={EMPTY_FILTER_TITLES[filter]}
+                        title={
+                            typeFilter === TYPE_ALL
+                                ? EMPTY_FILTER_TITLES[filter]
+                                : "No hay cursos con estos filtros"
+                        }
                         description="Pruebe con otro filtro para ver el resto de los cursos."
                         action={
                             <button
                                 type="button"
                                 className="btn btn-secondary"
-                                onClick={() => changeFilter("todos")}
+                                onClick={clearFilters}
                             >
                                 Ver todos
                             </button>
@@ -213,7 +279,14 @@ function CoursesList() {
                                             <div className={styles.courseCell}>
                                                 <CourseThumb course={course} />
                                                 <div>
-                                                    <span className={styles.name}>{course.name}</span>
+                                                    <span className={styles.name}>
+                                                        {course.name}
+                                                        {courseTypeLabel(course.courseType) && (
+                                                            <span className={styles.typeTag}>
+                                                                {courseTypeLabel(course.courseType)}
+                                                            </span>
+                                                        )}
+                                                    </span>
                                                     <span className={styles.secondary}>
                                                         {course.summary}
                                                     </span>
