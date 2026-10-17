@@ -34,6 +34,24 @@ Este documento define la estructura de datos, reglas de validación y preguntas 
 5. **Almacenamiento en Firestore:**
    - Colección: `enrollmentRequests/{id}`.
    - Sin migraciones ni índices compuestos (las consultas se filtran por campo simple y se ordenan en memoria).
+
+### Estructura del Documento (`enrollmentRequests/{id}`)
+
+```json
+{
+  "id": "UUID generado por el servidor (randomUUID())",
+  "courseId": "UUID del curso solicitado",
+  "courseName": "Nombre del curso al momento de solicitar",
+  "fullName": "Nombre completo de la persona",
+  "email": "correo@ejemplo.com",
+  "phone": "88888888",
+  "message": "Mensaje opcional o null",
+  "status": "pending",
+  "createdAt": "2026-10-16T12:00:00.000Z",
+  "updatedAt": "2026-10-16T12:00:00.000Z"
+}
+```
+
 6. **Seguridad y Privacidad (NOTA PARA EL HUMANO):**
    - La colección `enrollmentRequests` almacena datos personales sensibles (nombres, teléfonos, correos). Las reglas de seguridad de Firestore (`firestore.rules`) deben **negar todo acceso directo de clientes** (`allow read, write: if false;`). La API accede exclusivamente mediante Firebase Admin SDK.
 
