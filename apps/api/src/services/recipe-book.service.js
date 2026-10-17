@@ -114,3 +114,41 @@ export async function deleteRecipeBook(courseId, recipeBookId) {
         console.error("Could not delete recipe book file:", err);
     }
 }
+
+// Finds recipe books for student features, returning only student-facing fields.
+export async function findRecipeBooksByCourse(courseId) {
+    await getCourseById(courseId);
+    const books = await getRecipeBooksByCourseIdRepository(courseId);
+
+    return books.map((book) => ({
+        id: book.id,
+        title: book.title,
+        fileName: book.fileName,
+        sizeBytes: book.sizeBytes
+    }));
+}
+
+// Retrieves a recipe book file for student download features without administrative metadata.
+export async function getRecipeBookFileForCourse(courseId, recipeBookId) {
+    await getCourseById(courseId);
+
+    const recipeBook = await getRecipeBookByIdRepository(recipeBookId);
+    if (!recipeBook || recipeBook.courseId !== courseId) {
+        const error = new Error("Recipe book not found.");
+        error.name = "NotFoundError";
+        throw error;
+    }
+
+    const buffer = await readRecipeBookFile(recipeBookId);
+    if (!buffer) {
+        const error = new Error("Recipe book file not found.");
+        error.name = "NotFoundError";
+        throw error;
+    }
+
+    return {
+        fileName: recipeBook.fileName,
+        buffer
+    };
+}
+
