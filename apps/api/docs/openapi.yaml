@@ -277,6 +277,110 @@ paths:
         "500":
           description: Internal server error.
 
+    get:
+      tags:
+        - Recipe Books
+      summary: List recipe books for a course
+      description: Returns all recipe books linked to the specified course, sorted newest first.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: courseId
+          in: path
+          required: true
+          description: ID of the course.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Recipe books retrieved successfully.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RecipeBook"
+        "401":
+          description: Authentication required or invalid token.
+        "403":
+          description: Administrator privileges required.
+        "404":
+          description: Course not found.
+        "500":
+          description: Internal server error.
+
+  /admin/courses/{courseId}/recipe-books/{recipeBookId}/file:
+    get:
+      tags:
+        - Recipe Books
+      summary: Download recipe book PDF
+      description: Streams the PDF file of the specified recipe book as an attachment.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: courseId
+          in: path
+          required: true
+          description: ID of the course.
+          schema:
+            type: string
+        - name: recipeBookId
+          in: path
+          required: true
+          description: ID of the recipe book.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Recipe book PDF file downloaded successfully.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: Authentication required or invalid token.
+        "403":
+          description: Administrator privileges required.
+        "404":
+          description: Course or recipe book not found.
+        "500":
+          description: Internal server error.
+
+  /admin/courses/{courseId}/recipe-books/{recipeBookId}:
+    delete:
+      tags:
+        - Recipe Books
+      summary: Delete a recipe book
+      description: Permanently deletes a recipe book record and its stored binary file chunks.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: courseId
+          in: path
+          required: true
+          description: ID of the course.
+          schema:
+            type: string
+        - name: recipeBookId
+          in: path
+          required: true
+          description: ID of the recipe book.
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Recipe book deleted successfully.
+        "401":
+          description: Authentication required or invalid token.
+        "403":
+          description: Administrator privileges required.
+        "404":
+          description: Course or recipe book not found.
+        "500":
+          description: Internal server error.
+
+
   /courses:
     get:
       tags:
