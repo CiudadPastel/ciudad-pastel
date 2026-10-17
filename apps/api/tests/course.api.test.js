@@ -31,7 +31,7 @@ vi.mock("../src/config/firebase.js", () => ({
 vi.mock("../src/repositories/course.repository.js", () => fake.repository);
 
 import app from "../src/app.js";
-import { COURSE_STATUS as STATUS } from "../src/models/course.model.js";
+import { COURSE_STATUS as STATUS, toPublicCourse } from "../src/models/course.model.js";
 
 const CREATED_AT = "2026-10-01T12:00:00.000Z";
 const validInput = {
@@ -547,7 +547,7 @@ describe("course updates", () => {
       expect(
         (await adminRequest("get", `/api/admin/courses/${before.id}`)).body,
       ).toEqual(before);
-      expect((await request(app).get("/api/courses")).body).toEqual([before]);
+      expect((await request(app).get("/api/courses")).body).toEqual([toPublicCourse(before)]);
     },
   );
 
@@ -722,7 +722,7 @@ describe("status transitions, archiving and unarchiving", () => {
       });
       expect(changed.body.updatedAt).not.toBe(restored.body.updatedAt);
       expect((await request(app).get("/api/courses")).body).toEqual(
-        target === STATUS.PUBLISHED ? [changed.body] : [],
+        target === STATUS.PUBLISHED ? [toPublicCourse(changed.body)] : [],
       );
     },
   );
@@ -831,11 +831,11 @@ describe("public courses", () => {
     seedCourse(STATUS.ARCHIVED, "archived-course");
     const response = await request(app).get("/api/courses");
     expect(response.status).toBe(200);
-    expect(response.body).toEqual([published]);
+    expect(response.body).toEqual([toPublicCourse(published)]);
     expect(fake.verifyIdToken).not.toHaveBeenCalled();
   });
 
-  it("exposes the planning data of published courses to visitors", async () => {
+  it("exposes the planning data of published courses to visitors without internal metadata", async () => {
     seedCourse(STATUS.PUBLISHED, "published-course");
     const [course] = (await request(app).get("/api/courses")).body;
     expect(course).toMatchObject({
@@ -844,6 +844,9 @@ describe("public courses", () => {
       instructor: "Yamilena Blanco Chaves",
       schedule: validInput.schedule,
     });
+    expect(course).not.toHaveProperty("status");
+    expect(course).not.toHaveProperty("createdAt");
+    expect(course).not.toHaveProperty("updatedAt");
   });
 
   it("cannot expose drafts by accepting a public status query", async () => {
@@ -851,7 +854,7 @@ describe("public courses", () => {
     const published = seedCourse(STATUS.PUBLISHED, "published");
     const response = await request(app).get("/api/courses?status=draft");
     expect(response.status).toBe(200);
-    expect(response.body).toEqual([published]);
+    expect(response.body).toEqual([toPublicCourse(published)]);
   });
 
   it("returns an empty public array when no courses are published", async () => {
@@ -859,6 +862,38 @@ describe("public courses", () => {
     const response = await request(app).get("/api/courses");
     expect(response.status).toBe(200);
     expect(response.body).toEqual([]);
+  });
+
+  it("sorts published courses by schedule startDate ascending, then by name, placing courses without dates last", async () => {
+    fake.courses.clear();
+    const c1 = seedCourse(STATUS.PUBLISHED, "c1");
+    c1.name = "B Pasteles";
+    c1.schedule.startDate = "2026-12-01";
+    fake.courses.set("c1", c1);
+
+    const c2 = seedCourse(STATUS.PUBLISHED, "c2");
+    c2.name = "A Galletas";
+    c2.schedule.startDate = "2026-11-01";
+    fake.courses.set("c2", c2);
+
+    const c3 = seedCourse(STATUS.PUBLISHED, "c3");
+    c3.name = "Z Sin Fecha";
+    c3.schedule = null;
+    fake.courses.set("c3", c3);
+
+    const c4 = seedCourse(STATUS.PUBLISHED, "c4");
+    c4.name = "A Masas Mismo Dia";
+    c4.schedule.startDate = "2026-11-01";
+    fake.courses.set("c4", c4);
+
+    const response = await request(app).get("/api/courses");
+    expect(response.status).toBe(200);
+    expect(response.body.map((c) => c.name)).toEqual([
+      "A Galletas",
+      "A Masas Mismo Dia",
+      "B Pasteles",
+      "Z Sin Fecha"
+    ]);
   });
 });
 
@@ -1105,7 +1140,7 @@ describe("Sprint Review input contract", () => {
     const response = await adminRequest("patch", `/api/admin/courses/${created.body.id}/status`).send({ status: STATUS.PUBLISHED });
     expect(response.status).toBe(200);
     expect(response.body.price).toBe(price);
-    expect((await request(app).get("/api/courses")).body).toEqual([response.body]);
+    expect((await request(app).get("/api/courses")).body).toEqual([toPublicCourse(response.body)]);
   });
 
   it.each([undefined, null, -1, 1.5, "0"])("rejects publishing stored invalid price %j without mutation", async (price) => {
@@ -1195,7 +1230,7 @@ describe("real repository with isolated Firestore", () => {
     expect((await adminRequest("get", "/api/admin/courses")).body).toEqual([created.body]);
     const published = await adminRequest("patch", `/api/admin/courses/${created.body.id}/status`).send({ status: STATUS.PUBLISHED });
     expect(published.status).toBe(200);
-    expect((await request(app).get("/api/courses")).body).toEqual([published.body]);
+    expect((await request(app).get("/api/courses")).body).toEqual([toPublicCourse(published.body)]);
   });
 
   it("persists full PUT, metadata protection and clearing optional fields", async () => {
@@ -1236,7 +1271,7 @@ describe("real repository with isolated Firestore", () => {
         frequency: null, weekday: null, scheduleNote: schedule.description,
       } : null);
       expect((await adminRequest("get", "/api/admin/courses")).body).toEqual([detail.body]);
-      expect((await request(app).get("/api/courses")).body).toEqual([detail.body]);
+      expect((await request(app).get("/api/courses")).body).toEqual([toPublicCourse(detail.body)]);
       expect(writes).toEqual([]);
       expect(documents.get("legacy")).toBe(legacy);
       if (schedule) expect(legacy.schedule.description).toBe("Martes por la noche");

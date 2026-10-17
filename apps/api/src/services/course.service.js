@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { buildCourse, COURSE_STATUS } from "../models/course.model.js";
+import { buildCourse, COURSE_STATUS, toPublicCourse } from "../models/course.model.js";
 
 import {
     validateCourseInput
@@ -32,9 +32,26 @@ function validatePublicationPrice(course) {
     }
 }
 
-// Lists only published courses for public access.
+// Lists only published courses for public access, sorted by schedule start date ascending and then by name.
 export async function getPublishedCourses() {
-    return getCoursesRepository(COURSE_STATUS.PUBLISHED);
+    const courses = await getCoursesRepository(COURSE_STATUS.PUBLISHED);
+
+    return courses
+        .map(toPublicCourse)
+        .sort((a, b) => {
+            const aDate = a.schedule?.startDate;
+            const bDate = b.schedule?.startDate;
+
+            if (aDate && bDate) {
+                const dateComparison = aDate.localeCompare(bDate);
+                if (dateComparison !== 0) return dateComparison;
+                return a.name.localeCompare(b.name);
+            }
+            if (aDate && !bDate) return -1;
+            if (!aDate && bDate) return 1;
+
+            return a.name.localeCompare(b.name);
+        });
 }
 
 // Validates the target status and enforces allowed transitions.

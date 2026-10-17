@@ -386,7 +386,7 @@ paths:
       tags:
         - Courses
       summary: List published courses
-      description: Returns only published courses. Authentication is not required; draft and archived courses are excluded.
+      description: Returns only published courses sorted by start date ascending. Authentication is not required; draft and archived courses are excluded.
       security: []
       responses:
         "200":
@@ -396,7 +396,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Course"
+                  $ref: "#/components/schemas/PublicCourse"
         "500":
           description: Internal server error.
 
@@ -689,4 +689,59 @@ components:
           type: string
           format: date-time
           example: "2026-10-16T12:00:00.000Z"
+
+    PublicCourse:
+      type: object
+      required:
+        - id
+        - name
+        - summary
+        - description
+        - imageUrl
+        - learningOutcomes
+        - requiredMaterials
+        - capacity
+        - price
+        - instructor
+        - schedule
+      properties:
+        id:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        name:
+          type: string
+          example: Repostería Básica
+        summary:
+          type: string
+          example: Aprende técnicas básicas para preparar pasteles.
+        description:
+          type: string
+          example: Un curso práctico para principiantes.
+        imageUrl:
+          type: string
+          nullable: true
+          example: https://example.com/imagen.jpg
+        learningOutcomes:
+          type: array
+          items:
+            type: string
+        requiredMaterials:
+          type: array
+          items:
+            type: string
+        capacity:
+          type: integer
+          nullable: true
+          example: 8
+        price:
+          type: integer
+          nullable: true
+          example: 35000
+        instructor:
+          type: string
+          nullable: true
+          example: Yamilena Blanco Chaves
+        schedule:
+          $ref: "#/components/schemas/CourseSchedule"
+
 
