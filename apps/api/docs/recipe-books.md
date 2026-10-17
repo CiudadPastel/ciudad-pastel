@@ -43,3 +43,35 @@ Este documento define las reglas de negocio, decisiones arquitectónicas y pregu
 - **Motivación:** Desde febrero de 2026, Cloud Storage for Firebase exige el plan Blaze (de pago por consumo). Dado que el Project Charter de Ciudad Pastel establece operar sin financiamiento externo, se utiliza el plan Spark (gratuito) almacenando los archivos en Firestore en fragmentos de 800 KB (`CHUNK_SIZE = 800_000`).
 - **Límites y consumo:** Un documento en Firestore tiene un límite cercano a 1 MiB. Para un archivo de 5 MiB se emplean ~7 fragmentos, y para un archivo de 20 MiB ~26 fragmentos. La cuota diaria gratuita de Firestore en plan Spark ofrece 20.000 escrituras y 50.000 lecturas al día, suficiente para el flujo académico de Ciudad Pastel.
 - **Aislamiento y portabilidad:** Toda la interacción de lectura/escritura de archivos está encapsulada en `apps/api/src/storage/recipe-book.storage.js`. Si en el futuro se migra a Cloud Storage (Estrategia B al activar Blaze), solo se sustituye la implementación interna de dicho archivo sin alterar servicios, controladores ni modelos.
+
+---
+
+## 5. Modelo de Datos y Seguridad (Firestore)
+
+### Estructura del Documento (`recipeBooks/{id}`)
+
+```json
+{
+  "id": "UUID generado (clave del documento)",
+  "courseId": "UUID del curso al que pertenece",
+  "title": "Título descriptivo del recetario",
+  "fileName": "Nombre saneado del archivo (con extensión .pdf)",
+  "contentType": "application/pdf",
+  "sizeBytes": 1048576,
+  "createdBy": "UID del administrador que subió el archivo",
+  "createdAt": "Timestamp de Firestore",
+  "updatedAt": "Timestamp de Firestore"
+}
+```
+
+- **Respuesta pública de la API (`RecipeBook`):** Devuelve `id, courseId, title, fileName, contentType, sizeBytes, createdAt, updatedAt` (fechas en formato ISO 8601). El campo `createdBy` es estrictamente interno y nunca se expone en las respuestas de la API.
+- **Sin migraciones ni índices compuestos:** Al tratarse de una colección nueva, no se requieren migraciones. Las consultas filtran por igualdad (`where("courseId", "==", courseId)`) y el ordenamiento temporal descendente se efectúa en memoria, evitando requerir índices compuestos en Firestore.
+- **NOTA PARA EL HUMANO (Reglas de Seguridad de Firestore):**
+  Es necesario configurar en la consola de Firebase / `firestore.rules` que se deniegue todo acceso directo de clientes a la colección `recipeBooks` y sus subcolecciones:
+  ```
+  match /recipeBooks/{recipeBookId}/{document=**} {
+    allow read, write: if false;
+  }
+  ```
+  Toda operación legítima se canaliza a través de `apps/api` utilizando Firebase Admin SDK, el cual no está restringido por estas reglas.
+
