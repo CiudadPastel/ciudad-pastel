@@ -54,6 +54,19 @@ export async function getPublishedCourses() {
         });
 }
 
+// Retrieves a single published course by its identifier.
+export async function getPublishedCourseById(id) {
+    const course = await getCourseByIdRepository(id);
+
+    if (!course || course.status !== COURSE_STATUS.PUBLISHED) {
+        const error = new Error("Course not found.");
+        error.name = "NotFoundError";
+        throw error;
+    }
+
+    return toPublicCourse(course);
+}
+
 // Validates the target status and enforces allowed transitions.
 export async function updateCourseStatus(id, input) {
     const status = input?.status;

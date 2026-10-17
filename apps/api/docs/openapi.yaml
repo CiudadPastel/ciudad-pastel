@@ -400,6 +400,40 @@ paths:
         "500":
           description: Internal server error.
 
+  /courses/{id}:
+    get:
+      tags:
+        - Courses
+      summary: Get published course details
+      description: Returns public course details by identifier. Only published courses are returned; drafts, archived, or nonexistent courses return 404.
+      security: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Unique identifier of the course.
+      responses:
+        "200":
+          description: Public course details retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicCourse"
+        "404":
+          description: Course not found or not published.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Course not found.
+        "500":
+          description: Internal server error.
+
 components:
   securitySchemes:
     bearerAuth:

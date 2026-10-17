@@ -895,6 +895,45 @@ describe("public courses", () => {
       "Z Sin Fecha"
     ]);
   });
+
+  describe("GET /api/courses/:id (public course detail)", () => {
+    it("returns 200 with exact public keys for a published course without authentication", async () => {
+      const published = seedCourse(STATUS.PUBLISHED, "published-detail");
+      const response = await request(app).get(`/api/courses/${published.id}`);
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual(toPublicCourse(published));
+      expect(fake.verifyIdToken).not.toHaveBeenCalled();
+      expect(Object.keys(response.body).sort()).toEqual([
+        "capacity",
+        "description",
+        "id",
+        "imageUrl",
+        "instructor",
+        "learningOutcomes",
+        "name",
+        "price",
+        "requiredMaterials",
+        "schedule",
+        "summary"
+      ]);
+    });
+
+    it.each([
+      ["draft", STATUS.DRAFT],
+      ["archived", STATUS.ARCHIVED]
+    ])("returns 404 Course not found for a %s course", async (_label, status) => {
+      const course = seedCourse(status, `course-${status}`);
+      const response = await request(app).get(`/api/courses/${course.id}`);
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual({ message: "Course not found." });
+    });
+
+    it("returns 404 Course not found for a nonexistent course with identical body", async () => {
+      const response = await request(app).get("/api/courses/nonexistent-id");
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual({ message: "Course not found." });
+    });
+  });
 });
 
 const adminEndpoints = [
