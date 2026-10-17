@@ -75,3 +75,24 @@ Este documento define las reglas de negocio, decisiones arquitectónicas y pregu
   ```
   Toda operación legítima se canaliza a través de `apps/api` utilizando Firebase Admin SDK, el cual no está restringido por estas reglas.
 
+---
+
+## 6. Contrato para HU-A06 (Consulta de Estudiantes)
+
+Para la futura historia HU-A06 ("Acceso de estudiantes a recetarios de cursos matriculados"), el servicio de recetarios expone dos funciones internas de consulta desacopladas de rutas HTTP administrativas:
+
+### 1. `findRecipeBooksByCourse(courseId)`
+* **Propósito:** Lista los recetarios asociados a un curso para su presentación en el portal del estudiante.
+* **Firma:** `findRecipeBooksByCourse(courseId: string) => Promise<Array<{ id: string, title: string, fileName: string, sizeBytes: number }>>`
+* **Campos expuestos:** Exclusivamente `id`, `title`, `fileName` y `sizeBytes`. No expone timestamps (`createdAt`, `updatedAt`) ni campos de auditoría interna (`createdBy`).
+* **Errores:** Lanza `NotFoundError` (`"Course not found."`) si el curso no existe. Devuelve lista vacía `[]` si el curso existe pero no tiene recetarios.
+* **Precondición mandatoria para quien lo use:** El módulo o endpoint de HU-A06 debe verificar previamente que el estudiante autenticado cuente con una matrícula activa (HU-A09) en dicho curso antes de invocar esta función.
+
+### 2. `getRecipeBookFileForCourse(courseId, recipeBookId)`
+* **Propósito:** Obtiene el contenido binario del archivo PDF para la descarga autorizada del estudiante.
+* **Firma:** `getRecipeBookFileForCourse(courseId: string, recipeBookId: string) => Promise<{ fileName: string, buffer: Buffer }>`
+* **Retorno:** Objeto con el nombre del archivo saneado (`fileName`) y el `buffer` binario completo listo para streaming.
+* **Errores:** Lanza `NotFoundError` si el curso no existe, si el recetario no existe, si el recetario no pertenece al curso indicado, o si el archivo binario falta en storage (`"Recipe book file not found."`).
+* **Precondición mandatoria para quien lo use:** El invocador en HU-A06 debe validar la matrícula activa del estudiante antes de entregar el archivo.
+
+
