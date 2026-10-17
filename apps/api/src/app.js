@@ -18,6 +18,7 @@ import {
 
 import courseRoutes from "./routes/course.routes.js";
 import publicCourseRoutes from "./routes/public-course.routes.js";
+import recipeBookRoutes from "./routes/recipe-book.routes.js";
 
 
 dotenv.config();
@@ -63,6 +64,12 @@ app.use(
     swaggerUi.setup(openApiDocument)
 );
 
+
+// Recipe book administration routes.
+app.use(
+    "/api/admin/courses/:courseId/recipe-books",
+    recipeBookRoutes
+);
 
 // Course administration routes.
 app.use(
