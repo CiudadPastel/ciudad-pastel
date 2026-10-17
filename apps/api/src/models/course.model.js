@@ -65,3 +65,21 @@ export function buildCourse(data) {
         status: COURSE_STATUS.DRAFT
     };
 }
+
+// Converts a course entity into its public representation.
+export function toPublicCourse(course) {
+    if (!course) return null;
+    return {
+        id: course.id,
+        name: course.name,
+        summary: course.summary,
+        description: course.description,
+        imageUrl: course.imageUrl ?? null,
+        learningOutcomes: course.learningOutcomes ?? [],
+        requiredMaterials: course.requiredMaterials ?? [],
+        capacity: course.capacity ?? null,
+        price: course.price ?? null,
+        instructor: course.instructor ?? null,
+        schedule: normalizeSchedule(course.schedule)
+    };
+}

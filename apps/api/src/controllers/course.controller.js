@@ -4,7 +4,8 @@ import {
     getCourseById as getCourseByIdService,
     updateCourse as updateCourseService,
     updateCourseStatus as updateCourseStatusService,
-    getPublishedCourses as getPublishedCoursesService
+    getPublishedCourses as getPublishedCoursesService,
+    getPublishedCourseById as getPublishedCourseByIdService
 } from "../services/course.service.js";
 
 // Handles the public published-course listing.
@@ -18,6 +19,27 @@ export async function getPublishedCourses(req, res) {
 
         return res.status(500).json({
             message: "Could not retrieve courses."
+        });
+    }
+}
+
+// Handles the public course detail request.
+export async function getPublishedCourseById(req, res) {
+    try {
+        const course = await getPublishedCourseByIdService(req.params.id);
+
+        return res.status(200).json(course);
+    } catch (error) {
+        if (error.name === "NotFoundError") {
+            return res.status(404).json({
+                message: error.message
+            });
+        }
+
+        console.error("Published course detail error:", error);
+
+        return res.status(500).json({
+            message: "Could not retrieve course."
         });
     }
 }
