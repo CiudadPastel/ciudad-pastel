@@ -8,10 +8,14 @@ import {
 } from "../validators/recipe-book.validator.js";
 import {
     countRecipeBooksByCourseId,
-    createRecipeBook as createRecipeBookRepository
+    createRecipeBook as createRecipeBookRepository,
+    deleteRecipeBook as deleteRecipeBookRepository,
+    getRecipeBookById as getRecipeBookByIdRepository,
+    getRecipeBooksByCourseId as getRecipeBooksByCourseIdRepository
 } from "../repositories/recipe-book.repository.js";
 import {
     deleteRecipeBookFile,
+    readRecipeBookFile,
     saveRecipeBookFile
 } from "../storage/recipe-book.storage.js";
 
@@ -59,5 +63,54 @@ export async function createRecipeBook(courseId, { file, title } = {}, user = nu
         // Rollback stored binary data if metadata creation fails
         await deleteRecipeBookFile(id).catch(() => {});
         throw error;
+    }
+}
+
+// Lists all recipe books associated with a course, newest first.
+export async function listRecipeBooksByCourse(courseId) {
+    await getCourseById(courseId);
+    return getRecipeBooksByCourseIdRepository(courseId);
+}
+
+// Retrieves the binary buffer and metadata of a recipe book file for download.
+export async function getRecipeBookFile(courseId, recipeBookId) {
+    await getCourseById(courseId);
+
+    const recipeBook = await getRecipeBookByIdRepository(recipeBookId);
+    if (!recipeBook || recipeBook.courseId !== courseId) {
+        const error = new Error("Recipe book not found.");
+        error.name = "NotFoundError";
+        throw error;
+    }
+
+    const buffer = await readRecipeBookFile(recipeBookId);
+    if (!buffer) {
+        const error = new Error("Recipe book file not found.");
+        error.name = "NotFoundError";
+        throw error;
+    }
+
+    return { recipeBook, buffer };
+}
+
+// Deletes a recipe book metadata record and its underlying stored file.
+export async function deleteRecipeBook(courseId, recipeBookId) {
+    await getCourseById(courseId);
+
+    const recipeBook = await getRecipeBookByIdRepository(recipeBookId);
+    if (!recipeBook || recipeBook.courseId !== courseId) {
+        const error = new Error("Recipe book not found.");
+        error.name = "NotFoundError";
+        throw error;
+    }
+
+    // Delete metadata first
+    await deleteRecipeBookRepository(recipeBookId);
+
+    // Delete binary file chunks; log error if cleanup fails but don't fail the request
+    try {
+        await deleteRecipeBookFile(recipeBookId);
+    } catch (err) {
+        console.error("Could not delete recipe book file:", err);
     }
 }

@@ -34,7 +34,8 @@ const fake = vi.hoisted(() => {
             getRecipeBooksByCourseId: vi.fn((courseId) => {
                 const list = Array.from(recipeBooks.values())
                     .filter((rb) => rb.courseId === courseId)
-                    .map(({ createdBy, ...publicShape }) => publicShape);
+                    .map(({ createdBy, ...publicShape }) => publicShape)
+                    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
                 return Promise.resolve(list);
             }),
             countRecipeBooksByCourseId: vi.fn((courseId) => {
@@ -252,3 +253,288 @@ describe("POST /api/admin/courses/:courseId/recipe-books", () => {
         expect(fake.recipeBookStorage.deleteRecipeBookFile).toHaveBeenCalled();
     });
 });
+
+describe("GET /api/admin/courses/:courseId/recipe-books", () => {
+    beforeEach(() => {
+        fake.courses.clear();
+        fake.recipeBooks.clear();
+        fake.storageFiles.clear();
+        vi.clearAllMocks();
+        seedCourse();
+    });
+
+    it("returns empty array when course has no recipe books", async () => {
+        const response = await adminRequest("get", `/api/admin/courses/${COURSE_ID}/recipe-books`);
+
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual([]);
+    });
+
+    it("returns list of recipe books ordered newest first without createdBy", async () => {
+        const book1 = {
+            id: "book-1",
+            courseId: COURSE_ID,
+            title: "Primer recetario",
+            fileName: "primer.pdf",
+            contentType: "application/pdf",
+            sizeBytes: 1024,
+            createdBy: "admin-uid",
+            createdAt: "2026-10-01T10:00:00.000Z",
+            updatedAt: "2026-10-01T10:00:00.000Z"
+        };
+        const book2 = {
+            id: "book-2",
+            courseId: COURSE_ID,
+            title: "Segundo recetario más reciente",
+            fileName: "segundo.pdf",
+            contentType: "application/pdf",
+            sizeBytes: 2048,
+            createdBy: "admin-uid",
+            createdAt: "2026-10-15T12:00:00.000Z",
+            updatedAt: "2026-10-15T12:00:00.000Z"
+        };
+
+        fake.recipeBooks.set(book1.id, book1);
+        fake.recipeBooks.set(book2.id, book2);
+
+        const response = await adminRequest("get", `/api/admin/courses/${COURSE_ID}/recipe-books`);
+
+        expect(response.status).toBe(200);
+        expect(response.body).toHaveLength(2);
+        expect(response.body[0].id).toBe("book-2");
+        expect(response.body[1].id).toBe("book-1");
+        expect(response.body[0]).not.toHaveProperty("createdBy");
+    });
+
+    it("returns 404 if course does not exist", async () => {
+        const response = await adminRequest("get", "/api/admin/courses/nonexistent-course/recipe-books");
+
+        expect(response.status).toBe(404);
+        expect(response.body.message).toBe("Course not found.");
+    });
+
+    it("returns 401 without token", async () => {
+        const response = await request(app).get(`/api/admin/courses/${COURSE_ID}/recipe-books`);
+        expect(response.status).toBe(401);
+    });
+
+    it("returns 403 for non-admin user", async () => {
+        fake.verifyIdToken.mockResolvedValue({ uid: "user-1", admin: false });
+        const response = await request(app)
+            .get(`/api/admin/courses/${COURSE_ID}/recipe-books`)
+            .set("Authorization", "Bearer regular-token");
+
+        expect(response.status).toBe(403);
+    });
+});
+
+describe("GET /api/admin/courses/:courseId/recipe-books/:recipeBookId/file", () => {
+    const RECIPE_BOOK_ID = "book-download-1";
+    const PDF_BYTES = Buffer.from("%PDF-1.4 sample file for download test");
+
+    beforeEach(() => {
+        fake.courses.clear();
+        fake.recipeBooks.clear();
+        fake.storageFiles.clear();
+        vi.clearAllMocks();
+        seedCourse();
+
+        const book = {
+            id: RECIPE_BOOK_ID,
+            courseId: COURSE_ID,
+            title: "Recetario de Postres",
+            fileName: "Recetario_Básico.pdf",
+            contentType: "application/pdf",
+            sizeBytes: PDF_BYTES.length,
+            createdBy: "admin-uid",
+            createdAt: "2026-10-01T10:00:00.000Z",
+            updatedAt: "2026-10-01T10:00:00.000Z"
+        };
+        fake.recipeBooks.set(RECIPE_BOOK_ID, book);
+        fake.storageFiles.set(RECIPE_BOOK_ID, PDF_BYTES);
+    });
+
+    it("streams PDF with correct headers and identical binary content", async () => {
+        const response = await adminRequest(
+            "get",
+            `/api/admin/courses/${COURSE_ID}/recipe-books/${RECIPE_BOOK_ID}/file`
+        );
+
+        expect(response.status).toBe(200);
+        expect(response.header["content-type"]).toBe("application/pdf");
+        expect(response.header["content-length"]).toBe(String(PDF_BYTES.length));
+        expect(response.header["cache-control"]).toBe("private, no-store");
+        expect(response.header["content-disposition"]).toContain("attachment;");
+        expect(response.header["content-disposition"]).toContain("filename*=UTF-8''");
+        expect(Buffer.compare(response.body, PDF_BYTES)).toBe(0);
+    });
+
+    it("returns 404 when recipe book belongs to a different course", async () => {
+        seedCourse("published", "other-course");
+
+        const response = await adminRequest(
+            "get",
+            `/api/admin/courses/other-course/recipe-books/${RECIPE_BOOK_ID}/file`
+        );
+
+        expect(response.status).toBe(404);
+        expect(response.body.message).toBe("Recipe book not found.");
+    });
+
+    it("returns 404 when recipe book id does not exist", async () => {
+        const response = await adminRequest(
+            "get",
+            `/api/admin/courses/${COURSE_ID}/recipe-books/nonexistent-book/file`
+        );
+
+        expect(response.status).toBe(404);
+        expect(response.body.message).toBe("Recipe book not found.");
+    });
+
+    it("returns 404 if course does not exist", async () => {
+        const response = await adminRequest(
+            "get",
+            `/api/admin/courses/nonexistent-course/recipe-books/${RECIPE_BOOK_ID}/file`
+        );
+
+        expect(response.status).toBe(404);
+        expect(response.body.message).toBe("Course not found.");
+    });
+
+    it("returns 404 when binary file is missing from storage", async () => {
+        fake.storageFiles.delete(RECIPE_BOOK_ID);
+
+        const response = await adminRequest(
+            "get",
+            `/api/admin/courses/${COURSE_ID}/recipe-books/${RECIPE_BOOK_ID}/file`
+        );
+
+        expect(response.status).toBe(404);
+        expect(response.body.message).toBe("Recipe book file not found.");
+    });
+
+    it("returns 401 without token", async () => {
+        const response = await request(app).get(
+            `/api/admin/courses/${COURSE_ID}/recipe-books/${RECIPE_BOOK_ID}/file`
+        );
+        expect(response.status).toBe(401);
+    });
+
+    it("returns 403 for non-admin user", async () => {
+        fake.verifyIdToken.mockResolvedValue({ uid: "user-1", admin: false });
+        const response = await request(app)
+            .get(`/api/admin/courses/${COURSE_ID}/recipe-books/${RECIPE_BOOK_ID}/file`)
+            .set("Authorization", "Bearer regular-token");
+
+        expect(response.status).toBe(403);
+    });
+});
+
+describe("DELETE /api/admin/courses/:courseId/recipe-books/:recipeBookId", () => {
+    const RECIPE_BOOK_ID = "book-delete-1";
+    const PDF_BYTES = Buffer.from("%PDF-1.4 file to delete");
+
+    beforeEach(() => {
+        fake.courses.clear();
+        fake.recipeBooks.clear();
+        fake.storageFiles.clear();
+        vi.clearAllMocks();
+        seedCourse();
+
+        const book = {
+            id: RECIPE_BOOK_ID,
+            courseId: COURSE_ID,
+            title: "Recetario a borrar",
+            fileName: "recetario_borrar.pdf",
+            contentType: "application/pdf",
+            sizeBytes: PDF_BYTES.length,
+            createdBy: "admin-uid",
+            createdAt: "2026-10-01T10:00:00.000Z",
+            updatedAt: "2026-10-01T10:00:00.000Z"
+        };
+        fake.recipeBooks.set(RECIPE_BOOK_ID, book);
+        fake.storageFiles.set(RECIPE_BOOK_ID, PDF_BYTES);
+    });
+
+    it("deletes recipe book and returns 204 with no content", async () => {
+        const response = await adminRequest(
+            "delete",
+            `/api/admin/courses/${COURSE_ID}/recipe-books/${RECIPE_BOOK_ID}`
+        );
+
+        expect(response.status).toBe(204);
+        expect(response.body).toEqual({});
+        expect(fake.recipeBooks.has(RECIPE_BOOK_ID)).toBe(false);
+        expect(fake.storageFiles.has(RECIPE_BOOK_ID)).toBe(false);
+
+        // Subsequent get returns 404
+        const check = await adminRequest(
+            "get",
+            `/api/admin/courses/${COURSE_ID}/recipe-books/${RECIPE_BOOK_ID}/file`
+        );
+        expect(check.status).toBe(404);
+    });
+
+    it("returns 204 even if storage deletion encounters an error", async () => {
+        fake.recipeBookStorage.deleteRecipeBookFile.mockRejectedValueOnce(
+            new Error("Storage disk error")
+        );
+
+        const response = await adminRequest(
+            "delete",
+            `/api/admin/courses/${COURSE_ID}/recipe-books/${RECIPE_BOOK_ID}`
+        );
+
+        expect(response.status).toBe(204);
+        expect(fake.recipeBooks.has(RECIPE_BOOK_ID)).toBe(false);
+    });
+
+    it("returns 404 when recipe book belongs to another course", async () => {
+        seedCourse("published", "other-course");
+
+        const response = await adminRequest(
+            "delete",
+            `/api/admin/courses/other-course/recipe-books/${RECIPE_BOOK_ID}`
+        );
+
+        expect(response.status).toBe(404);
+        expect(response.body.message).toBe("Recipe book not found.");
+    });
+
+    it("returns 404 when recipe book id does not exist", async () => {
+        const response = await adminRequest(
+            "delete",
+            `/api/admin/courses/${COURSE_ID}/recipe-books/nonexistent-book`
+        );
+
+        expect(response.status).toBe(404);
+        expect(response.body.message).toBe("Recipe book not found.");
+    });
+
+    it("returns 404 if course does not exist", async () => {
+        const response = await adminRequest(
+            "delete",
+            `/api/admin/courses/nonexistent-course/recipe-books/${RECIPE_BOOK_ID}`
+        );
+
+        expect(response.status).toBe(404);
+        expect(response.body.message).toBe("Course not found.");
+    });
+
+    it("returns 401 without token", async () => {
+        const response = await request(app).delete(
+            `/api/admin/courses/${COURSE_ID}/recipe-books/${RECIPE_BOOK_ID}`
+        );
+        expect(response.status).toBe(401);
+    });
+
+    it("returns 403 for non-admin user", async () => {
+        fake.verifyIdToken.mockResolvedValue({ uid: "user-1", admin: false });
+        const response = await request(app)
+            .delete(`/api/admin/courses/${COURSE_ID}/recipe-books/${RECIPE_BOOK_ID}`)
+            .set("Authorization", "Bearer regular-token");
+
+        expect(response.status).toBe(403);
+    });
+});
+
