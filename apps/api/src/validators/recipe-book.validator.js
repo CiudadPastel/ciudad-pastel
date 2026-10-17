@@ -16,11 +16,13 @@ export const RECIPE_BOOK_LIMITS = Object.freeze({
 export function fixUtf8FileName(fileName = "") {
     try {
         const decoded = Buffer.from(fileName, "latin1").toString("utf8");
-        // If decoding produced valid characters and didn't result in unprintable garbage, return it
-        return decoded;
+        if (!decoded.includes("\ufffd")) {
+            return decoded;
+        }
     } catch {
-        return fileName;
+        // Return original on failure
     }
+    return fileName;
 }
 
 // Sanitizes a file name: strips directories, control characters, quotes, and enforces .pdf extension.

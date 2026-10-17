@@ -12,6 +12,8 @@ servers:
 tags:
   - name: Courses
     description: Course administration
+  - name: Recipe Books
+    description: Recipe book PDF administration
 
 paths:
   /admin/courses:
@@ -217,6 +219,61 @@ paths:
           description: Course not found.
         "409":
           description: Status transition is not allowed.
+        "500":
+          description: Internal server error.
+
+  /admin/courses/{courseId}/recipe-books:
+    post:
+      tags:
+        - Recipe Books
+      summary: Upload and link a recipe book PDF
+      description: Uploads a PDF recipe book and links it to an existing course.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: courseId
+          in: path
+          required: true
+          description: ID of the course to link the recipe book to.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: PDF file of the recipe book (max 20 MiB).
+                title:
+                  type: string
+                  minLength: 3
+                  maxLength: 120
+                  description: Optional descriptive title. Defaults to the base file name.
+      responses:
+        "201":
+          description: Recipe book created and linked successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecipeBook"
+        "400":
+          description: Validation failed (missing file, non-PDF, invalid signature, empty file, or invalid title).
+        "401":
+          description: Authentication required or invalid token.
+        "403":
+          description: Administrator privileges required.
+        "404":
+          description: Course not found.
+        "409":
+          description: Course already has reached the maximum of 10 recipe books.
+        "413":
+          description: File size exceeds the maximum allowed limit.
         "500":
           description: Internal server error.
 
@@ -489,3 +546,43 @@ components:
           nullable: true
           maxLength: 5000
           description: Optional free text; amounts are not parsed.
+
+    RecipeBook:
+      type: object
+      required:
+        - id
+        - courseId
+        - title
+        - fileName
+        - contentType
+        - sizeBytes
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          example: 9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d
+        courseId:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        title:
+          type: string
+          example: Recetario de Masas y Cremas
+        fileName:
+          type: string
+          example: recetario_masas_cremas.pdf
+        contentType:
+          type: string
+          example: application/pdf
+        sizeBytes:
+          type: integer
+          example: 1048576
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-10-16T12:00:00.000Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-10-16T12:00:00.000Z"
+
