@@ -34,3 +34,12 @@ Este documento define las reglas de negocio, decisiones arquitectónicas y pregu
 > *Espacio reservado para registrar formalmente las respuestas de la clienta:*
 > - **Tamaño de archivos:** Se informó que los recetarios pueden llegar a pesar hasta 20 MB (incorporado en la propuesta).
 > - *(Respuestas restantes pendientes de confirmación formal)*
+
+---
+
+## 4. Decisión de Almacenamiento
+
+- **Estrategia seleccionada:** Estrategia A — Fragmentación en Firestore (`recipeBooks/{id}/chunks/{0000, 0001, ...}`).
+- **Motivación:** Desde febrero de 2026, Cloud Storage for Firebase exige el plan Blaze (de pago por consumo). Dado que el Project Charter de Ciudad Pastel establece operar sin financiamiento externo, se utiliza el plan Spark (gratuito) almacenando los archivos en Firestore en fragmentos de 800 KB (`CHUNK_SIZE = 800_000`).
+- **Límites y consumo:** Un documento en Firestore tiene un límite cercano a 1 MiB. Para un archivo de 5 MiB se emplean ~7 fragmentos, y para un archivo de 20 MiB ~26 fragmentos. La cuota diaria gratuita de Firestore en plan Spark ofrece 20.000 escrituras y 50.000 lecturas al día, suficiente para el flujo académico de Ciudad Pastel.
+- **Aislamiento y portabilidad:** Toda la interacción de lectura/escritura de archivos está encapsulada en `apps/api/src/storage/recipe-book.storage.js`. Si en el futuro se migra a Cloud Storage (Estrategia B al activar Blaze), solo se sustituye la implementación interna de dicho archivo sin alterar servicios, controladores ni modelos.
