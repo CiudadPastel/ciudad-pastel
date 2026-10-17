@@ -1,3 +1,7 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import YAML from "yaml";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 
@@ -537,4 +541,323 @@ describe("DELETE /api/admin/courses/:courseId/recipe-books/:recipeBookId", () =>
         expect(response.status).toBe(403);
     });
 });
+
+describe("Comprehensive Backend Verification [CIU-69]", () => {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const openApiPath = path.join(__dirname, "../docs/openapi.yaml");
+    const SAMPLE_ID = "comprehensive-book-1";
+    const PDF_CONTENT = Buffer.from("%PDF-1.4 sample file for CIU-69 tests");
+
+    beforeEach(() => {
+        fake.courses.clear();
+        fake.recipeBooks.clear();
+        fake.storageFiles.clear();
+        fake.flags.failCreateRepo = false;
+        vi.clearAllMocks();
+        seedCourse();
+
+        const book = {
+            id: SAMPLE_ID,
+            courseId: COURSE_ID,
+            title: "Recetario de Coberturas",
+            fileName: "coberturas.pdf",
+            contentType: "application/pdf",
+            sizeBytes: PDF_CONTENT.length,
+            createdBy: "confidential-admin-uid-999",
+            createdAt: "2026-10-16T12:00:00.000Z",
+            updatedAt: "2026-10-16T12:00:00.000Z"
+        };
+        fake.recipeBooks.set(SAMPLE_ID, book);
+        fake.storageFiles.set(SAMPLE_ID, PDF_CONTENT);
+    });
+
+    describe("Authorization matrix: invalid token on all 4 endpoints", () => {
+        it.each([
+            ["POST", `/api/admin/courses/${COURSE_ID}/recipe-books`],
+            ["GET", `/api/admin/courses/${COURSE_ID}/recipe-books`],
+            ["GET", `/api/admin/courses/${COURSE_ID}/recipe-books/${SAMPLE_ID}/file`],
+            ["DELETE", `/api/admin/courses/${COURSE_ID}/recipe-books/${SAMPLE_ID}`]
+        ])("returns 401 when token is invalid for %s %s", async (method, url) => {
+            fake.verifyIdToken.mockRejectedValueOnce(new Error("Invalid token signature"));
+
+            let req = request(app)[method.toLowerCase()](url).set(
+                "Authorization",
+                "Bearer invalid-token-xyz"
+            );
+
+            if (method === "POST") {
+                req = req.attach("file", VALID_PDF_BUFFER, {
+                    filename: "test.pdf",
+                    contentType: "application/pdf"
+                });
+            }
+
+            const response = await req;
+            expect(response.status).toBe(401);
+            expect(response.body).toHaveProperty("message");
+        });
+    });
+
+    describe("Upload isolation on auth failure", () => {
+        it("does not call storage nor repository if authentication fails (no token)", async () => {
+            const response = await request(app)
+                .post(`/api/admin/courses/${COURSE_ID}/recipe-books`)
+                .attach("file", VALID_PDF_BUFFER, {
+                    filename: "recetario.pdf",
+                    contentType: "application/pdf"
+                });
+
+            expect(response.status).toBe(401);
+            expect(fake.recipeBookStorage.saveRecipeBookFile).not.toHaveBeenCalled();
+            expect(fake.recipeBookRepository.createRecipeBook).not.toHaveBeenCalled();
+        });
+
+        it("does not call storage nor repository if authentication fails (invalid token)", async () => {
+            fake.verifyIdToken.mockRejectedValueOnce(new Error("Decoding failed"));
+
+            const response = await request(app)
+                .post(`/api/admin/courses/${COURSE_ID}/recipe-books`)
+                .set("Authorization", "Bearer invalid-token")
+                .attach("file", VALID_PDF_BUFFER, {
+                    filename: "recetario.pdf",
+                    contentType: "application/pdf"
+                });
+
+            expect(response.status).toBe(401);
+            expect(fake.recipeBookStorage.saveRecipeBookFile).not.toHaveBeenCalled();
+            expect(fake.recipeBookRepository.createRecipeBook).not.toHaveBeenCalled();
+        });
+
+        it("does not call storage nor repository if user is not admin", async () => {
+            fake.verifyIdToken.mockResolvedValueOnce({ uid: "regular-user", admin: false });
+
+            const response = await request(app)
+                .post(`/api/admin/courses/${COURSE_ID}/recipe-books`)
+                .set("Authorization", "Bearer regular-token")
+                .attach("file", VALID_PDF_BUFFER, {
+                    filename: "recetario.pdf",
+                    contentType: "application/pdf"
+                });
+
+            expect(response.status).toBe(403);
+            expect(fake.recipeBookStorage.saveRecipeBookFile).not.toHaveBeenCalled();
+            expect(fake.recipeBookRepository.createRecipeBook).not.toHaveBeenCalled();
+        });
+    });
+
+    describe("Unexpected repository and storage errors return 500 without leaking internals", () => {
+        it("returns generic 500 when storage fails during upload", async () => {
+            fake.recipeBookStorage.saveRecipeBookFile.mockRejectedValueOnce(
+                new Error("Disk IO failure /var/secret/path")
+            );
+
+            const response = await adminRequest("post", `/api/admin/courses/${COURSE_ID}/recipe-books`)
+                .attach("file", VALID_PDF_BUFFER, {
+                    filename: "recetario.pdf",
+                    contentType: "application/pdf"
+                });
+
+            expect(response.status).toBe(500);
+            expect(response.body).toEqual({ message: "Could not create recipe book." });
+            expect(JSON.stringify(response.body)).not.toContain("Disk IO failure");
+            expect(JSON.stringify(response.body)).not.toContain("/var/secret/path");
+        });
+
+        it("returns generic 500 when repository fails during listing", async () => {
+            fake.recipeBookRepository.getRecipeBooksByCourseId.mockRejectedValueOnce(
+                new Error("Firestore query quota exceeded in internal shard 4")
+            );
+
+            const response = await adminRequest("get", `/api/admin/courses/${COURSE_ID}/recipe-books`);
+
+            expect(response.status).toBe(500);
+            expect(response.body).toEqual({ message: "Could not retrieve recipe books." });
+            expect(JSON.stringify(response.body)).not.toContain("shard 4");
+            expect(JSON.stringify(response.body)).not.toContain("quota");
+        });
+
+        it("returns generic 500 when storage fails during file download", async () => {
+            fake.recipeBookStorage.readRecipeBookFile.mockRejectedValueOnce(
+                new Error("Chunk decompression corrupted in firestore shard")
+            );
+
+            const response = await adminRequest(
+                "get",
+                `/api/admin/courses/${COURSE_ID}/recipe-books/${SAMPLE_ID}/file`
+            );
+
+            expect(response.status).toBe(500);
+            expect(response.body).toEqual({ message: "Could not download recipe book." });
+            expect(JSON.stringify(response.body)).not.toContain("Chunk decompression");
+        });
+
+        it("returns generic 500 when repository fails during deletion", async () => {
+            fake.recipeBookRepository.deleteRecipeBook.mockRejectedValueOnce(
+                new Error("Firestore transaction deadlock in primary cluster")
+            );
+
+            const response = await adminRequest(
+                "delete",
+                `/api/admin/courses/${COURSE_ID}/recipe-books/${SAMPLE_ID}`
+            );
+
+            expect(response.status).toBe(500);
+            expect(response.body).toEqual({ message: "Could not delete recipe book." });
+            expect(JSON.stringify(response.body)).not.toContain("deadlock");
+        });
+    });
+
+    describe("Field privacy: createdBy is never leaked", () => {
+        it("never leaks createdBy in list response", async () => {
+            const response = await adminRequest("get", `/api/admin/courses/${COURSE_ID}/recipe-books`);
+
+            expect(response.status).toBe(200);
+            expect(response.body.length).toBeGreaterThan(0);
+            for (const item of response.body) {
+                expect(item).not.toHaveProperty("createdBy");
+            }
+            expect(JSON.stringify(response.body)).not.toContain("confidential-admin-uid-999");
+        });
+
+        it("never leaks createdBy in upload response", async () => {
+            const response = await adminRequest("post", `/api/admin/courses/${COURSE_ID}/recipe-books`)
+                .attach("file", VALID_PDF_BUFFER, {
+                    filename: "nuevo.pdf",
+                    contentType: "application/pdf"
+                });
+
+            expect(response.status).toBe(201);
+            expect(response.body).not.toHaveProperty("createdBy");
+            expect(JSON.stringify(response.body)).not.toContain("admin-uid-123");
+        });
+    });
+
+    describe("Malicious file name sanitization and Content-Disposition safety", () => {
+        it("sanitizes dangerous characters on upload and produces safe Content-Disposition on download", async () => {
+            const maliciousFilename = "../../hack\" \r\nInjected-Header: evil\r\nx.pdf";
+
+            const uploadRes = await adminRequest("post", `/api/admin/courses/${COURSE_ID}/recipe-books`)
+                .attach("file", VALID_PDF_BUFFER, {
+                    filename: maliciousFilename,
+                    contentType: "application/pdf"
+                });
+
+            expect(uploadRes.status).toBe(201);
+            const savedBook = uploadRes.body;
+            expect(savedBook.fileName).not.toContain("..");
+            expect(savedBook.fileName).not.toContain("/");
+            expect(savedBook.fileName).not.toContain("\\");
+            expect(savedBook.fileName).not.toContain("\"");
+            expect(savedBook.fileName).not.toContain("\r");
+            expect(savedBook.fileName).not.toContain("\n");
+            expect(savedBook.fileName.endsWith(".pdf")).toBe(true);
+
+            const downloadRes = await adminRequest(
+                "get",
+                `/api/admin/courses/${COURSE_ID}/recipe-books/${savedBook.id}/file`
+            );
+
+            expect(downloadRes.status).toBe(200);
+            const disposition = downloadRes.header["content-disposition"];
+            expect(disposition).toContain("attachment;");
+            expect(disposition).not.toContain("\r");
+            expect(disposition).not.toContain("\n");
+            expect(downloadRes.header["injected-header"]).toBeUndefined();
+        });
+    });
+
+    describe("10 + 1 limit and deletion recovery", () => {
+        it("blocks 11th recipe book with 409, and allows upload again after deleting one", async () => {
+            fake.recipeBooks.clear();
+            fake.storageFiles.clear();
+
+            // Seed 10 recipe books
+            for (let i = 1; i <= 10; i++) {
+                const id = `seeded-book-${i}`;
+                fake.recipeBooks.set(id, {
+                    id,
+                    courseId: COURSE_ID,
+                    title: `Recetario ${i}`,
+                    fileName: `recetario_${i}.pdf`,
+                    contentType: "application/pdf",
+                    sizeBytes: 1024,
+                    createdBy: "admin-uid",
+                    createdAt: `2026-10-01T10:0${i}:00.000Z`,
+                    updatedAt: `2026-10-01T10:0${i}:00.000Z`
+                });
+                fake.storageFiles.set(id, VALID_PDF_BUFFER);
+            }
+
+            // 11th upload must fail with 409
+            const eleventhRes = await adminRequest("post", `/api/admin/courses/${COURSE_ID}/recipe-books`)
+                .attach("file", VALID_PDF_BUFFER, {
+                    filename: "eleventh.pdf",
+                    contentType: "application/pdf"
+                });
+
+            expect(eleventhRes.status).toBe(409);
+            expect(eleventhRes.body.message).toMatch(/maximum/i);
+
+            // Delete 1 recipe book
+            const deleteRes = await adminRequest(
+                "delete",
+                `/api/admin/courses/${COURSE_ID}/recipe-books/seeded-book-1`
+            );
+            expect(deleteRes.status).toBe(204);
+
+            // Now upload should succeed with 201
+            const retryRes = await adminRequest("post", `/api/admin/courses/${COURSE_ID}/recipe-books`)
+                .attach("file", VALID_PDF_BUFFER, {
+                    filename: "new_tenth.pdf",
+                    contentType: "application/pdf"
+                });
+
+            expect(retryRes.status).toBe(201);
+            expect(retryRes.body.fileName).toBe("new_tenth.pdf");
+        });
+    });
+
+    describe("OpenAPI schema conformity", () => {
+        it("matches the RecipeBook schema defined in openapi.yaml exactly", async () => {
+            const rawYaml = fs.readFileSync(openApiPath, "utf8");
+            const spec = YAML.parse(rawYaml);
+            const recipeBookSchema = spec.components?.schemas?.RecipeBook;
+
+            expect(recipeBookSchema).toBeDefined();
+            expect(recipeBookSchema.type).toBe("object");
+
+            const expectedProperties = Object.keys(recipeBookSchema.properties).sort();
+            const requiredProperties = recipeBookSchema.required || [];
+
+            const uploadRes = await adminRequest("post", `/api/admin/courses/${COURSE_ID}/recipe-books`)
+                .attach("file", VALID_PDF_BUFFER, {
+                    filename: "openapi_check.pdf",
+                    contentType: "application/pdf"
+                })
+                .field("title", "Verificación OpenAPI");
+
+            expect(uploadRes.status).toBe(201);
+            const responseBody = uploadRes.body;
+            const actualKeys = Object.keys(responseBody).sort();
+
+            expect(actualKeys).toEqual(expectedProperties);
+
+            for (const requiredProp of requiredProperties) {
+                expect(responseBody).toHaveProperty(requiredProp);
+                expect(responseBody[requiredProp]).not.toBeNull();
+            }
+
+            expect(typeof responseBody.id).toBe("string");
+            expect(typeof responseBody.courseId).toBe("string");
+            expect(typeof responseBody.title).toBe("string");
+            expect(typeof responseBody.fileName).toBe("string");
+            expect(typeof responseBody.contentType).toBe("string");
+            expect(typeof responseBody.sizeBytes).toBe("number");
+            expect(responseBody.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+            expect(responseBody.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+        });
+    });
+});
+
 
