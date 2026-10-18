@@ -19,6 +19,7 @@ function ConfirmDialog({
     confirmLabel = "Confirmar",
     cancelLabel = "Cancelar",
     confirmIcon: ConfirmIcon,
+    busy = false,
     onConfirm,
     onCancel
 }) {
@@ -72,11 +73,12 @@ function ConfirmDialog({
                     ref={cancelRef}
                     type="button"
                     className="btn btn-secondary"
+                    disabled={busy}
                     onClick={onCancel}
                 >
                     {cancelLabel}
                 </button>
-                <button type="button" className="btn btn-danger" onClick={onConfirm}>
+                <button type="button" className="btn btn-danger" disabled={busy} onClick={onConfirm}>
                     {ConfirmIcon && <ConfirmIcon size={18} aria-hidden="true" />}
                     {confirmLabel}
                 </button>

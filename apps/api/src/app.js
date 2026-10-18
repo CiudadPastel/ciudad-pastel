@@ -48,7 +48,9 @@ const openApiDocument = YAML.parse(
 // Enables requests from the configured frontend.
 app.use(
     cors({
-        origin: FRONTEND_URL
+        origin: FRONTEND_URL,
+        methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allowedHeaders: ["Authorization", "Content-Type"]
     })
 );
 

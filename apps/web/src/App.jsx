@@ -13,6 +13,9 @@ import AdminLayout
 import AdminLogin
     from "./components/AdminLogin";
 
+import PublicLayout
+    from "./components/public/PublicLayout";
+
 import AdminDashboard
     from "./pages/AdminDashboard";
 
@@ -28,6 +31,12 @@ import CourseEdit
 import CoursesList
     from "./pages/admin/CoursesList";
 
+import PublicCoursesList
+    from "./pages/public/CoursesList";
+
+import PublicCourseDetail
+    from "./pages/public/CourseDetail";
+
 import Home
     from "./pages/Home";
 
@@ -39,6 +48,20 @@ function App() {
                 path="/"
                 element={<Home />}
             />
+
+            <Route
+                path="/cursos"
+                element={<PublicLayout />}
+            >
+                <Route
+                    index
+                    element={<PublicCoursesList />}
+                />
+                <Route
+                    path=":id"
+                    element={<PublicCourseDetail />}
+                />
+            </Route>
 
             <Route
                 path="/admin/login"

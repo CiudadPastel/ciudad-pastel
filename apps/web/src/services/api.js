@@ -9,6 +9,7 @@ const STATUS_MESSAGES = {
     403: "Su cuenta no tiene permisos para realizar esta acción.",
     404: "No se encontró la información solicitada.",
     409: "Esta acción no es posible en el estado actual.",
+    413: "El archivo supera el tamaño máximo permitido de 20 MiB.",
     default: "Ocurrió un error en el servidor. Intente de nuevo en unos minutos."
 };
 
@@ -40,9 +41,15 @@ export class ApiError extends Error {
  * Llama al backend. Con requiresAuth: true agrega el token
  * de Firebase del usuario actual (necesario en rutas /admin).
  */
-export async function apiFetch(path, { requiresAuth = false, headers, ...options } = {}) {
+export async function apiFetch(path, {
+    requiresAuth = false,
+    responseType = "json",
+    headers,
+    ...options
+} = {}) {
+    const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
     const finalHeaders = {
-        "Content-Type": "application/json",
+        ...(!isFormData && { "Content-Type": "application/json" }),
         ...headers
     };
 
@@ -100,5 +107,6 @@ export async function apiFetch(path, { requiresAuth = false, headers, ...options
         );
     }
 
-    return response.status === 204 ? null : response.json();
+    if (response.status === 204) return null;
+    return responseType === "blob" ? response.blob() : response.json();
 }
