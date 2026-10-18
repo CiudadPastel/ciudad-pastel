@@ -1,13 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
     ArrowLeft,
     CalendarDays,
+    CircleAlert,
     GraduationCap,
     ImageOff,
+    LoaderCircle,
     ListChecks,
     MapPin,
     Package,
-    Pencil
+    Pencil,
+    Upload
 } from "lucide-react";
 import { Link, useLocation, useParams } from "react-router-dom";
 
@@ -16,11 +19,14 @@ import Notice from "../../components/ui/Notice";
 import StateMessage, { RetryButton } from "../../components/ui/StateMessage";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { getAdminCourseById } from "../../services/courses.service";
+import { uploadRecipeBook } from "../../services/recipe-books.service";
 import { COURSE_STATUS, canEditCourse, courseTypeLabel } from "../../constants/course";
 import { formatCapacity, formatDate, formatDateTime, formatPrice } from "../../utils/format";
 import { formatScheduleRange, formatScheduleSummary } from "../../utils/schedule";
 
 import styles from "./CourseDetail.module.css";
+
+const RECIPE_BOOK_MAX_BYTES = 20 * 1024 * 1024;
 
 function CourseDetail() {
     const { id } = useParams();
@@ -35,6 +41,11 @@ function CourseDetail() {
 
     const [state, setState] = useState({ id: null, status: "loading", course: null, error: null });
     const [reloadKey, setReloadKey] = useState(0);
+    const [recipeBookFile, setRecipeBookFile] = useState(null);
+    const [recipeBookTitle, setRecipeBookTitle] = useState("");
+    const [recipeBookErrors, setRecipeBookErrors] = useState({});
+    const [uploadingRecipeBook, setUploadingRecipeBook] = useState(false);
+    const recipeBookFileInput = useRef(null);
 
     useEffect(() => {
         let active = true;
@@ -55,6 +66,51 @@ function CourseDetail() {
     function retry() {
         setState({ id, status: "loading", course: null, error: null });
         setReloadKey((key) => key + 1);
+    }
+
+    async function handleRecipeBookSubmit(event) {
+        event.preventDefault();
+
+        const errors = {};
+        if (!recipeBookFile) {
+            errors.file = "Seleccione un archivo PDF.";
+        } else if (
+            recipeBookFile.type !== "application/pdf" ||
+            !recipeBookFile.name.toLowerCase().endsWith(".pdf")
+        ) {
+            errors.file = "El archivo debe ser un PDF.";
+        } else if (recipeBookFile.size === 0) {
+            errors.file = "El archivo está vacío.";
+        } else if (recipeBookFile.size > RECIPE_BOOK_MAX_BYTES) {
+            errors.file = "El archivo no puede superar los 20 MiB.";
+        }
+
+        const cleanTitle = recipeBookTitle.trim();
+        if (!cleanTitle) {
+            errors.title = "Escriba el título del libro de recetas.";
+        } else if (cleanTitle.length < 3 || cleanTitle.length > 120) {
+            errors.title = "El título debe tener entre 3 y 120 caracteres.";
+        }
+
+        setRecipeBookErrors(errors);
+        if (Object.keys(errors).length > 0) return;
+
+        setUploadingRecipeBook(true);
+        try {
+            await uploadRecipeBook(id, recipeBookFile, cleanTitle);
+            setRecipeBookFile(null);
+            setRecipeBookTitle("");
+            setRecipeBookErrors({});
+            if (recipeBookFileInput.current) recipeBookFileInput.current.value = "";
+            setNotice({ variant: "success", text: "El libro de recetas se subió correctamente." });
+        } catch (error) {
+            setNotice({
+                variant: "error",
+                text: error.message || "No se pudo subir el libro de recetas. Intente de nuevo."
+            });
+        } finally {
+            setUploadingRecipeBook(false);
+        }
     }
 
     // Si cambió el id en la URL, se muestra "cargando" hasta tener el curso nuevo
@@ -255,6 +311,101 @@ function CourseDetail() {
                         <p className={styles.preLine}>{course.prerequisites}</p>
                     </section>
                 )}
+
+                <section className={styles.block}>
+                    <h2>
+                        <Upload size={18} aria-hidden="true" className={styles.blockIcon} />
+                        Libros de recetas
+                    </h2>
+                    <form className={styles.recipeBookForm} onSubmit={handleRecipeBookSubmit} noValidate>
+                        <div className={styles.recipeBookField}>
+                            <label htmlFor="recipe-book-file">Archivo PDF *</label>
+                            <div className={styles.recipeBookFilePicker}>
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    disabled={uploadingRecipeBook}
+                                    onClick={() => recipeBookFileInput.current?.click()}
+                                >
+                                    Seleccionar archivo PDF
+                                </button>
+                                <span className={styles.recipeBookFileName} aria-live="polite">
+                                    {recipeBookFile?.name ?? "Ningún archivo seleccionado"}
+                                </span>
+                                <input
+                                    ref={recipeBookFileInput}
+                                    id="recipe-book-file"
+                                    name="file"
+                                    type="file"
+                                    accept="application/pdf,.pdf"
+                                    required
+                                    disabled={uploadingRecipeBook}
+                                    className={styles.visuallyHiddenInput}
+                                    tabIndex={-1}
+                                    aria-hidden="true"
+                                    aria-invalid={recipeBookErrors.file ? "true" : undefined}
+                                    aria-describedby="recipe-book-file-hint recipe-book-file-error"
+                                    onChange={(event) => {
+                                        setRecipeBookFile(event.target.files?.[0] ?? null);
+                                        setRecipeBookErrors((previous) => ({ ...previous, file: "" }));
+                                    }}
+                                />
+                            </div>
+                            <p id="recipe-book-file-hint" className={styles.recipeBookHint}>
+                                Tamaño máximo: 20 MiB.
+                            </p>
+                            {recipeBookErrors.file && (
+                                <p id="recipe-book-file-error" className={styles.recipeBookError}>
+                                    <CircleAlert size={14} aria-hidden="true" />
+                                    {recipeBookErrors.file}
+                                </p>
+                            )}
+                        </div>
+
+                        <div className={styles.recipeBookField}>
+                            <label htmlFor="recipe-book-title">Título *</label>
+                            <input
+                                id="recipe-book-title"
+                                name="title"
+                                type="text"
+                                value={recipeBookTitle}
+                                minLength={3}
+                                maxLength={120}
+                                required
+                                disabled={uploadingRecipeBook}
+                                aria-invalid={recipeBookErrors.title ? "true" : undefined}
+                                aria-describedby="recipe-book-title-error"
+                                onChange={(event) => {
+                                    setRecipeBookTitle(event.target.value);
+                                    setRecipeBookErrors((previous) => ({ ...previous, title: "" }));
+                                }}
+                            />
+                            {recipeBookErrors.title && (
+                                <p id="recipe-book-title-error" className={styles.recipeBookError}>
+                                    <CircleAlert size={14} aria-hidden="true" />
+                                    {recipeBookErrors.title}
+                                </p>
+                            )}
+                        </div>
+
+                        <div className={styles.recipeBookActions}>
+                            <button type="submit" className="btn btn-primary" disabled={uploadingRecipeBook}>
+                                {uploadingRecipeBook ? (
+                                    <>
+                                        <LoaderCircle size={16} className={styles.spin} aria-hidden="true" />
+                                        Subiendo…
+                                    </>
+                                ) : (
+                                    <>
+                                        <Upload size={16} aria-hidden="true" />
+                                        Subir
+                                    </>
+                                )}
+                            </button>
+                            {uploadingRecipeBook && <span role="status">Subiendo libro de recetas…</span>}
+                        </div>
+                    </form>
+                </section>
 
                 <footer className={styles.meta}>
                     <span>Creado: {formatDateTime(course.createdAt)}</span>
