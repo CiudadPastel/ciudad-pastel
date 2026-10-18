@@ -261,7 +261,7 @@
   cursor: pointer;
 }
 
-.recipeBookFilePicker .btn {
+.recipeBookFilePicker :global(.btn) {
   font-size: 0.9rem;
 }
 
@@ -283,7 +283,7 @@
   border: 0;
 }
 
-.recipeBookFilePicker:focus-within .btn {
+.recipeBookFilePicker:focus-within :global(.btn) {
   outline: 3px solid var(--cp-mint);
   outline-offset: 2px;
 }
@@ -337,6 +337,54 @@
   gap: 0.75rem;
 }
 
+.recipeBookLoading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--cp-muted);
+}
+
+.recipeBookList {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recipeBookItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 0;
+  border-top: 1px solid var(--cp-border);
+}
+
+.recipeBookInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.recipeBookInfo strong {
+  overflow-wrap: anywhere;
+  color: var(--cp-navy);
+}
+
+.recipeBookInfo span {
+  color: var(--cp-muted);
+  font-size: 0.85rem;
+}
+
+.recipeBookRowActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .spin {
   animation: spin 0.9s linear infinite;
 }
@@ -348,5 +396,16 @@
 @media (prefers-reduced-motion: reduce) {
   .spin {
     animation: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .recipeBookItem {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .recipeBookRowActions {
+    width: 100%;
   }
 }

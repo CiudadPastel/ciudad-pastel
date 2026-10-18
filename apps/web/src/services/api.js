@@ -41,7 +41,12 @@ export class ApiError extends Error {
  * Llama al backend. Con requiresAuth: true agrega el token
  * de Firebase del usuario actual (necesario en rutas /admin).
  */
-export async function apiFetch(path, { requiresAuth = false, headers, ...options } = {}) {
+export async function apiFetch(path, {
+    requiresAuth = false,
+    responseType = "json",
+    headers,
+    ...options
+} = {}) {
     const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
     const finalHeaders = {
         ...(!isFormData && { "Content-Type": "application/json" }),
@@ -102,5 +107,6 @@ export async function apiFetch(path, { requiresAuth = false, headers, ...options
         );
     }
 
-    return response.status === 204 ? null : response.json();
+    if (response.status === 204) return null;
+    return responseType === "blob" ? response.blob() : response.json();
 }

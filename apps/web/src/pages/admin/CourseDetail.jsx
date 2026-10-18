@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import {
     ArrowLeft,
+    BookOpen,
     CalendarDays,
     CircleAlert,
+    Download,
     GraduationCap,
     ImageOff,
     LoaderCircle,
@@ -10,16 +12,23 @@ import {
     MapPin,
     Package,
     Pencil,
+    Trash2,
     Upload
 } from "lucide-react";
 import { Link, useLocation, useParams } from "react-router-dom";
 
 import CourseStatusActions from "../../components/admin/CourseStatusActions";
+import ConfirmDialog from "../../components/ui/ConfirmDialog";
 import Notice from "../../components/ui/Notice";
 import StateMessage, { RetryButton } from "../../components/ui/StateMessage";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { getAdminCourseById } from "../../services/courses.service";
-import { uploadRecipeBook } from "../../services/recipe-books.service";
+import {
+    deleteRecipeBook,
+    getRecipeBookFile,
+    listRecipeBooks,
+    uploadRecipeBook
+} from "../../services/recipe-books.service";
 import { COURSE_STATUS, canEditCourse, courseTypeLabel } from "../../constants/course";
 import { formatCapacity, formatDate, formatDateTime, formatPrice } from "../../utils/format";
 import { formatScheduleRange, formatScheduleSummary } from "../../utils/schedule";
@@ -46,6 +55,16 @@ function CourseDetail() {
     const [recipeBookErrors, setRecipeBookErrors] = useState({});
     const [uploadingRecipeBook, setUploadingRecipeBook] = useState(false);
     const recipeBookFileInput = useRef(null);
+    const [recipeBookListState, setRecipeBookListState] = useState({
+        id: null,
+        status: "loading",
+        books: [],
+        error: null
+    });
+    const [recipeBookListReloadKey, setRecipeBookListReloadKey] = useState(0);
+    const [recipeBookAction, setRecipeBookAction] = useState(null);
+    const [recipeBookToDelete, setRecipeBookToDelete] = useState(null);
+    const [deletingRecipeBookId, setDeletingRecipeBookId] = useState(null);
 
     useEffect(() => {
         let active = true;
@@ -63,9 +82,126 @@ function CourseDetail() {
         };
     }, [id, reloadKey]);
 
+    useEffect(() => {
+        let active = true;
+
+        listRecipeBooks(id)
+            .then((books) => {
+                if (active) {
+                    setRecipeBookListState({
+                        id,
+                        key: recipeBookListReloadKey,
+                        status: "success",
+                        books,
+                        error: null
+                    });
+                }
+            })
+            .catch((error) => {
+                if (active) {
+                    setRecipeBookListState({
+                        id,
+                        key: recipeBookListReloadKey,
+                        status: "error",
+                        books: [],
+                        error
+                    });
+                }
+            });
+
+        return () => {
+            active = false;
+        };
+    }, [id, recipeBookListReloadKey]);
+
     function retry() {
         setState({ id, status: "loading", course: null, error: null });
         setReloadKey((key) => key + 1);
+    }
+
+    function retryRecipeBookList() {
+        setRecipeBookListReloadKey((key) => key + 1);
+    }
+
+    async function handleOpenRecipeBook(book) {
+        const openedTab = window.open("", "_blank");
+        if (!openedTab) {
+            setNotice({
+                variant: "error",
+                text: "El navegador bloqueó la pestaña. Permita las ventanas emergentes para abrir el PDF."
+            });
+            return;
+        }
+
+        openedTab.opener = null;
+        openedTab.document.title = "Abriendo libro de recetas";
+        openedTab.document.body.textContent = "Cargando el libro de recetas…";
+        setRecipeBookAction({ id: book.id, type: "open" });
+
+        try {
+            const file = await getRecipeBookFile(id, book.id);
+            const fileUrl = URL.createObjectURL(file);
+            openedTab.location.href = fileUrl;
+            const cleanupTimer = window.setInterval(() => {
+                if (openedTab.closed) {
+                    window.clearInterval(cleanupTimer);
+                    URL.revokeObjectURL(fileUrl);
+                }
+            }, 10000);
+            setNotice({ variant: "success", text: `Se abrió «${book.title}» en otra pestaña.` });
+        } catch (error) {
+            openedTab.close();
+            setNotice({
+                variant: "error",
+                text: error.message || "No se pudo abrir el libro de recetas. Intente de nuevo."
+            });
+        } finally {
+            setRecipeBookAction(null);
+        }
+    }
+
+    async function handleDownloadRecipeBook(book) {
+        setRecipeBookAction({ id: book.id, type: "download" });
+
+        try {
+            const file = await getRecipeBookFile(id, book.id);
+            const fileUrl = URL.createObjectURL(file);
+            const link = document.createElement("a");
+            link.href = fileUrl;
+            link.download = book.fileName;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.setTimeout(() => URL.revokeObjectURL(fileUrl), 1000);
+            setNotice({ variant: "success", text: `Se inició la descarga de «${book.title}».` });
+        } catch (error) {
+            setNotice({
+                variant: "error",
+                text: error.message || "No se pudo descargar el libro de recetas. Intente de nuevo."
+            });
+        } finally {
+            setRecipeBookAction(null);
+        }
+    }
+
+    async function handleDeleteRecipeBook() {
+        if (!recipeBookToDelete) return;
+
+        const book = recipeBookToDelete;
+        setDeletingRecipeBookId(book.id);
+        try {
+            await deleteRecipeBook(id, book.id);
+            setRecipeBookListReloadKey((key) => key + 1);
+            setNotice({ variant: "success", text: `Se eliminó «${book.title}».` });
+        } catch (error) {
+            setNotice({
+                variant: "error",
+                text: error.message || "No se pudo eliminar el libro de recetas. Intente de nuevo."
+            });
+        } finally {
+            setDeletingRecipeBookId(null);
+            setRecipeBookToDelete(null);
+        }
     }
 
     async function handleRecipeBookSubmit(event) {
@@ -98,6 +234,7 @@ function CourseDetail() {
         setUploadingRecipeBook(true);
         try {
             await uploadRecipeBook(id, recipeBookFile, cleanTitle);
+            setRecipeBookListReloadKey((key) => key + 1);
             setRecipeBookFile(null);
             setRecipeBookTitle("");
             setRecipeBookErrors({});
@@ -166,6 +303,10 @@ function CourseDetail() {
     }
 
     const { course } = state;
+    const recipeBookListStatus = recipeBookListState.id === id &&
+        recipeBookListState.key === recipeBookListReloadKey
+        ? recipeBookListState.status
+        : "loading";
     const visibilityText = {
         [COURSE_STATUS.PUBLISHED]: "Este curso se muestra en la oferta pública de la Academia.",
         [COURSE_STATUS.DRAFT]: "Borrador: este curso no es visible para el público.",
@@ -405,6 +546,97 @@ function CourseDetail() {
                             {uploadingRecipeBook && <span role="status">Subiendo libro de recetas…</span>}
                         </div>
                     </form>
+
+                    {recipeBookListStatus === "loading" && (
+                        <p className={styles.recipeBookLoading} role="status" aria-busy="true">
+                            <LoaderCircle size={16} className={styles.spin} aria-hidden="true" />
+                            Cargando libros de recetas…
+                        </p>
+                    )}
+                    {recipeBookListStatus === "error" && (
+                        <StateMessage
+                            variant="error"
+                            title="No se pudieron cargar los libros de recetas"
+                            description={recipeBookListState.error?.message}
+                            action={<RetryButton onClick={retryRecipeBookList} />}
+                        />
+                    )}
+                    {recipeBookListStatus === "success" && recipeBookListState.books.length === 0 && (
+                        <StateMessage title="Este curso aún no tiene libros de recetas" />
+                    )}
+                    {recipeBookListStatus === "success" && recipeBookListState.books.length > 0 && (
+                        <ul className={styles.recipeBookList}>
+                            {recipeBookListState.books.map((book) => {
+                                const busy = Boolean(recipeBookAction) || deletingRecipeBookId === book.id;
+                                return (
+                                    <li className={styles.recipeBookItem} key={book.id}>
+                                        <div className={styles.recipeBookInfo}>
+                                            <strong>{book.title}</strong>
+                                            <span>Archivo: {book.fileName}</span>
+                                            <span>Subido: {formatDateTime(book.createdAt)}</span>
+                                        </div>
+                                        <div className={styles.recipeBookRowActions}>
+                                            <button
+                                                type="button"
+                                                className="btn btn-secondary"
+                                                disabled={busy}
+                                                onClick={() => handleOpenRecipeBook(book)}
+                                            >
+                                                {recipeBookAction?.id === book.id && recipeBookAction.type === "open" ? (
+                                                    <LoaderCircle size={16} className={styles.spin} aria-hidden="true" />
+                                                ) : (
+                                                    <BookOpen size={16} aria-hidden="true" />
+                                                )}
+                                                {recipeBookAction?.id === book.id && recipeBookAction.type === "open"
+                                                    ? "Abriendo…"
+                                                    : "Abrir"}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="btn btn-secondary"
+                                                disabled={busy}
+                                                onClick={() => handleDownloadRecipeBook(book)}
+                                            >
+                                                {recipeBookAction?.id === book.id && recipeBookAction.type === "download" ? (
+                                                    <LoaderCircle size={16} className={styles.spin} aria-hidden="true" />
+                                                ) : (
+                                                    <Download size={16} aria-hidden="true" />
+                                                )}
+                                                {recipeBookAction?.id === book.id && recipeBookAction.type === "download"
+                                                    ? "Descargando…"
+                                                    : "Descargar"}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="btn btn-danger"
+                                                disabled={busy}
+                                                onClick={() => setRecipeBookToDelete(book)}
+                                            >
+                                                <Trash2 size={16} aria-hidden="true" />
+                                                Eliminar
+                                            </button>
+                                        </div>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    )}
+
+                    <ConfirmDialog
+                        open={Boolean(recipeBookToDelete)}
+                        title="¿Eliminar este libro de recetas?"
+                        confirmLabel={deletingRecipeBookId ? "Eliminando…" : "Eliminar"}
+                        confirmIcon={Trash2}
+                        busy={Boolean(deletingRecipeBookId)}
+                        onConfirm={handleDeleteRecipeBook}
+                        onCancel={() => {
+                            if (!deletingRecipeBookId) setRecipeBookToDelete(null);
+                        }}
+                    >
+                        {recipeBookToDelete && (
+                            <p>Se eliminará «{recipeBookToDelete.title}». Esta acción no se puede deshacer.</p>
+                        )}
+                    </ConfirmDialog>
                 </section>
 
                 <footer className={styles.meta}>
