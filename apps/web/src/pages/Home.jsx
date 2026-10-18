@@ -1,3 +1,4 @@
+import { BookOpen } from "lucide-react";
 import { Link } from "react-router-dom";
 
 function Home() {
@@ -12,6 +13,13 @@ function Home() {
             <p>
                 Próximamente aquí estará la tienda
                 y la oferta académica.
+            </p>
+
+            <p>
+                <Link to="/cursos" className="btn btn-primary">
+                    <BookOpen size={16} aria-hidden="true" />
+                    Ver cursos
+                </Link>
             </p>
 
             <footer>
