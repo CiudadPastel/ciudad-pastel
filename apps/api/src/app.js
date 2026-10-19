@@ -19,6 +19,7 @@ import {
 import courseRoutes from "./routes/course.routes.js";
 import publicCourseRoutes from "./routes/public-course.routes.js";
 import recipeBookRoutes from "./routes/recipe-book.routes.js";
+import enrollmentRequestRoutes from "./routes/enrollment-request.routes.js";
 
 
 dotenv.config();
@@ -79,6 +80,12 @@ app.use(
     courseRoutes
 );
 
+
+// Enrollment request administration routes (HU-A05).
+app.use(
+    "/api/admin/enrollment-requests",
+    enrollmentRequestRoutes
+);
 
 // Public published-course listing.
 app.use("/api/courses", publicCourseRoutes);
