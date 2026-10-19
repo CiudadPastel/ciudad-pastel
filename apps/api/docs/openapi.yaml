@@ -14,6 +14,8 @@ tags:
     description: Course administration
   - name: Recipe Books
     description: Recipe book PDF administration
+  - name: Enrollment requests
+    description: Enrollment requests from visitors (HU-A05)
 
 paths:
   /admin/courses:
@@ -434,6 +436,156 @@ paths:
         "500":
           description: Internal server error.
 
+  /courses/{id}/enrollment-requests:
+    post:
+      tags:
+        - Enrollment requests
+      summary: Submit an enrollment request (public)
+      description: >-
+        HU-A05. A visitor without an account asks to enroll in a published course. The request is saved as
+        pending and linked to the course; it never creates a confirmed enrollment (payment is coordinated
+        outside the platform). Only fullName, idType, idNumber and phone are accepted; other fields are ignored.
+        Spaces and hyphens in idNumber and phone are removed. A national ID has 9 digits and starts with 1-7;
+        a DIMEX has 11 or 12 digits; the phone has exactly 8 digits. One active (pending or contacted) request
+        per ID number and course; a discarded request does not block a new one.
+        Limited to 5 requests every 15 minutes per IP.
+      security: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Identifier of a published course.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnrollmentRequestInput"
+      responses:
+        "201":
+          description: Request received.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrollmentRequestConfirmation"
+        "400":
+          description: Invalid data. The errors array lists every problem (e.g. "phone must have exactly 8 digits.").
+        "404":
+          description: The course does not exist or is not published.
+        "409":
+          description: An active request for this course already exists for this ID number.
+        "429":
+          description: Too many requests from this IP. See the Retry-After header.
+        "500":
+          description: Internal server error.
+
+  /admin/enrollment-requests:
+    get:
+      tags:
+        - Enrollment requests
+      summary: List enrollment requests
+      description: Newest first. Contains personal data, so it requires an administrator.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: courseId
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+            enum: [pending, contacted, discarded]
+      responses:
+        "200":
+          description: List of requests (may be empty).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EnrollmentRequest"
+        "400":
+          description: Invalid filter.
+        "401":
+          description: Authentication required or invalid token.
+        "403":
+          description: Administrator privileges required.
+
+  /admin/enrollment-requests/{id}:
+    get:
+      tags:
+        - Enrollment requests
+      summary: Get one enrollment request
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Request details.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrollmentRequest"
+        "401":
+          description: Authentication required or invalid token.
+        "403":
+          description: Administrator privileges required.
+        "404":
+          description: Enrollment request not found.
+
+  /admin/enrollment-requests/{id}/status:
+    patch:
+      tags:
+        - Enrollment requests
+      summary: Change the follow-up status of a request
+      description: Any change between pending, contacted and discarded is allowed.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [pending, contacted, discarded]
+      responses:
+        "200":
+          description: Updated request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrollmentRequest"
+        "400":
+          description: Invalid status.
+        "401":
+          description: Authentication required or invalid token.
+        "403":
+          description: Administrator privileges required.
+        "404":
+          description: Enrollment request not found.
+
 components:
   securitySchemes:
     bearerAuth:
@@ -778,4 +930,76 @@ components:
         schedule:
           $ref: "#/components/schemas/CourseSchedule"
 
+    EnrollmentRequestInput:
+      type: object
+      required:
+        - fullName
+        - idType
+        - idNumber
+        - phone
+      properties:
+        fullName:
+          type: string
+          minLength: 3
+          maxLength: 120
+          example: María González Pérez
+        idType:
+          type: string
+          enum: [national, dimex]
+          description: national = Costa Rican cédula (9 digits, starts with 1-7); dimex = resident ID (11 or 12 digits).
+        idNumber:
+          type: string
+          example: "205380021"
+        phone:
+          type: string
+          description: Exactly 8 digits.
+          example: "88888888"
 
+    EnrollmentRequestConfirmation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        courseId:
+          type: string
+        courseName:
+          type: string
+        status:
+          type: string
+          enum: [pending]
+        createdAt:
+          type: string
+          format: date-time
+        message:
+          type: string
+
+    EnrollmentRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        courseId:
+          type: string
+        courseName:
+          type: string
+          description: Copy of the course name when the request was sent.
+        fullName:
+          type: string
+        idType:
+          type: string
+          enum: [national, dimex]
+        idNumber:
+          type: string
+        phone:
+          type: string
+        status:
+          type: string
+          enum: [pending, contacted, discarded]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time

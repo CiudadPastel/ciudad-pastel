@@ -1,73 +1,54 @@
 # HU-A05 — Solicitudes de Matrícula (Enrollment Requests)
 
-Este documento define la estructura de datos, reglas de validación y preguntas abiertas para el registro y gestión de solicitudes de matrícula en Ciudad Pastel.
+Una persona interesada (sin cuenta) solicita matricularse en un curso **publicado**.
+La solicitud **no** crea una matrícula confirmada: Ciudad Pastel contacta a la persona,
+el pago se coordina fuera de la plataforma (SINPE u otro medio) y la matrícula
+confirmada se registra después en HU-A09.
 
----
+## 1. Datos definidos con Ciudad Pastel
 
-## 1. Tabla de Campos y Reglas de Negocio
+La clienta solo necesita **nombre completo, cédula y teléfono**: el nombre y la cédula
+para los certificados, y el teléfono para contactar a la persona y agregarla al grupo
+de WhatsApp del curso. No se pide correo ni mensaje (las dudas se atienden por
+WhatsApp, 6378-5912).
 
-| Campo | Origen | Tipo / Regla | Propósito | Estado |
-|---|:---:|---|---|---|
-| `id` | **Servidor** | String (UUID generado con `randomUUID()`). Clave del documento. | Identificador único de la solicitud. | PROPUESTA — falta confirmar con Ciudad Pastel |
-| `courseId` | **Cliente** | String (ID del curso). Obligatorio. | Enlace al curso solicitado. Debe existir y estar en estado `published`. | PROPUESTA — falta confirmar con Ciudad Pastel |
-| `courseName` | **Servidor** | String (3–120 caracteres). Copia del nombre del curso al enviar. | Permite a la administración identificar el curso incluso si este cambia de nombre o se archiva. | PROPUESTA — falta confirmar con Ciudad Pastel |
-| `fullName` | **Cliente** | String (3–120 caracteres tras `trim`). Obligatorio. | Nombre completo de la persona interesada. | PROPUESTA — falta confirmar con Ciudad Pastel |
-| `email` | **Cliente** | String formato email estándar (máx. 254 caracteres). Obligatorio. | Correo electrónico para contacto y posterior acceso de estudiante (HU-A06). | PROPUESTA — falta confirmar con Ciudad Pastel |
-| `phone` | **Cliente** | String dígitos normalizados (8–15 dígitos). Obligatorio. | Teléfono / WhatsApp para coordinar pago SINPE y detalles. | PROPUESTA — falta confirmar con Ciudad Pastel |
-| `message` | **Cliente** | String opcional (máx. 500 caracteres tras `trim`) o `null`. | Preguntas, dudas o información adicional del solicitante. | PROPUESTA — falta confirmar con Ciudad Pastel |
-| `status` | **Servidor** | String enum (`"pending"`, `"contacted"`, `"cancelled"`). Inicialmente `"pending"`. | Estado de atención de la solicitud por parte de Ciudad Pastel. | PROPUESTA — falta confirmar con Ciudad Pastel |
-| `createdAt` | **Servidor** | Timestamp / ISO 8601 string. | Fecha y hora exacta de recepción de la solicitud. | PROPUESTA — falta confirmar con Ciudad Pastel |
-| `updatedAt` | **Servidor** | Timestamp / ISO 8601 string. | Fecha y hora de última actualización administrativa. | PROPUESTA — falta confirmar con Ciudad Pastel |
+| Campo | Origen | Regla |
+|---|:---:|---|
+| `id` | Servidor | UUID (`randomUUID()`), clave del documento. |
+| `courseId` | URL | Curso de `POST /api/courses/:id/enrollment-requests`. Debe existir y estar `published`; si no, 404. |
+| `courseName` | Servidor | Copia del nombre del curso al enviar (se conserva aunque el curso cambie). |
+| `fullName` | Cliente | 3–120 caracteres; se quitan espacios repetidos. Obligatorio. |
+| `idType` | Cliente | `national` (cédula nacional) o `dimex` (residentes). Obligatorio. |
+| `idNumber` | Cliente | Solo dígitos (se quitan espacios y guiones). Cédula nacional: 9 dígitos y el primero es la provincia, de 1 a 7. DIMEX: 11 o 12 dígitos. Obligatorio. |
+| `phone` | Cliente | Exactamente 8 dígitos (se quitan espacios y guiones). Obligatorio. |
+| `status` | Servidor | `pending` al crear. Luego `contacted` o `discarded` (cualquier cambio entre los tres). |
+| `createdAt` / `updatedAt` | Servidor | Timestamps de Firestore, devueltos en ISO 8601. |
 
----
+Colección de Firestore: `enrollmentRequests/{id}`. Sin índices compuestos: se filtra
+por un campo y el segundo filtro y el orden se aplican en memoria.
 
-## 2. Decisiones de Diseño y Reglas Técnicas
+## 2. Reglas
 
-1. **Campos protegidos del servidor:**
-   - `id`, `courseName`, `status`, `createdAt` y `updatedAt` son fijados exclusivamente por el servidor. Cualquier intento del cliente de enviarlos en el cuerpo de la petición es ignorado o descartado.
-2. **Normalización telefónica:**
-   - La persona puede ingresar espacios, guiones o paréntesis (ej. `8888-8888` o `+506 8888 8888`), pero el sistema extrae únicamente los dígitos para almacenar un número estándar de 8 a 15 cifras.
-3. **Validación de curso publicado:**
-   - Una solicitud solo puede ser procesada si el curso existe y se encuentra actualmente con `status === "published"`. Si el curso está en borrador, archivado o no existe, se rechaza con 404 (`Course not found.`).
-4. **No bloqueante por cupos:**
-   - Enviar una solicitud de matrícula **NO** reserva un cupo automáticamente ni matricula al alumno; el pago y confirmación formal se coordinan fuera de la plataforma (ej. SINPE Móvil). Por lo tanto, no se bloquean solicitudes por cupo lleno.
-5. **Almacenamiento en Firestore:**
-   - Colección: `enrollmentRequests/{id}`.
-   - Sin migraciones ni índices compuestos (las consultas se filtran por campo simple y se ordenan en memoria).
+1. **Campos protegidos:** `id`, `courseId`, `courseName`, `status` y las fechas los pone
+   el servidor. Si el visitante los envía, se ignoran.
+2. **Solicitudes repetidas:** una misma cédula solo puede tener una solicitud activa
+   (`pending` o `contacted`) por curso → 409 *"already received"*. Si la anterior fue
+   `discarded`, sí puede volver a solicitar.
+3. **Sin bloqueo por cupo:** enviar una solicitud no reserva cupo.
+4. **Antispam:** máximo 5 solicitudes cada 15 minutos por IP → 429 con `Retry-After`.
+   El contador vive en memoria (se reinicia con el servidor). En producción detrás de
+   un proxy, activar `app.set("trust proxy", 1)`.
+5. **Respuesta pública mínima:** el 201 devuelve `id`, `courseId`, `courseName`,
+   `status`, `createdAt` y un mensaje; no devuelve la cédula ni el teléfono.
+6. **Privacidad:** las rutas `/api/admin/enrollment-requests` exigen administrador
+   (HU-G01). Las reglas de Firestore deben negar el acceso directo de clientes a
+   `enrollmentRequests` (`allow read, write: if false;`); la API usa Firebase Admin SDK.
 
-### Estructura del Documento (`enrollmentRequests/{id}`)
+## 3. Endpoints
 
-```json
-{
-  "id": "UUID generado por el servidor (randomUUID())",
-  "courseId": "UUID del curso solicitado",
-  "courseName": "Nombre del curso al momento de solicitar",
-  "fullName": "Nombre completo de la persona",
-  "email": "correo@ejemplo.com",
-  "phone": "88888888",
-  "message": "Mensaje opcional o null",
-  "status": "pending",
-  "createdAt": "2026-10-16T12:00:00.000Z",
-  "updatedAt": "2026-10-16T12:00:00.000Z"
-}
-```
-
-6. **Seguridad y Privacidad (NOTA PARA EL HUMANO):**
-   - La colección `enrollmentRequests` almacena datos personales sensibles (nombres, teléfonos, correos). Las reglas de seguridad de Firestore (`firestore.rules`) deben **negar todo acceso directo de clientes** (`allow read, write: if false;`). La API accede exclusivamente mediante Firebase Admin SDK.
-
----
-
-## 3. Preguntas para la Clienta (Yamilena Blanco Chaves)
-
-1. **Datos de contacto necesarios:** ¿Qué datos consideran indispensables para contactar a una persona interesada (nombre completo, teléfono/WhatsApp, correo electrónico)? ¿Es necesario algún dato adicional como lugar de residencia o cédula?
-2. **Medio preferido de comunicación:** ¿Prefieren contactar a los interesados principalmente por WhatsApp, llamada telefónica o por correo electrónico?
-3. **Preguntas adicionales en el formulario:** ¿Desean incluir campos opcionales como experiencia previa en repostería, edad del estudiante (o si es para un menor de edad), o si tienen alguna alergia alimentaria?
-4. **Consentimiento y privacidad:** ¿Requieren mostrar una cláusula de consentimiento o aviso de privacidad sobre el tratamiento de datos personales antes de enviar el formulario?
-5. **Notificación de nuevas solicitudes:** ¿Cómo prefieren enterarse de que llegó una nueva solicitud: revisando el listado en la plataforma administrativa, o desearían recibir una notificación automática por correo electrónico?
-
----
-
-## 4. Respuestas de Ciudad Pastel
-
-> *Espacio reservado para registrar formalmente las respuestas de la clienta tras la validación:*
-> - *(Pendiente de confirmación con la clienta)*
+| Método y ruta | Acceso | Respuestas |
+|---|---|---|
+| `POST /api/courses/:id/enrollment-requests` | Público | 201, 400, 404, 409, 429 |
+| `GET /api/admin/enrollment-requests?courseId=&status=` | Admin | 200, 400, 401, 403 |
+| `GET /api/admin/enrollment-requests/:id` | Admin | 200, 401, 403, 404 |
+| `PATCH /api/admin/enrollment-requests/:id/status` | Admin | 200, 400, 401, 403, 404 |

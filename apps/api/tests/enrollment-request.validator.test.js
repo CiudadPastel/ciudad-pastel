@@ -1,234 +1,154 @@
 import { describe, expect, it } from "vitest";
 
 import {
-    normalizePhone,
+    normalizeDigits,
+    validateEnrollmentListFilters,
     validateEnrollmentRequestInput,
-    ENROLLMENT_REQUEST_LIMITS
+    validateEnrollmentStatusInput
 } from "../src/validators/enrollment-request.validator.js";
 
 const VALID_REQUEST = {
-    courseId: "course-123-uuid",
     fullName: "María González Pérez",
-    email: "maria.gonzalez@example.com",
-    phone: "8888-8888",
-    message: "Quisiera consultar si puedo reservar para 2 personas."
+    idType: "national",
+    idNumber: "205380021",
+    phone: "88888888"
 };
 
-describe("Enrollment Request Validator Suite [CIU-87]", () => {
-    describe("normalizePhone", () => {
-        it("extracts digits only from phone inputs with spaces, hyphens, and country codes", () => {
-            expect(normalizePhone("+506 8888-1234")).toBe("50688881234");
-            expect(normalizePhone("(506) 8888 1234")).toBe("50688881234");
-            expect(normalizePhone("8888-8888")).toBe("88888888");
-        });
+function errorsFor(changes) {
+    return validateEnrollmentRequestInput({ ...VALID_REQUEST, ...changes }).errors;
+}
 
-        it("returns empty string for non-string input", () => {
-            expect(normalizePhone(null)).toBe("");
-            expect(normalizePhone(undefined)).toBe("");
-            expect(normalizePhone(12345678)).toBe("");
+describe("Enrollment request validator (HU-A05)", () => {
+    describe("normalizeDigits", () => {
+        it("keeps only digits", () => {
+            expect(normalizeDigits("2-0538-0021")).toBe("205380021");
+            expect(normalizeDigits(" 8888 8888 ")).toBe("88888888");
+            expect(normalizeDigits(null)).toBe("");
         });
     });
 
     describe("validateEnrollmentRequestInput", () => {
-        it("accepts a valid enrollment request and normalizes email and phone", () => {
-            const result = validateEnrollmentRequestInput(VALID_REQUEST);
-
-            expect(result.valid).toBe(true);
-            expect(result.errors).toEqual([]);
-            expect(result.data).toEqual({
-                courseId: "course-123-uuid",
-                fullName: "María González Pérez",
-                email: "maria.gonzalez@example.com",
-                phone: "88888888",
-                message: "Quisiera consultar si puedo reservar para 2 personas."
-            });
-        });
-
-        it("rejects non-object body", () => {
-            expect(validateEnrollmentRequestInput(null).valid).toBe(false);
-            expect(validateEnrollmentRequestInput("").valid).toBe(false);
-            expect(validateEnrollmentRequestInput([]).valid).toBe(false);
-        });
-
-        it("rejects missing or empty courseId", () => {
+        it("accepts a valid national ID request and returns only the allowed fields", () => {
             const result = validateEnrollmentRequestInput({
                 ...VALID_REQUEST,
-                courseId: "   "
+                fullName: "  María   González Pérez ",
+                courseId: "ignored",
+                status: "contacted",
+                email: "ignored@example.com"
             });
 
-            expect(result.valid).toBe(false);
-            expect(result.errors).toContain("courseId is required.");
+            expect(result).toEqual({
+                valid: true,
+                errors: [],
+                data: {
+                    fullName: "María González Pérez",
+                    idType: "national",
+                    idNumber: "205380021",
+                    phone: "88888888"
+                }
+            });
         });
 
-        it("rejects short fullName (< 3 chars) and missing fullName", () => {
-            const shortResult = validateEnrollmentRequestInput({
-                ...VALID_REQUEST,
-                fullName: "Ab"
-            });
-            expect(shortResult.valid).toBe(false);
-            expect(shortResult.errors).toEqual(
-                expect.arrayContaining([expect.stringContaining("at least 3 characters")])
-            );
-
-            const missingResult = validateEnrollmentRequestInput({
-                ...VALID_REQUEST,
-                fullName: "   "
-            });
-            expect(missingResult.valid).toBe(false);
-            expect(missingResult.errors).toContain("fullName is required.");
-        });
-
-        it("rejects long fullName (> 120 chars)", () => {
-            const longName = "A".repeat(121);
+        it("removes spaces and hyphens from the ID number and phone", () => {
             const result = validateEnrollmentRequestInput({
                 ...VALID_REQUEST,
-                fullName: longName
-            });
-
-            expect(result.valid).toBe(false);
-            expect(result.errors).toEqual(
-                expect.arrayContaining([expect.stringContaining("not exceed 120 characters")])
-            );
-        });
-
-        it("rejects invalid or missing email", () => {
-            const invalidEmail = validateEnrollmentRequestInput({
-                ...VALID_REQUEST,
-                email: "not-an-email"
-            });
-            expect(invalidEmail.valid).toBe(false);
-            expect(invalidEmail.errors).toEqual(
-                expect.arrayContaining([expect.stringContaining("valid email address")])
-            );
-
-            const missingEmail = validateEnrollmentRequestInput({
-                ...VALID_REQUEST,
-                email: "   "
-            });
-            expect(missingEmail.valid).toBe(false);
-            expect(missingEmail.errors).toContain("email is required.");
-        });
-
-        it("rejects email exceeding 254 characters", () => {
-            const longEmail = `${"a".repeat(250)}@test.com`;
-            const result = validateEnrollmentRequestInput({
-                ...VALID_REQUEST,
-                email: longEmail
-            });
-
-            expect(result.valid).toBe(false);
-            expect(result.errors).toEqual(
-                expect.arrayContaining([expect.stringContaining("not exceed 254 characters")])
-            );
-        });
-
-        it("normalizes phone with spaces and hyphens into clean digits", () => {
-            const result = validateEnrollmentRequestInput({
-                ...VALID_REQUEST,
-                phone: "  +506 8888-9999  "
+                idNumber: "2-0538-0021",
+                phone: "8888-8888"
             });
 
             expect(result.valid).toBe(true);
-            expect(result.data.phone).toBe("50688889999");
+            expect(result.data.idNumber).toBe("205380021");
+            expect(result.data.phone).toBe("88888888");
         });
 
-        it("rejects phone with too few digits (< 8)", () => {
-            const result = validateEnrollmentRequestInput({
-                ...VALID_REQUEST,
-                phone: "123-456"
-            });
-
-            expect(result.valid).toBe(false);
-            expect(result.errors).toEqual(
-                expect.arrayContaining([expect.stringContaining("between 8 and 15 digits")])
-            );
+        it.each(["100000000", "799999999"])("accepts national ID %s (province 1 to 7)", (idNumber) => {
+            expect(errorsFor({ idNumber })).toEqual([]);
         });
 
-        it("rejects phone with too many digits (> 15)", () => {
-            const result = validateEnrollmentRequestInput({
-                ...VALID_REQUEST,
-                phone: "1234567890123456"
-            });
-
-            expect(result.valid).toBe(false);
-            expect(result.errors).toEqual(
-                expect.arrayContaining([expect.stringContaining("between 8 and 15 digits")])
-            );
-        });
-
-        it("rejects phone with letters that don't have enough digits", () => {
-            const result = validateEnrollmentRequestInput({
-                ...VALID_REQUEST,
-                phone: "call-me-88"
-            });
-
-            expect(result.valid).toBe(false);
-            expect(result.errors).toEqual(
-                expect.arrayContaining([expect.stringContaining("between 8 and 15 digits")])
-            );
-        });
-
-        it("normalizes empty message or whitespace message to null", () => {
-            const emptyResult = validateEnrollmentRequestInput({
-                ...VALID_REQUEST,
-                message: "   "
-            });
-            expect(emptyResult.valid).toBe(true);
-            expect(emptyResult.data.message).toBeNull();
-
-            const nullResult = validateEnrollmentRequestInput({
-                ...VALID_REQUEST,
-                message: null
-            });
-            expect(nullResult.valid).toBe(true);
-            expect(nullResult.data.message).toBeNull();
-
-            const omittedResult = validateEnrollmentRequestInput({
-                courseId: VALID_REQUEST.courseId,
-                fullName: VALID_REQUEST.fullName,
-                email: VALID_REQUEST.email,
-                phone: VALID_REQUEST.phone
-            });
-            expect(omittedResult.valid).toBe(true);
-            expect(omittedResult.data.message).toBeNull();
-        });
-
-        it("rejects message exceeding 500 characters", () => {
-            const longMessage = "M".repeat(501);
-            const result = validateEnrollmentRequestInput({
-                ...VALID_REQUEST,
-                message: longMessage
-            });
-
-            expect(result.valid).toBe(false);
-            expect(result.errors).toEqual(
-                expect.arrayContaining([expect.stringContaining("not exceed 500 characters")])
-            );
-        });
-
-        it("ignores protected fields (status, id, courseName, createdAt, updatedAt) sent by client", () => {
-            const result = validateEnrollmentRequestInput({
-                ...VALID_REQUEST,
-                id: "forged-id-123",
-                status: "confirmed",
-                courseName: "Forged Course Name",
-                createdAt: "2020-01-01T00:00:00.000Z",
-                updatedAt: "2020-01-01T00:00:00.000Z"
-            });
-
-            expect(result.valid).toBe(true);
-            expect(result.data).not.toHaveProperty("id");
-            expect(result.data).not.toHaveProperty("status");
-            expect(result.data).not.toHaveProperty("courseName");
-            expect(result.data).not.toHaveProperty("createdAt");
-            expect(result.data).not.toHaveProperty("updatedAt");
-            expect(Object.keys(result.data).sort()).toEqual([
-                "courseId",
-                "email",
-                "fullName",
-                "message",
-                "phone"
+        it.each([
+            ["8 digits", "20538021"],
+            ["10 digits", "2053800210"],
+            ["province 0", "005380021"],
+            ["province 8", "805380021"],
+            ["province 9", "905380021"],
+            ["letters", "2053800AB"]
+        ])("rejects a national ID with %s", (_label, idNumber) => {
+            expect(errorsFor({ idNumber })).toEqual([
+                expect.stringContaining("9 digits")
             ]);
+        });
+
+        it.each(["15512345678", "155123456789"])("accepts DIMEX %s (11 or 12 digits)", (idNumber) => {
+            expect(errorsFor({ idType: "dimex", idNumber })).toEqual([]);
+        });
+
+        it.each(["205380021", "1551234567", "1551234567890"])("rejects DIMEX %s", (idNumber) => {
+            expect(errorsFor({ idType: "dimex", idNumber })).toEqual([
+                expect.stringContaining("11 or 12 digits")
+            ]);
+        });
+
+        it.each([
+            ["7 digits", "8888888"],
+            ["9 digits", "888888888"],
+            ["country code", "+506 8888 8888"],
+            ["letters", "8888abcd"]
+        ])("rejects a phone with %s", (_label, phone) => {
+            expect(errorsFor({ phone })).toEqual([expect.stringContaining("exactly 8 digits")]);
+        });
+
+        it("reports every missing required field", () => {
+            const result = validateEnrollmentRequestInput({});
+
+            expect(result.valid).toBe(false);
+            expect(result.errors).toEqual([
+                "fullName is required.",
+                "idType is required.",
+                "idNumber is required.",
+                "phone is required."
+            ]);
+        });
+
+        it.each([
+            ["short name", { fullName: "Al" }, "fullName"],
+            ["long name", { fullName: "a".repeat(121) }, "fullName"],
+            ["non-text name", { fullName: 123 }, "fullName"],
+            ["unknown ID type", { idType: "passport" }, "idType"],
+            ["numeric ID", { idNumber: 205380021 }, "idNumber"],
+            ["numeric phone", { phone: 88888888 }, "phone"]
+        ])("rejects %s", (_label, changes, field) => {
+            expect(errorsFor(changes)).toEqual([expect.stringContaining(field)]);
+        });
+
+        it.each([null, [], "text"])("rejects a non-object body %j", (body) => {
+            expect(validateEnrollmentRequestInput(body).valid).toBe(false);
+        });
+    });
+
+    describe("validateEnrollmentStatusInput", () => {
+        it.each(["pending", "contacted", "discarded"])("accepts %s", (status) => {
+            expect(validateEnrollmentStatusInput({ status })).toEqual({
+                valid: true,
+                errors: [],
+                data: { status }
+            });
+        });
+
+        it.each([{}, { status: "cancelled" }, { status: null }, null, []])("rejects %j", (body) => {
+            expect(validateEnrollmentStatusInput(body).valid).toBe(false);
+        });
+    });
+
+    describe("validateEnrollmentListFilters", () => {
+        it("accepts no filters, a course and a status", () => {
+            expect(validateEnrollmentListFilters({}).data).toEqual({});
+            expect(validateEnrollmentListFilters({ courseId: " c-1 ", status: "pending" }).data)
+                .toEqual({ courseId: "c-1", status: "pending" });
+        });
+
+        it("rejects an unknown status and an empty course", () => {
+            expect(validateEnrollmentListFilters({ status: "banana" }).valid).toBe(false);
+            expect(validateEnrollmentListFilters({ courseId: " " }).valid).toBe(false);
         });
     });
 });

@@ -3,6 +3,10 @@ import { db } from "../config/firebase.js";
 
 const COLLECTION = "enrollmentRequests";
 
+function toIso(timestamp) {
+    return timestamp ? timestamp.toDate().toISOString() : null;
+}
+
 // Maps a Firestore document snapshot to the EnrollmentRequest representation.
 export function mapEnrollmentRequestDocument(documentSnapshot) {
     const data = documentSnapshot.data();
@@ -12,12 +16,12 @@ export function mapEnrollmentRequestDocument(documentSnapshot) {
         courseId: data.courseId,
         courseName: data.courseName,
         fullName: data.fullName,
-        email: data.email,
+        idType: data.idType ?? null,
+        idNumber: data.idNumber ?? null,
         phone: data.phone,
-        message: data.message ?? null,
         status: data.status,
-        createdAt: data.createdAt ? data.createdAt.toDate().toISOString() : new Date().toISOString(),
-        updatedAt: data.updatedAt ? data.updatedAt.toDate().toISOString() : new Date().toISOString()
+        createdAt: toIso(data.createdAt),
+        updatedAt: toIso(data.updatedAt)
     };
 }
 
@@ -42,7 +46,8 @@ export async function getEnrollmentRequestById(id) {
     return doc.exists ? mapEnrollmentRequestDocument(doc) : null;
 }
 
-// Lists enrollment requests with optional single-field filters, sorted newest first in memory.
+// Lists enrollment requests, newest first. Firestore filters by one field
+// (no composite index needed) and the second filter is applied in memory.
 export async function getEnrollmentRequests(filter = {}) {
     let query = db.collection(COLLECTION);
 
@@ -56,5 +61,36 @@ export async function getEnrollmentRequests(filter = {}) {
 
     return snapshot.docs
         .map(mapEnrollmentRequestDocument)
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        .filter((request) => !filter.status || request.status === filter.status)
+        .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+}
+
+// Finds the requests a person (by ID number) already made for one course.
+export async function getEnrollmentRequestsForPerson(courseId, idNumber) {
+    const snapshot = await db
+        .collection(COLLECTION)
+        .where("courseId", "==", courseId)
+        .get();
+
+    return snapshot.docs
+        .map(mapEnrollmentRequestDocument)
+        .filter((request) => request.idNumber === idNumber);
+}
+
+// Changes the follow-up status of a request. Returns null if it does not exist.
+export async function updateEnrollmentRequestStatus(id, status) {
+    const docRef = db.collection(COLLECTION).doc(id);
+    const current = await docRef.get();
+
+    if (!current.exists) {
+        return null;
+    }
+
+    await docRef.update({
+        status,
+        updatedAt: FieldValue.serverTimestamp()
+    });
+
+    const updated = await docRef.get();
+    return mapEnrollmentRequestDocument(updated);
 }
