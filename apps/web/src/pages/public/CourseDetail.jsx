@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, ImageOff } from "lucide-react";
+import { ArrowLeft, ClipboardPen, ImageOff } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
+import EnrollmentRequest from "../../components/public/EnrollmentRequest";
 import StateMessage, { RetryButton } from "../../components/ui/StateMessage";
 import { getPublicCourseById } from "../../services/publicCourses.service";
 import { formatCapacity, formatDate, formatPrice } from "../../utils/format";
@@ -17,6 +18,8 @@ function CourseDetail() {
     const { id } = useParams();
     const [reloadKey, setReloadKey] = useState(0);
     const [state, setState] = useState({ id: null, key: null, status: "loading", course: null, error: null });
+    // Formulario de solicitud de matrícula abierto (HU-A05), por curso
+    const [enrollOpenFor, setEnrollOpenFor] = useState(null);
 
     useEffect(() => {
         let active = true;
@@ -119,6 +122,17 @@ function CourseDetail() {
                             ? "Precio no disponible"
                             : course.price === 0 ? "Gratis" : formatPrice(course.price)}
                     </p>
+                    <a
+                        href="#solicitar-matricula"
+                        className="btn btn-primary"
+                        onClick={(event) => {
+                            event.preventDefault();
+                            setEnrollOpenFor(course.id);
+                        }}
+                    >
+                        <ClipboardPen size={18} aria-hidden="true" />
+                        Solicitar matrícula
+                    </a>
                 </div>
             </header>
 
@@ -158,7 +172,12 @@ function CourseDetail() {
                 <PublicList title="Materiales que debes traer" items={course.requiredMaterials} />
             )}
 
-            <div className={styles.enrollmentPlaceholder} aria-hidden="true" />
+            <EnrollmentRequest
+                key={course.id}
+                course={course}
+                open={enrollOpenFor === course.id}
+                onOpenChange={(open) => setEnrollOpenFor(open ? course.id : null)}
+            />
         </article>
     );
 }

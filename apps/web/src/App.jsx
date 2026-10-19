@@ -31,6 +31,9 @@ import CourseEdit
 import CoursesList
     from "./pages/admin/CoursesList";
 
+import EnrollmentRequests
+    from "./pages/admin/EnrollmentRequests";
+
 import PublicCoursesList
     from "./pages/public/CoursesList";
 
@@ -99,6 +102,11 @@ function App() {
                     <Route
                         path="cursos/:id/editar"
                         element={<CourseEdit />}
+                    />
+
+                    <Route
+                        path="solicitudes"
+                        element={<EnrollmentRequests />}
                     />
                 </Route>
             </Route>

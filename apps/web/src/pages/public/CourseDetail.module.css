@@ -128,10 +128,6 @@
   color: var(--cp-mint-600);
 }
 
-.enrollmentPlaceholder {
-  min-height: 6rem;
-  border-top: 1px solid var(--cp-border);
-}
 
 @media (max-width: 700px) {
   .hero,

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
     ArrowLeft,
+    ClipboardList,
     BookOpen,
     CalendarDays,
     CircleAlert,
@@ -353,6 +354,11 @@ function CourseDetail() {
                         <p className={styles.visibility}>
                             {visibilityText}
                         </p>
+
+                        <Link to={`/admin/solicitudes?curso=${course.id}`} className={styles.requestsLink}>
+                            <ClipboardList size={16} aria-hidden="true" />
+                            Ver solicitudes de matrícula de este curso
+                        </Link>
 
                         <CourseStatusActions
                             course={course}
