@@ -20,6 +20,7 @@ import courseRoutes from "./routes/course.routes.js";
 import publicCourseRoutes from "./routes/public-course.routes.js";
 import recipeBookRoutes from "./routes/recipe-book.routes.js";
 import enrollmentRequestRoutes from "./routes/enrollment-request.routes.js";
+import { courseEnrollmentRoutes, enrollmentRoutes } from "./routes/enrollment.routes.js";
 
 
 dotenv.config();
@@ -72,6 +73,18 @@ app.use(
 app.use(
     "/api/admin/courses/:courseId/recipe-books",
     recipeBookRoutes
+);
+
+// Confirmed enrollments of a course (HU-A09).
+app.use(
+    "/api/admin/courses/:courseId/enrollments",
+    courseEnrollmentRoutes
+);
+
+// Confirmed enrollment changes (HU-A09).
+app.use(
+    "/api/admin/enrollments",
+    enrollmentRoutes
 );
 
 // Course administration routes.

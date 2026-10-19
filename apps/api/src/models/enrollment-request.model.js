@@ -1,8 +1,17 @@
 export const ENROLLMENT_REQUEST_STATUS = Object.freeze({
     PENDING: "pending",
     CONTACTED: "contacted",
-    DISCARDED: "discarded"
+    DISCARDED: "discarded",
+    // Set only by the confirm endpoint (HU-A09): the person is enrolled
+    CONFIRMED: "confirmed"
 });
+
+// Statuses an administrator can set by hand (PATCH .../status).
+export const MANUAL_ENROLLMENT_REQUEST_STATUSES = Object.freeze([
+    ENROLLMENT_REQUEST_STATUS.PENDING,
+    ENROLLMENT_REQUEST_STATUS.CONTACTED,
+    ENROLLMENT_REQUEST_STATUS.DISCARDED
+]);
 
 // Identity documents accepted by Ciudad Pastel for course certificates.
 export const ID_TYPE = Object.freeze({
@@ -13,6 +22,13 @@ export const ID_TYPE = Object.freeze({
 // Statuses that block a new request for the same course and ID number.
 // A discarded request does not block, so the person can apply again later.
 export const ACTIVE_ENROLLMENT_REQUEST_STATUSES = Object.freeze([
+    ENROLLMENT_REQUEST_STATUS.PENDING,
+    ENROLLMENT_REQUEST_STATUS.CONTACTED,
+    ENROLLMENT_REQUEST_STATUS.CONFIRMED
+]);
+
+// Requests that can still be confirmed as an enrollment.
+export const CONFIRMABLE_ENROLLMENT_REQUEST_STATUSES = Object.freeze([
     ENROLLMENT_REQUEST_STATUS.PENDING,
     ENROLLMENT_REQUEST_STATUS.CONTACTED
 ]);

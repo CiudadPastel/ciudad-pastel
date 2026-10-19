@@ -34,6 +34,10 @@ vi.mock("../src/config/firebase.js", () => ({
     db: { collection: vi.fn() }
 }));
 vi.mock("../src/repositories/course.repository.js", () => fake.repository);
+// HU-A09: no confirmed enrollments in these tests (all spots free)
+vi.mock("../src/repositories/enrollment.repository.js", () => ({
+    countActiveEnrollmentsByCourse: async () => new Map()
+}));
 
 import app from "../src/app.js";
 import { COURSE_STATUS, toPublicCourse } from "../src/models/course.model.js";
@@ -143,6 +147,7 @@ describe("Public Courses API Acceptance Criteria Suite [CIU-74 / CIU-80]", () =>
                 "learningOutcomes",
                 "name",
                 "price",
+                "remainingSpots",
                 "requiredMaterials",
                 "schedule",
                 "summary"

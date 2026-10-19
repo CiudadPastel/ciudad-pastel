@@ -67,8 +67,11 @@ export function buildCourse(data) {
 }
 
 // Converts a course entity into its public representation.
-export function toPublicCourse(course) {
+// activeEnrollments: confirmed enrollments of the course (HU-A09), used to
+// show the remaining spots. remainingSpots is null when there is no capacity.
+export function toPublicCourse(course, activeEnrollments = 0) {
     if (!course) return null;
+    const capacity = course.capacity ?? null;
     return {
         id: course.id,
         name: course.name,
@@ -77,7 +80,8 @@ export function toPublicCourse(course) {
         imageUrl: course.imageUrl ?? null,
         learningOutcomes: course.learningOutcomes ?? [],
         requiredMaterials: course.requiredMaterials ?? [],
-        capacity: course.capacity ?? null,
+        capacity,
+        remainingSpots: capacity === null ? null : Math.max(0, capacity - activeEnrollments),
         price: course.price ?? null,
         instructor: course.instructor ?? null,
         schedule: normalizeSchedule(course.schedule)

@@ -6,6 +6,8 @@ import {
     validateCourseInput
 } from "../validators/course.validator.js";
 
+import { countActiveEnrollmentsByCourse } from "../repositories/enrollment.repository.js";
+
 import {
     createCourse as createCourseRepository,
     getCourses as getCoursesRepository,
@@ -34,10 +36,13 @@ function validatePublicationPrice(course) {
 
 // Lists only published courses for public access, sorted by schedule start date ascending and then by name.
 export async function getPublishedCourses() {
-    const courses = await getCoursesRepository(COURSE_STATUS.PUBLISHED);
+    const [courses, activeByCourse] = await Promise.all([
+        getCoursesRepository(COURSE_STATUS.PUBLISHED),
+        countActiveEnrollmentsByCourse()
+    ]);
 
     return courses
-        .map(toPublicCourse)
+        .map((course) => toPublicCourse(course, activeByCourse.get(course.id) ?? 0))
         .sort((a, b) => {
             const aDate = a.schedule?.startDate;
             const bDate = b.schedule?.startDate;
@@ -64,7 +69,9 @@ export async function getPublishedCourseById(id) {
         throw error;
     }
 
-    return toPublicCourse(course);
+    const activeByCourse = await countActiveEnrollmentsByCourse();
+
+    return toPublicCourse(course, activeByCourse.get(course.id) ?? 0);
 }
 
 // Validates the target status and enforces allowed transitions.

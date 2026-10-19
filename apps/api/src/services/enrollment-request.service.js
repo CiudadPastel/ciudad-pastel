@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { COURSE_STATUS } from "../models/course.model.js";
 import {
     ACTIVE_ENROLLMENT_REQUEST_STATUSES,
+    ENROLLMENT_REQUEST_STATUS,
     buildEnrollmentRequest,
     toEnrollmentRequestConfirmation
 } from "../models/enrollment-request.model.js";
@@ -11,6 +12,7 @@ import {
     validateEnrollmentRequestInput,
     validateEnrollmentStatusInput
 } from "../validators/enrollment-request.validator.js";
+import { ENROLLMENT_ERROR_CODE } from "../models/enrollment.model.js";
 import { getCourseById as getCourseByIdRepository } from "../repositories/course.repository.js";
 import {
     createEnrollmentRequest as createEnrollmentRequestRepository,
@@ -20,10 +22,11 @@ import {
     updateEnrollmentRequestStatus as updateEnrollmentRequestStatusRepository
 } from "../repositories/enrollment-request.repository.js";
 
-function namedError(name, message, details) {
+function namedError(name, message, details, code) {
     const error = new Error(message);
     error.name = name;
     if (details) error.details = details;
+    if (code) error.code = code;
     return error;
 }
 
@@ -93,11 +96,25 @@ export async function getEnrollmentRequestById(id) {
 }
 
 // Follow-up status: pending, contacted or discarded. Any change between them is allowed.
+// A confirmed request (already an enrollment) can no longer be changed here.
 export async function updateEnrollmentRequestStatus(id, input) {
     const validation = validateEnrollmentStatusInput(input);
 
     if (!validation.valid) {
         throw namedError("ValidationError", "Enrollment request status validation failed.", validation.errors);
+    }
+
+    const current = await getEnrollmentRequestByIdRepository(id);
+    if (!current) {
+        throw namedError("NotFoundError", "Enrollment request not found.");
+    }
+    if (current.status === ENROLLMENT_REQUEST_STATUS.CONFIRMED) {
+        throw namedError(
+            "ConflictError",
+            "This enrollment request was already confirmed as an enrollment.",
+            undefined,
+            ENROLLMENT_ERROR_CODE.REQUEST_ALREADY_CONFIRMED
+        );
     }
 
     const updated = await updateEnrollmentRequestStatusRepository(id, validation.data.status);

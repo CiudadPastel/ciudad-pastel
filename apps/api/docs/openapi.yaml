@@ -16,6 +16,8 @@ tags:
     description: Recipe book PDF administration
   - name: Enrollment requests
     description: Enrollment requests from visitors (HU-A05)
+  - name: Enrollments
+    description: Confirmed enrollments registered by the administrator (HU-A09)
 
 paths:
   /admin/courses:
@@ -500,7 +502,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [pending, contacted, discarded]
+            enum: [pending, contacted, discarded, confirmed]
       responses:
         "200":
           description: List of requests (may be empty).
@@ -585,6 +587,215 @@ paths:
           description: Administrator privileges required.
         "404":
           description: Enrollment request not found.
+
+  /admin/courses/{courseId}/enrollments:
+    get:
+      tags:
+        - Enrollments
+      summary: List the students of a course
+      description: Active enrollments first, then cancelled ones. Contains personal data.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: courseId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+            enum: [enrolled, cancelled]
+      responses:
+        "200":
+          description: Enrollments of the course (may be empty).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Enrollment"
+        "400":
+          description: Invalid status filter.
+        "401":
+          description: Authentication required or invalid token.
+        "403":
+          description: Administrator privileges required.
+        "404":
+          description: Course not found.
+    post:
+      tags:
+        - Enrollments
+      summary: Register a student manually
+      description: >-
+        Registers a confirmed enrollment after the payment was coordinated. Same data rules as an enrollment
+        request (national ID 9 digits starting 1-7, DIMEX 11-12 digits, phone 8 digits; dashes and spaces are
+        removed) plus an optional note. Rejects duplicates and enrollments beyond the capacity. If the person had a
+        pending or contacted request for the course, it is marked as confirmed.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: courseId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnrollmentInput"
+      responses:
+        "201":
+          description: Enrollment registered.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Enrollment"
+        "400":
+          description: Invalid data; the errors array lists every problem.
+        "401":
+          description: Authentication required or invalid token.
+        "403":
+          description: Administrator privileges required.
+        "404":
+          description: Course not found.
+        "409":
+          description: >-
+            Conflict. The code field says why: COURSE_FULL (no spots left), ALREADY_ENROLLED (the ID number is
+            already actively enrolled in this course), COURSE_ARCHIVED, REQUEST_ALREADY_CONFIRMED or REQUEST_DISCARDED.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrollmentConflict"
+
+  /admin/enrollment-requests/{id}/confirm:
+    post:
+      tags:
+        - Enrollments
+      summary: Confirm an enrollment request
+      description: >-
+        Creates the enrollment from a pending or contacted request with its data and marks the request as
+        confirmed, so it is not processed twice. Any person field sent in the body replaces the request's value
+        (to correct it); note is optional.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note:
+                  type: string
+                  maxLength: 500
+                  example: Pagó por SINPE
+                fullName:
+                  type: string
+                idType:
+                  type: string
+                  enum: [national, dimex]
+                idNumber:
+                  type: string
+                phone:
+                  type: string
+      responses:
+        "201":
+          description: Enrollment created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Enrollment"
+        "400":
+          description: Invalid data.
+        "401":
+          description: Authentication required or invalid token.
+        "403":
+          description: Administrator privileges required.
+        "404":
+          description: Enrollment request or course not found.
+        "409":
+          description: >-
+            Conflict. The code field says why: COURSE_FULL (no spots left), ALREADY_ENROLLED (the ID number is
+            already actively enrolled in this course), COURSE_ARCHIVED, REQUEST_ALREADY_CONFIRMED or REQUEST_DISCARDED.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrollmentConflict"
+
+  /admin/enrollments/{id}:
+    patch:
+      tags:
+        - Enrollments
+      summary: Correct or cancel an enrollment
+      description: >-
+        Partial update. Cancelling (status cancelled) frees a spot. Setting status enrolled again needs a free spot
+        and no other active enrollment of the same ID number in the course.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                fullName:
+                  type: string
+                idType:
+                  type: string
+                  enum: [national, dimex]
+                idNumber:
+                  type: string
+                phone:
+                  type: string
+                note:
+                  type: string
+                  nullable: true
+                  maxLength: 500
+                status:
+                  type: string
+                  enum: [enrolled, cancelled]
+      responses:
+        "200":
+          description: Updated enrollment.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Enrollment"
+        "400":
+          description: Invalid data or empty body.
+        "401":
+          description: Authentication required or invalid token.
+        "403":
+          description: Administrator privileges required.
+        "404":
+          description: Enrollment not found.
+        "409":
+          description: >-
+            Conflict. The code field says why: COURSE_FULL (no spots left), ALREADY_ENROLLED (the ID number is
+            already actively enrolled in this course), COURSE_ARCHIVED, REQUEST_ALREADY_CONFIRMED or REQUEST_DISCARDED.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrollmentConflict"
 
 components:
   securitySchemes:
@@ -887,6 +1098,7 @@ components:
         - learningOutcomes
         - requiredMaterials
         - capacity
+        - remainingSpots
         - price
         - instructor
         - schedule
@@ -919,6 +1131,11 @@ components:
           type: integer
           nullable: true
           example: 8
+        remainingSpots:
+          type: integer
+          nullable: true
+          example: 3
+          description: Capacity minus confirmed (active) enrollments (HU-A09). Null when the course has no capacity.
         price:
           type: integer
           nullable: true
@@ -996,10 +1213,97 @@ components:
           type: string
         status:
           type: string
-          enum: [pending, contacted, discarded]
+          enum: [pending, contacted, discarded, confirmed]
+          description: confirmed is set only by the confirm endpoint (HU-A09).
+        enrollmentId:
+          type: string
+          nullable: true
+          description: Enrollment created when the request was confirmed.
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
+
+    EnrollmentInput:
+      type: object
+      required:
+        - fullName
+        - idType
+        - idNumber
+        - phone
+      properties:
+        fullName:
+          type: string
+          minLength: 3
+          maxLength: 120
+        idType:
+          type: string
+          enum: [national, dimex]
+        idNumber:
+          type: string
+          example: "105380021"
+        phone:
+          type: string
+          example: "88887777"
+        note:
+          type: string
+          nullable: true
+          maxLength: 500
+          example: Pagó por SINPE
+
+    Enrollment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        courseId:
+          type: string
+        courseName:
+          type: string
+        fullName:
+          type: string
+        idType:
+          type: string
+          enum: [national, dimex]
+        idNumber:
+          type: string
+          description: Digits only.
+        phone:
+          type: string
+          description: 8 digits.
+        enrollmentRequestId:
+          type: string
+          nullable: true
+          description: Original enrollment request, if it came from one.
+        note:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [enrolled, cancelled]
+        confirmedAt:
+          type: string
+          format: date-time
+        cancelledAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    EnrollmentConflict:
+      type: object
+      properties:
+        message:
+          type: string
+          example: The course is full.
+        code:
+          type: string
+          enum: [COURSE_FULL, ALREADY_ENROLLED, COURSE_ARCHIVED, REQUEST_ALREADY_CONFIRMED, REQUEST_DISCARDED]

@@ -29,6 +29,10 @@ vi.mock("../src/config/firebase.js", () => ({
   db: { collection: (...args) => fake.collection(...args), runTransaction: (...args) => fake.runTransaction(...args) },
 }));
 vi.mock("../src/repositories/course.repository.js", () => fake.repository);
+// HU-A09: no confirmed enrollments in these tests (all spots free)
+vi.mock("../src/repositories/enrollment.repository.js", () => ({
+    countActiveEnrollmentsByCourse: async () => new Map()
+}));
 
 import app from "../src/app.js";
 import { COURSE_STATUS as STATUS, toPublicCourse } from "../src/models/course.model.js";
@@ -912,6 +916,7 @@ describe("public courses", () => {
         "learningOutcomes",
         "name",
         "price",
+        "remainingSpots",
         "requiredMaterials",
         "schedule",
         "summary"

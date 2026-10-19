@@ -134,7 +134,7 @@ describe("Enrollment request validator (HU-A05)", () => {
             });
         });
 
-        it.each([{}, { status: "cancelled" }, { status: null }, null, []])("rejects %j", (body) => {
+        it.each([{}, { status: "cancelled" }, { status: "confirmed" }, { status: null }, null, []])("rejects %j", (body) => {
             expect(validateEnrollmentStatusInput(body).valid).toBe(false);
         });
     });
