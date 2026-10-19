@@ -1,0 +1,159 @@
+.page {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  background: var(--cp-bg);
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(2rem, 5vh, 3.25rem);
+  width: min(880px, 100%);
+  margin: 0 auto;
+  padding: clamp(2rem, 6vh, 4rem) 1rem 2rem;
+}
+
+/* Logo: el elemento protagonista de la página */
+.brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  text-align: center;
+}
+
+.logo {
+  width: clamp(150px, 28vw, 220px);
+  height: auto;
+}
+
+.tagline {
+  font-family: var(--font-heading);
+  font-size: clamp(1.05rem, 2.2vw, 1.25rem);
+  color: var(--cp-navy);
+}
+
+/* Dos "puertas": Academia (azul marino) y Tienda (verde menta) */
+.doors {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+  width: 100%;
+}
+
+.door {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 1.75rem 1.75rem 1.5rem;
+  border-radius: 14px 14px 6px 6px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.door h2 {
+  font-size: 1.75rem;
+  color: inherit;
+}
+
+.door p {
+  max-width: 34ch;
+  line-height: 1.5;
+}
+
+.doorIcon {
+  margin-bottom: 0.25rem;
+}
+
+.doorAction {
+  margin-top: auto;
+  padding-top: 0.75rem;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  color: inherit;
+}
+
+.academy {
+  background: var(--cp-navy);
+  color: #fff;
+  transition: background 0.15s;
+}
+
+.academy:hover {
+  background: var(--cp-navy-700);
+}
+
+.academy:focus-visible {
+  outline: 3px solid var(--cp-mint);
+  outline-offset: 3px;
+}
+
+.academy .doorIcon {
+  color: var(--cp-mint);
+}
+
+.store {
+  background: var(--cp-mint-50);
+  border: 1px solid #cfe7dc;
+  color: var(--cp-mint-700);
+}
+
+.store h2 {
+  color: var(--cp-mint-700);
+}
+
+.store p {
+  color: var(--cp-text);
+}
+
+/* Pie: contacto y acceso discreto para la administradora */
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+  width: min(880px, 100%);
+  margin: 0 auto;
+  padding: 1.25rem 1rem 1.75rem;
+  border-top: 1px solid var(--cp-border);
+  font-size: 0.9rem;
+}
+
+.footerLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 700;
+  color: var(--cp-mint-700);
+  text-decoration: none;
+}
+
+.footerLink:hover {
+  text-decoration: underline;
+}
+
+.admin {
+  color: var(--cp-muted);
+}
+
+@media (max-width: 640px) {
+  .doors {
+    grid-template-columns: 1fr;
+  }
+
+  .door {
+    padding: 1.4rem;
+  }
+
+  .footer {
+    justify-content: center;
+    text-align: center;
+  }
+}
