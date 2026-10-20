@@ -20,6 +20,8 @@ export function mapEnrollmentRequestDocument(documentSnapshot) {
         idNumber: data.idNumber ?? null,
         phone: data.phone,
         status: data.status,
+        // Enrollment created when the request was confirmed (HU-A09)
+        enrollmentId: data.enrollmentId ?? null,
         createdAt: toIso(data.createdAt),
         updatedAt: toIso(data.updatedAt)
     };

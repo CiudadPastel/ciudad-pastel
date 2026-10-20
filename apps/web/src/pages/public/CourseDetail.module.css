@@ -66,6 +66,25 @@
   font-weight: 800;
 }
 
+.spots,
+.spotsFull {
+  display: inline-flex;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.spots {
+  background: var(--cp-mint-50);
+  color: var(--cp-mint-700);
+}
+
+.spotsFull {
+  background: var(--cp-danger-50);
+  color: var(--cp-danger);
+}
+
 .section {
   display: flex;
   flex-direction: column;

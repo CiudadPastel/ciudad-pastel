@@ -16,7 +16,7 @@ function sendKnownError(res, error) {
     }
 
     if (error.name === "ConflictError") {
-        return res.status(409).json({ message: error.message });
+        return res.status(409).json({ message: error.message, ...(error.code ? { code: error.code } : {}) });
     }
 
     return null;

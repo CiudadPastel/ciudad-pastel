@@ -94,6 +94,8 @@ function CourseDetail() {
     }
 
     const { course } = state;
+    // Cupos libres (HU-A09). null = el curso no tiene cupo definido
+    const isFull = course.remainingSpots === 0;
 
     return (
         <article className={styles.page}>
@@ -122,6 +124,14 @@ function CourseDetail() {
                             ? "Precio no disponible"
                             : course.price === 0 ? "Gratis" : formatPrice(course.price)}
                     </p>
+                    {course.remainingSpots != null && (
+                        <p className={isFull ? styles.spotsFull : styles.spots}>
+                            {isFull
+                                ? "Cupo lleno"
+                                : `Quedan ${course.remainingSpots} ${course.remainingSpots === 1 ? "cupo" : "cupos"}`}
+                        </p>
+                    )}
+                    {!isFull && (
                     <a
                         href="#solicitar-matricula"
                         className="btn btn-primary"
@@ -133,6 +143,7 @@ function CourseDetail() {
                         <ClipboardPen size={18} aria-hidden="true" />
                         Solicitar matrícula
                     </a>
+                    )}
                 </div>
             </header>
 
@@ -155,7 +166,12 @@ function CourseDetail() {
                     {course.capacity != null && (
                         <div>
                             <dt>Cupo</dt>
-                            <dd>{formatCapacity(course.capacity)}</dd>
+                            <dd>
+                                {formatCapacity(course.capacity)}
+                                {course.remainingSpots != null && (
+                                    <> ({isFull ? "lleno" : `${course.remainingSpots} disponibles`})</>
+                                )}
+                            </dd>
                         </div>
                     )}
                     <div className={styles.schedule}>

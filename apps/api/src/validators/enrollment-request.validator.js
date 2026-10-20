@@ -1,4 +1,8 @@
-import { ENROLLMENT_REQUEST_STATUS, ID_TYPE } from "../models/enrollment-request.model.js";
+import {
+    ENROLLMENT_REQUEST_STATUS,
+    ID_TYPE,
+    MANUAL_ENROLLMENT_REQUEST_STATUSES
+} from "../models/enrollment-request.model.js";
 
 export const ENROLLMENT_REQUEST_LIMITS = Object.freeze({
     fullName: { min: 3, max: 120 },
@@ -101,8 +105,9 @@ export function validateEnrollmentRequestInput(input) {
 }
 
 // Validates the administrative status change body ({ status }).
+// "confirmed" is not accepted here: it is set by the confirm endpoint (HU-A09).
 export function validateEnrollmentStatusInput(input) {
-    const statuses = Object.values(ENROLLMENT_REQUEST_STATUS);
+    const statuses = MANUAL_ENROLLMENT_REQUEST_STATUSES;
 
     if (!input || typeof input !== "object" || Array.isArray(input) || !statuses.includes(input.status)) {
         return {

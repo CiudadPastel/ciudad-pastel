@@ -1,15 +1,18 @@
 import { useEffect, useState } from "react";
 import {
     Ban,
+    BadgeCheck,
     CircleCheck,
     Clock,
     LoaderCircle,
     MessageCircle,
     Phone,
-    RotateCcw
+    RotateCcw,
+    UserCheck
 } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 
+import EnrollmentFormDialog from "../../components/admin/EnrollmentFormDialog";
 import Notice from "../../components/ui/Notice";
 import StateMessage, { RetryButton } from "../../components/ui/StateMessage";
 import {
@@ -23,6 +26,7 @@ import {
     getEnrollmentRequests,
     updateEnrollmentRequestStatus
 } from "../../services/enrollmentRequests.service";
+import { confirmEnrollmentRequest } from "../../services/enrollments.service";
 import { formatDateTime } from "../../utils/format";
 
 import styles from "./EnrollmentRequests.module.css";
@@ -31,19 +35,24 @@ const FILTERS = [
     { value: "todas", label: "Todas" },
     { value: "pendientes", label: "Pendientes", status: ENROLLMENT_STATUS.PENDING },
     { value: "contactadas", label: "Contactadas", status: ENROLLMENT_STATUS.CONTACTED },
+    { value: "confirmadas", label: "Confirmadas", status: ENROLLMENT_STATUS.CONFIRMED },
     { value: "descartadas", label: "Descartadas", status: ENROLLMENT_STATUS.DISCARDED }
 ];
 
 const STATUS_ICONS = {
     [ENROLLMENT_STATUS.PENDING]: Clock,
     [ENROLLMENT_STATUS.CONTACTED]: CircleCheck,
-    [ENROLLMENT_STATUS.DISCARDED]: Ban
+    [ENROLLMENT_STATUS.DISCARDED]: Ban,
+    [ENROLLMENT_STATUS.CONFIRMED]: BadgeCheck
 };
+
+// Solicitudes que se pueden convertir en matrícula (HU-A09)
+const CONFIRMABLE = [ENROLLMENT_STATUS.PENDING, ENROLLMENT_STATUS.CONTACTED];
 
 // Acciones disponibles según el estado actual de la solicitud
 const ACTIONS = {
     [ENROLLMENT_STATUS.PENDING]: [
-        { to: ENROLLMENT_STATUS.CONTACTED, label: "Marcar contactada", icon: CircleCheck, primary: true },
+        { to: ENROLLMENT_STATUS.CONTACTED, label: "Marcar contactada", icon: CircleCheck },
         { to: ENROLLMENT_STATUS.DISCARDED, label: "Descartar", icon: Ban }
     ],
     [ENROLLMENT_STATUS.CONTACTED]: [
@@ -52,7 +61,9 @@ const ACTIONS = {
     ],
     [ENROLLMENT_STATUS.DISCARDED]: [
         { to: ENROLLMENT_STATUS.PENDING, label: "Volver a pendiente", icon: RotateCcw }
-    ]
+    ],
+    // Ya es una matrícula: se administra desde el curso
+    [ENROLLMENT_STATUS.CONFIRMED]: []
 };
 
 const SUCCESS_TEXT = {
@@ -77,6 +88,8 @@ function EnrollmentRequests() {
     const [notice, setNotice] = useState(null);
     // Solicitud y acción que se están guardando: { id, to }
     const [pending, setPending] = useState(null);
+    // Solicitud que se está confirmando como matrícula (ventana abierta)
+    const [confirming, setConfirming] = useState(null);
 
     // Los filtros viven en la URL: ?estado=pendientes&curso=<id>
     const [searchParams, setSearchParams] = useSearchParams();
@@ -124,6 +137,25 @@ function EnrollmentRequests() {
         }
     }
 
+    async function confirmRequest(request, payload) {
+        const enrollment = await confirmEnrollmentRequest(request.id, payload);
+
+        setState((prev) => ({
+            ...prev,
+            requests: prev.requests.map((r) => (
+                r.id === request.id
+                    ? { ...r, status: ENROLLMENT_STATUS.CONFIRMED, enrollmentId: enrollment.id }
+                    : r
+            ))
+        }));
+        setConfirming(null);
+        setNotice({
+            variant: "success",
+            text: `Se matriculó a ${enrollment.fullName} en "${enrollment.courseName}".`,
+            action: { to: `/admin/cursos/${enrollment.courseId}#estudiantes`, label: "Ver estudiantes del curso" }
+        });
+    }
+
     // Cursos que tienen solicitudes, para el filtro por curso
     const courses = [...new Map(state.requests.map((r) => [r.courseId, r.courseName])).entries()]
         .map(([id, name]) => ({ id, name }))
@@ -142,12 +174,12 @@ function EnrollmentRequests() {
                 <h1>Solicitudes de matrícula</h1>
                 <p className={styles.subtitle}>
                     Personas que pidieron matricularse desde la página de un curso. Contáctelas
-                    para coordinar el pago; enviar la solicitud no las matricula.
+                    para coordinar el pago y, cuando esté pagado, confirme la matrícula.
                 </p>
             </header>
 
             {notice && (
-                <Notice variant={notice.variant} onClose={() => setNotice(null)}>
+                <Notice variant={notice.variant} action={notice.action} onClose={() => setNotice(null)}>
                     {notice.text}
                 </Notice>
             )}
@@ -271,6 +303,25 @@ function EnrollmentRequests() {
                                 <div className={styles.statusCell}>
                                     <EnrollmentStatusBadge status={request.status} />
                                     <div className={styles.actions}>
+                                        {CONFIRMABLE.includes(request.status) && (
+                                            <button
+                                                type="button"
+                                                className={`btn btn-primary ${styles.actionButton}`}
+                                                onClick={() => setConfirming(request)}
+                                                disabled={pending !== null}
+                                            >
+                                                <UserCheck size={15} aria-hidden="true" />
+                                                Confirmar matrícula
+                                            </button>
+                                        )}
+                                        {request.status === ENROLLMENT_STATUS.CONFIRMED && (
+                                            <Link
+                                                to={`/admin/cursos/${request.courseId}#estudiantes`}
+                                                className={styles.confirmedLink}
+                                            >
+                                                Ver en la lista del curso
+                                            </Link>
+                                        )}
                                         {(ACTIONS[request.status] ?? []).map((action) => {
                                             const busy = pending?.id === request.id && pending.to === action.to;
                                             const Icon = busy ? LoaderCircle : action.icon;
@@ -293,6 +344,23 @@ function EnrollmentRequests() {
                         );
                     })}
                 </ul>
+            )}
+
+            {confirming && (
+                <EnrollmentFormDialog
+                    title="Confirmar matrícula"
+                    subtitle={`Curso: ${confirming.courseName}. Revise los datos antes de confirmar; puede corregirlos.`}
+                    initialValues={{
+                        fullName: confirming.fullName,
+                        idType: confirming.idType,
+                        idNumber: confirming.idNumber,
+                        phone: confirming.phone
+                    }}
+                    submitLabel="Confirmar matrícula"
+                    submitIcon={UserCheck}
+                    onSubmit={(payload) => confirmRequest(confirming, payload)}
+                    onClose={() => setConfirming(null)}
+                />
             )}
         </section>
     );

@@ -28,12 +28,14 @@ function notifyAuthProblem(status) {
  * puedan distinguir "no encontrado" (404) de otros errores.
  */
 export class ApiError extends Error {
-    constructor(message, status, details = null) {
+    constructor(message, status, details = null, code = null) {
         super(message);
         this.name = "ApiError";
         this.status = status;
         // Detalle de validación del backend: lista de textos, ej. ["name must ..."]
         this.details = details;
+        // Código del backend para distinguir conflictos (ej. "COURSE_FULL")
+        this.code = code;
     }
 }
 
@@ -80,12 +82,14 @@ export async function apiFetch(path, {
 
     if (!response.ok) {
         let details = null;
+        let code = null;
         let serverMessage = "";
 
         try {
             const body = await response.json();
             serverMessage = body.message || "";
             details = body.errors || null;
+            code = body.code || null;
         } catch {
             // La respuesta no traía JSON
         }
@@ -103,7 +107,8 @@ export async function apiFetch(path, {
         throw new ApiError(
             STATUS_MESSAGES[response.status] ?? STATUS_MESSAGES.default,
             response.status,
-            details
+            details,
+            code
         );
     }
 
