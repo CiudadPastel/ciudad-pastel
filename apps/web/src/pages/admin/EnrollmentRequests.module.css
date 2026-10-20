@@ -241,6 +241,17 @@
   color: var(--cp-mint-700);
 }
 
+.confirmed {
+  background: var(--cp-navy-50);
+  color: var(--cp-navy);
+}
+
+.confirmedLink {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--cp-mint-700);
+}
+
 .discarded {
   background: var(--cp-neutral-50);
   color: var(--cp-neutral-700);

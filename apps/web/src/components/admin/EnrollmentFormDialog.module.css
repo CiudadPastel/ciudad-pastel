@@ -1,0 +1,208 @@
+.dialog {
+  width: min(560px, calc(100vw - 2rem));
+  max-height: calc(100svh - 2rem);
+  padding: 1.5rem;
+  border: 0;
+  border-radius: 12px;
+  background: var(--cp-surface);
+  color: var(--cp-text);
+  box-shadow: 0 20px 50px rgba(16, 24, 40, 0.25);
+  text-align: left;
+  white-space: normal;
+  font-weight: 400;
+}
+
+.dialog::backdrop {
+  background: rgba(23, 44, 69, 0.45);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.header h2 {
+  font-size: 1.3rem;
+}
+
+.subtitle {
+  margin-top: 0.2rem;
+  color: var(--cp-muted);
+}
+
+.close {
+  display: inline-flex;
+  padding: 0.4rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--cp-navy);
+  cursor: pointer;
+}
+
+.close:hover:not(:disabled) {
+  background: var(--cp-navy-50);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.field label,
+.label {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--cp-navy);
+}
+
+.field input[type="text"],
+.field input[type="tel"],
+.field textarea {
+  width: 100%;
+  padding: 0.65rem 0.8rem;
+  font: inherit;
+  color: var(--cp-text);
+  background: var(--cp-surface);
+  border: 1px solid var(--cp-border);
+  border-radius: 8px;
+}
+
+.field textarea {
+  resize: vertical;
+}
+
+.field input:focus,
+.field textarea:focus {
+  outline: none;
+  border-color: var(--cp-mint-600);
+  box-shadow: 0 0 0 3px rgba(98, 180, 150, 0.3);
+}
+
+.field input[aria-invalid="true"],
+.field textarea[aria-invalid="true"] {
+  border-color: var(--cp-danger);
+}
+
+.field input:disabled,
+.field textarea:disabled {
+  background: #f3f2ee;
+}
+
+.hint {
+  font-size: 0.8rem;
+  color: var(--cp-muted);
+}
+
+.fieldError {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--cp-danger);
+}
+
+.fieldError svg {
+  flex-shrink: 0;
+}
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid var(--cp-border);
+  border-radius: 8px;
+  font-weight: 600;
+  color: var(--cp-navy);
+  cursor: pointer;
+}
+
+.choiceActive {
+  border-color: var(--cp-mint-600);
+  background: var(--cp-mint-50);
+}
+
+.choice:has(input:focus-visible) {
+  box-shadow: 0 0 0 3px rgba(98, 180, 150, 0.3);
+}
+
+.choice input {
+  accent-color: var(--cp-mint-600);
+}
+
+.serverError {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid #f4c7c3;
+  border-radius: 8px;
+  background: var(--cp-danger-50);
+  color: var(--cp-danger);
+  font-weight: 600;
+}
+
+.serverError svg {
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .row {
+    grid-template-columns: 1fr;
+  }
+
+  .actions {
+    flex-direction: column-reverse;
+  }
+
+  .actions button {
+    justify-content: center;
+  }
+}

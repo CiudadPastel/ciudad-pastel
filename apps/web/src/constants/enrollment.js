@@ -5,13 +5,22 @@
 export const ENROLLMENT_STATUS = {
     PENDING: "pending",
     CONTACTED: "contacted",
-    DISCARDED: "discarded"
+    DISCARDED: "discarded",
+    // La solicitud ya es una matrícula confirmada (HU-A09)
+    CONFIRMED: "confirmed"
 };
 
 export const ENROLLMENT_STATUS_LABELS = {
     [ENROLLMENT_STATUS.PENDING]: "Pendiente",
     [ENROLLMENT_STATUS.CONTACTED]: "Contactada",
-    [ENROLLMENT_STATUS.DISCARDED]: "Descartada"
+    [ENROLLMENT_STATUS.DISCARDED]: "Descartada",
+    [ENROLLMENT_STATUS.CONFIRMED]: "Confirmada"
+};
+
+// Matrícula confirmada (HU-A09)
+export const STUDENT_STATUS = {
+    ENROLLED: "enrolled",
+    CANCELLED: "cancelled"
 };
 
 export const ID_TYPE = {

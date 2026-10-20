@@ -19,6 +19,7 @@ import {
 import { Link, useLocation, useParams } from "react-router-dom";
 
 import CourseStatusActions from "../../components/admin/CourseStatusActions";
+import CourseStudents from "../../components/admin/CourseStudents";
 import ConfirmDialog from "../../components/ui/ConfirmDialog";
 import Notice from "../../components/ui/Notice";
 import StateMessage, { RetryButton } from "../../components/ui/StateMessage";
@@ -420,6 +421,8 @@ function CourseDetail() {
                         </div>
                     </dl>
                 </section>
+
+                <CourseStudents course={course} />
 
                 {(course.location || course.address) && (
                     <section className={styles.block}>

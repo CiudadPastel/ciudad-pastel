@@ -167,7 +167,20 @@ function EnrollmentRequest({ course, open, onOpenChange }) {
 
     return (
         <section ref={sectionRef} className={styles.card} aria-labelledby="enroll-title" id="solicitar-matricula">
-            {step === "closed" && (
+            {step === "closed" && course.remainingSpots === 0 && (
+                <div className={styles.invite}>
+                    <div>
+                        <h2 id="enroll-title">Este curso ya no tiene cupos</h2>
+                        <p>
+                            Escríbenos por WhatsApp para saber si se abre otro grupo o si se libera
+                            algún espacio.
+                        </p>
+                    </div>
+                    <div className={styles.actions}>{whatsappButton}</div>
+                </div>
+            )}
+
+            {step === "closed" && course.remainingSpots !== 0 && (
                 <div className={styles.invite}>
                     <div>
                         <h2 id="enroll-title">¿Te interesa este curso?</h2>

@@ -20,38 +20,68 @@ export function onlyDigits(value) {
     return String(value ?? "").replace(/\D/g, "");
 }
 
-export function validateEnrollmentForm(values) {
+export const NOTE_MAX = 500;
+
+/*
+ * Mensajes en "tú" para el formulario público y en "usted" para la
+ * administración (formal: true), que habla de otra persona.
+ */
+const TEXTS = {
+    public: {
+        name: "Escribe tu nombre completo.",
+        nameShort: "Escribe tu nombre completo, con apellidos.",
+        dimex: "Escribe tu número de DIMEX.",
+        cedula: "Escribe tu número de cédula.",
+        typed: "llevas",
+        zero: "Si empieza con 0 después de la provincia, inclúyelo.",
+        phone: "Escribe tu número de teléfono."
+    },
+    admin: {
+        name: "Escriba el nombre completo.",
+        nameShort: "Escriba el nombre completo, con apellidos.",
+        dimex: "Escriba el número de DIMEX.",
+        cedula: "Escriba el número de cédula.",
+        typed: "lleva",
+        zero: "Si tiene un 0 después de la provincia, inclúyalo.",
+        phone: "Escriba el número de teléfono."
+    }
+};
+
+export function validateEnrollmentForm(values, { formal = false } = {}) {
+    const t = formal ? TEXTS.admin : TEXTS.public;
     const errors = {};
 
     const fullName = values.fullName.trim().replace(/\s+/g, " ");
     if (!fullName) {
-        errors.fullName = "Escribe tu nombre completo.";
+        errors.fullName = t.name;
     } else if (fullName.length < ENROLLMENT_LIMITS.fullName.min) {
-        errors.fullName = "Escribe tu nombre completo, con apellidos.";
+        errors.fullName = t.nameShort;
     } else if (fullName.length > ENROLLMENT_LIMITS.fullName.max) {
         errors.fullName = `El nombre puede tener como máximo ${ENROLLMENT_LIMITS.fullName.max} caracteres.`;
     }
 
     const idNumber = onlyDigits(values.idNumber);
     if (!idNumber) {
-        errors.idNumber = values.idType === ID_TYPE.DIMEX
-            ? "Escribe tu número de DIMEX."
-            : "Escribe tu número de cédula.";
+        errors.idNumber = values.idType === ID_TYPE.DIMEX ? t.dimex : t.cedula;
     } else if (values.idType === ID_TYPE.DIMEX) {
         if (!/^\d{11,12}$/.test(idNumber)) {
-            errors.idNumber = `El DIMEX tiene 11 o 12 dígitos (llevas ${idNumber.length}).`;
+            errors.idNumber = `El DIMEX tiene 11 o 12 dígitos (${t.typed} ${idNumber.length}).`;
         }
     } else if (idNumber.length !== 9) {
-        errors.idNumber = `La cédula tiene 9 dígitos (llevas ${idNumber.length}). Si empieza con 0 después de la provincia, inclúyelo.`;
+        errors.idNumber = `La cédula tiene 9 dígitos (${t.typed} ${idNumber.length}). ${t.zero}`;
     } else if (!/^[1-7]/.test(idNumber)) {
         errors.idNumber = "La cédula debe empezar con el número de provincia, del 1 al 7.";
     }
 
     const phone = onlyDigits(values.phone);
     if (!phone) {
-        errors.phone = "Escribe tu número de teléfono.";
+        errors.phone = t.phone;
     } else if (phone.length !== 8) {
-        errors.phone = `El teléfono tiene 8 dígitos (llevas ${phone.length}).`;
+        errors.phone = `El teléfono tiene 8 dígitos (${t.typed} ${phone.length}).`;
+    }
+
+    if (values.note !== undefined && values.note.trim().length > NOTE_MAX) {
+        errors.note = `La nota puede tener como máximo ${NOTE_MAX} caracteres.`;
     }
 
     return errors;
@@ -67,13 +97,21 @@ export function toEnrollmentPayload(values) {
 }
 
 /** Errores de la API (en inglés) -> campo del formulario con mensaje en español. */
-export function mapEnrollmentApiErrors(details) {
-    const messages = {
-        fullName: "Revisa tu nombre completo.",
-        idType: "Elige el tipo de documento.",
-        idNumber: "Revisa el número de documento.",
-        phone: "Revisa el número de teléfono: debe tener 8 dígitos."
-    };
+export function mapEnrollmentApiErrors(details, { formal = false } = {}) {
+    const messages = formal
+        ? {
+            fullName: "Revise el nombre completo.",
+            idType: "Elija el tipo de documento.",
+            idNumber: "Revise el número de documento.",
+            phone: "Revise el teléfono: debe tener 8 dígitos.",
+            note: `La nota puede tener como máximo ${NOTE_MAX} caracteres.`
+        }
+        : {
+            fullName: "Revisa tu nombre completo.",
+            idType: "Elige el tipo de documento.",
+            idNumber: "Revisa el número de documento.",
+            phone: "Revisa el número de teléfono: debe tener 8 dígitos."
+        };
     const errors = {};
 
     for (const detail of Array.isArray(details) ? details : []) {
