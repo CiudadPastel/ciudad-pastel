@@ -37,3 +37,9 @@ export const enrollmentRequestRateLimit = createRateLimiter({
     max: 5,
     message: "Too many enrollment requests. Please try again later."
 });
+
+export const studentVerificationRateLimit = createRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    message: "Too many verification attempts. Please try again later."
+});
