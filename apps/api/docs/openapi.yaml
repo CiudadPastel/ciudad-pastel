@@ -10,6 +10,8 @@ servers:
     description: Local development server
 
 tags:
+  - name: Student access
+    description: Public student enrollment verification (CIU-119)
   - name: Courses
     description: Course administration
   - name: Recipe Books
@@ -20,6 +22,220 @@ tags:
     description: Confirmed enrollments registered by the administrator (HU-A09)
 
 paths:
+  /student-access/verify:
+    post:
+      tags: [Student access]
+      summary: Verify student enrollment and issue temporary access
+      security: []
+      description: >-
+        Public endpoint; no Firebase account or administrative authentication.
+        Name is collected but is not used for exact matching. Normalized ID and
+        phone must match the same active confirmed enrollment; cancelled
+        enrollments are excluded. Spaces, hyphens and other non-digit characters
+        are removed using existing enrollment normalization. National IDs have
+        9 digits starting with 1-7; DIMEX has 11 or 12 digits; phone has 8 digits.
+        The signed token expires after 900 seconds and is not a permanent account.
+        Only courses with recipe books appear; each course may currently have
+        multiple recipe books. Valid identity with no books returns courses [].
+        Material access re-checks active enrollment even with a valid token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fullName, idNumber, phone]
+              properties:
+                fullName:
+                  type: string
+                  minLength: 3
+                  maxLength: 120
+                  description: Trimmed with collapsed whitespace; not an authentication factor.
+                idNumber:
+                  type: string
+                  example: 1-0538-0021
+                phone:
+                  type: string
+                  example: 8888 7777
+      responses:
+        "200":
+          description: Successful verification, including when courses is empty.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accessToken, expiresIn, courses]
+                properties:
+                  accessToken:
+                    type: string
+                    description: Temporary signed token; contains no name, phone or ID number.
+                  expiresIn:
+                    type: integer
+                    enum: [900]
+                  courses:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name, recipeBooks]
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        recipeBooks:
+                          type: array
+                          minItems: 1
+                          items:
+                            type: object
+                            required: [id, title, fileName, sizeBytes]
+                            properties:
+                              id:
+                                type: string
+                              title:
+                                type: string
+                              fileName:
+                                type: string
+                              sizeBytes:
+                                type: integer
+        "400":
+          description: Invalid input, malformed JSON or body over 100 KB; errors do not disclose enrollment existence.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message, errors]
+                properties:
+                  message:
+                    type: string
+                    example: Student verification validation failed.
+                  errors:
+                    type: array
+                    items:
+                      type: string
+        "401":
+          description: No matching active enrollment; the same response for every identity mismatch.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    enum: ["We couldn't find an enrollment with this data."]
+        "429":
+          description: More than 5 attempts per IP in 15 minutes; dedicated verification counter.
+          headers:
+            Retry-After:
+              description: Seconds until another attempt is allowed.
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    enum: [Too many verification attempts. Please try again later.]
+        "500":
+          description: Safe internal failure, including missing token secret configuration.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    enum: [Could not verify student access.]
+
+  /student-access/courses/{courseId}/recipe-books/{recipeBookId}/file:
+    get:
+      tags: [Student access]
+      summary: View an authorized course recipe-book PDF (CIU-121)
+      description: >-
+        Requires the temporary student token issued by POST /student-access/verify,
+        not Firebase/admin authentication. The requested course must be in the
+        token courseIds, and at least one enrollment identified by its enrollmentIds
+        must currently exist, be enrolled, and belong to that course. Token validity
+        alone is insufficient. Cancellation revokes practical access on subsequent
+        requests immediately without waiting for token expiry, unless another
+        represented active enrollment grants access. Returns the specifically
+        requested PDF using existing HU-A03 ownership and storage checks.
+        This route refines the original singular CIU-121 wording because HU-A03
+        supports multiple recipe books per course; recipeBookId comes from
+        courses[].recipeBooks[]. No recipe book is arbitrarily selected.
+      security:
+        - studentAccessBearer: []
+      parameters:
+        - name: courseId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: recipeBookId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Authorized PDF bytes, viewed inline; no enrollment or storage metadata.
+          headers:
+            Content-Disposition:
+              description: Inline disposition with safely quoted/encoded stored filename.
+              schema:
+                type: string
+                example: 'inline; filename="macarons.pdf"'
+            Content-Length:
+              description: Actual PDF Buffer length in bytes.
+              schema:
+                type: integer
+            Cache-Control:
+              schema:
+                type: string
+                enum: ["private, no-store"]
+            X-Content-Type-Options:
+              schema:
+                type: string
+                enum: [nosniff]
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: Missing Authorization, wrong scheme, missing/malformed token, invalid signature or expired token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentAccessFileError"
+              example:
+                message: Invalid or expired student access token.
+        "403":
+          description: Course absent from token claims or no represented enrollment remains active for it, including cancellation/deletion/reassignment.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentAccessFileError"
+              example:
+                message: Student access is not authorized for this course.
+        "404":
+          description: Course/book missing, book belongs to another course, or binary missing; same safe response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentAccessFileError"
+              example:
+                message: Recipe book not found.
+        "500":
+          description: Missing/invalid server token configuration or unexpected repository/storage failure; no internal details disclosed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentAccessFileError"
+              example:
+                message: Could not retrieve recipe book.
+
   /admin/courses:
     get:
       tags:
@@ -799,12 +1015,24 @@ paths:
 
 components:
   securitySchemes:
+    studentAccessBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: HMAC-SHA256 student access token
+      description: Temporary 900-second student token from POST /student-access/verify; not Firebase authentication.
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
 
   schemas:
+    StudentAccessFileError:
+      type: object
+      required: [message]
+      additionalProperties: false
+      properties:
+        message:
+          type: string
     UpdateCourseStatusRequest:
       type: object
       required:

@@ -20,6 +20,7 @@ import courseRoutes from "./routes/course.routes.js";
 import publicCourseRoutes from "./routes/public-course.routes.js";
 import recipeBookRoutes from "./routes/recipe-book.routes.js";
 import enrollmentRequestRoutes from "./routes/enrollment-request.routes.js";
+import studentAccessRoutes from "./routes/student-access.routes.js";
 import { courseEnrollmentRoutes, enrollmentRoutes } from "./routes/enrollment.routes.js";
 
 
@@ -57,7 +58,10 @@ app.use(
 );
 
 
-// Parses incoming JSON request bodies.
+// Limits student verification attempts before parsing sensitive input.
+app.use("/api/student-access", studentAccessRoutes);
+
+// Parses incoming JSON request bodies for the remaining routes.
 app.use(express.json());
 
 
