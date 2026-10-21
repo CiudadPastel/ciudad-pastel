@@ -37,6 +37,9 @@ import EnrollmentRequests
 import PublicCoursesList
     from "./pages/public/CoursesList";
 
+import MyRecipeBooks
+    from "./pages/public/MyRecipeBooks";
+
 import PublicCourseDetail
     from "./pages/public/CourseDetail";
 
@@ -63,6 +66,13 @@ function App() {
                 <Route
                     path=":id"
                     element={<PublicCourseDetail />}
+                />
+            </Route>
+
+            <Route element={<PublicLayout />}>
+                <Route
+                    path="/mis-libros-de-recetas"
+                    element={<MyRecipeBooks />}
                 />
             </Route>
 
