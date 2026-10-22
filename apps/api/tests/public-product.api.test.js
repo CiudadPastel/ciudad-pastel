@@ -1,5 +1,11 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import YAML from "yaml";
 import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
 import request from "supertest";
+
+import { buildSeedData } from "../scripts/seed-products.js";
 
 const fake = vi.hoisted(() => {
     let productsList = [];
@@ -40,6 +46,10 @@ vi.mock("../src/repositories/category.repository.js", () => fake.categoryReposit
 
 import app from "../src/app.js";
 import { invalidateProductCatalogCache } from "../src/services/product.service.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const openApiPath = path.join(__dirname, "../docs/openapi.yaml");
 
 describe("public-product.api", () => {
     beforeEach(() => {
@@ -376,5 +386,193 @@ describe("public-product.api", () => {
             }
         });
     });
+
+    describe("Backend Acceptance Criteria [CIU-136]", () => {
+        it("returns exactly 16 published and 13 available products from seed data without empty categories", async () => {
+            const { categories, products } = buildSeedData();
+            fake.setCategoriesList(categories);
+            fake.setProductsList(products);
+
+            const response = await request(app).get("/api/products");
+
+            expect(response.status).toBe(200);
+            expect(response.body).toHaveLength(16);
+
+            const availableCount = response.body.filter((p) => p.available === true).length;
+            const outOfStockCount = response.body.filter((p) => p.available === false).length;
+            expect(availableCount).toBe(13);
+            expect(outOfStockCount).toBe(3);
+
+            // Category 6 has 0 published products, so no product in response has categoryId 'seed-cat-6'
+            const cat6Products = response.body.filter((p) => p.category?.id === "seed-cat-6");
+            expect(cat6Products).toHaveLength(0);
+        });
+
+        it("rejects public mutation methods (POST, PUT, PATCH, DELETE) with 404", async () => {
+            const postRes = await request(app).post("/api/products").send({ name: "Intruso" });
+            expect(postRes.status).toBe(404);
+
+            const putRes = await request(app).put("/api/products/seed-prod-01").send({ price: 100 });
+            expect(putRes.status).toBe(404);
+
+            const patchRes = await request(app).patch("/api/products/seed-prod-01").send({ available: false });
+            expect(patchRes.status).toBe(404);
+
+            const deleteRes = await request(app).delete("/api/products/seed-prod-01");
+            expect(deleteRes.status).toBe(404);
+        });
+
+        it("never leaks internal document fields (status, categoryId, createdAt, updatedAt) in any response", async () => {
+            const { categories, products } = buildSeedData();
+            fake.setCategoriesList(categories);
+            fake.setProductsList(
+                products.map((p) => ({
+                    ...p,
+                    createdAt: "2026-01-01T00:00:00.000Z",
+                    updatedAt: "2026-01-01T00:00:00.000Z"
+                }))
+            );
+
+            const response = await request(app).get("/api/products");
+
+            expect(response.status).toBe(200);
+            expect(response.body.length).toBeGreaterThan(0);
+
+            for (const product of response.body) {
+                expect(product).not.toHaveProperty("status");
+                expect(product).not.toHaveProperty("categoryId");
+                expect(product).not.toHaveProperty("createdAt");
+                expect(product).not.toHaveProperty("updatedAt");
+            }
+        });
+
+        it("conforms strictly to the OpenAPI PublicProduct schema specification", async () => {
+            const openApiContent = fs.readFileSync(openApiPath, "utf8");
+            const spec = YAML.parse(openApiContent);
+            const publicProductSchema = spec.components?.schemas?.PublicProduct;
+
+            expect(publicProductSchema).toBeDefined();
+            const expectedRequired = publicProductSchema.required;
+            expect(expectedRequired).toEqual(
+                expect.arrayContaining(["id", "name", "description", "price", "imageUrl", "available", "category"])
+            );
+
+            const { categories, products } = buildSeedData();
+            fake.setCategoriesList(categories);
+            fake.setProductsList(products);
+
+            const response = await request(app).get("/api/products");
+            expect(response.status).toBe(200);
+
+            for (const item of response.body) {
+                // All required properties must be present
+                for (const key of expectedRequired) {
+                    expect(item).toHaveProperty(key);
+                }
+
+                // Types check
+                expect(typeof item.id).toBe("string");
+                expect(typeof item.name).toBe("string");
+                expect(item.description === null || typeof item.description === "string").toBe(true);
+                expect(typeof item.price).toBe("number");
+                expect(Number.isInteger(item.price)).toBe(true);
+                expect(item.imageUrl === null || typeof item.imageUrl === "string").toBe(true);
+                expect(typeof item.available).toBe("boolean");
+
+                if (item.category !== null) {
+                    expect(typeof item.category).toBe("object");
+                    expect(typeof item.category.id).toBe("string");
+                    expect(typeof item.category.name).toBe("string");
+                }
+            }
+        });
+
+        it("handles and correctly sorts a catalog of 500 products across multiple categories", async () => {
+            const mockCategories = Array.from({ length: 10 }, (_, i) => ({
+                id: `cat-${i + 1}`,
+                name: `Categoría ${i + 1}`,
+                order: i + 1
+            }));
+
+            const mockProducts = [];
+            for (let i = 1; i <= 500; i++) {
+                const catIndex = ((i - 1) % 10) + 1;
+                // Pad number to verify alphabetical ordering within category
+                const padded = String(i).padStart(3, "0");
+                mockProducts.push({
+                    id: `prod-large-${i}`,
+                    name: `Producto ${padded}`,
+                    price: 1000 + i,
+                    categoryId: `cat-${catIndex}`,
+                    available: true,
+                    status: "published"
+                });
+            }
+
+            fake.setCategoriesList(mockCategories);
+            fake.setProductsList(mockProducts);
+
+            const response = await request(app).get("/api/products");
+
+            expect(response.status).toBe(200);
+            expect(response.body).toHaveLength(500);
+
+            // Verify order consistency
+            for (let i = 0; i < response.body.length - 1; i++) {
+                const current = response.body[i];
+                const next = response.body[i + 1];
+
+                const currentCat = mockCategories.find((c) => c.id === current.category.id);
+                const nextCat = mockCategories.find((c) => c.id === next.category.id);
+
+                if (currentCat.order === nextCat.order) {
+                    expect(current.name.localeCompare(next.name, "es")).toBeLessThanOrEqual(0);
+                } else {
+                    expect(currentCat.order).toBeLessThan(nextCat.order);
+                }
+            }
+        });
+
+        it("returns clean 500 when category repository fails while product repository is healthy", async () => {
+            const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+            fake.categoryRepository.getCategories.mockRejectedValueOnce(
+                new Error("Firestore connection timed out for categories")
+            );
+            fake.setProductsList([
+                { id: "p1", name: "Harina", categoryId: "c1", price: 1000, status: "published" }
+            ]);
+
+            const response = await request(app).get("/api/products");
+
+            expect(response.status).toBe(500);
+            expect(response.body).toEqual({
+                message: "Could not load the product catalog."
+            });
+            expect(consoleErrorSpy).toHaveBeenCalled();
+
+            consoleErrorSpy.mockRestore();
+        });
+
+        it("keeps catalog fully functional with category: null when all categories are missing", async () => {
+            fake.setCategoriesList([]);
+            fake.setProductsList([
+                { id: "p2", name: "Zumo de naranja", price: 1200, categoryId: "missing-1", status: "published" },
+                { id: "p1", name: "Azúcar pulverizada", price: 900, categoryId: "missing-2", status: "published" }
+            ]);
+
+            const response = await request(app).get("/api/products");
+
+            expect(response.status).toBe(200);
+            expect(response.body).toHaveLength(2);
+
+            expect(response.body[0].name).toBe("Azúcar pulverizada");
+            expect(response.body[0].category).toBeNull();
+
+            expect(response.body[1].name).toBe("Zumo de naranja");
+            expect(response.body[1].category).toBeNull();
+        });
+    });
 });
+
 
