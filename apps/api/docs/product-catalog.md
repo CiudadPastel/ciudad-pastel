@@ -76,3 +76,30 @@ Este documento define las reglas de negocio, estructura de datos y preguntas abi
 
 > *Espacio reservado para registrar formalmente las respuestas de la clienta tras la sesión de validación:*
 > - *(Pendiente de confirmación con la clienta)*
+
+---
+
+## 5. Datos de Muestra y Script de Siembra (Seed Script)
+
+Para el desarrollo local y pruebas visuales previas a la pantalla administrativa (HU-T06), se incluye el script `apps/api/scripts/seed-products.js` con datos deterministas (6 categorías y 18 productos).
+
+### Comandos disponibles:
+
+1. **Simulación (Dry-Run, por defecto):**
+   ```bash
+   npm run seed:products --workspace=apps/api
+   ```
+   Valida todos los datos en memoria y muestra en consola qué categorías y productos se escribirían, sin tocar Firestore ni requerir credenciales.
+
+2. **Aplicar datos de muestra (Upsert idempotente):**
+   ```bash
+   npm run seed:products --workspace=apps/api -- --apply
+   ```
+   Escribe los 6 documentos en `categories` y 18 en `products` en Firestore usando `upsert` con IDs deterministas (`seed-cat-*`, `seed-prod-*`). Requiere credenciales de Firebase en `.env`.
+
+3. **Eliminar datos de muestra:**
+   ```bash
+   npm run seed:products --workspace=apps/api -- --remove --apply
+   ```
+   Elimina **únicamente** los documentos cuyos identificadores inicien con el prefijo `seed-` en las colecciones `products` y `categories`, preservando cualquier otro documento existente.
+
