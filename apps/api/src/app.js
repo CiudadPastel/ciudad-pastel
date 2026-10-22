@@ -22,6 +22,7 @@ import recipeBookRoutes from "./routes/recipe-book.routes.js";
 import enrollmentRequestRoutes from "./routes/enrollment-request.routes.js";
 import studentAccessRoutes from "./routes/student-access.routes.js";
 import { courseEnrollmentRoutes, enrollmentRoutes } from "./routes/enrollment.routes.js";
+import publicProductRoutes from "./routes/public-product.routes.js";
 
 
 dotenv.config();
@@ -106,6 +107,9 @@ app.use(
 
 // Public published-course listing.
 app.use("/api/courses", publicCourseRoutes);
+
+// Public product catalog (HU-T01).
+app.use("/api/products", publicProductRoutes);
 
 // Checks whether the API is running.
 app.get("/api/health", (req, res) => {

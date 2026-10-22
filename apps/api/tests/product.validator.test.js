@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { sanitizeImageUrl } from "../src/validators/image-url.validator.js";
 import {
     PRODUCT_LIMITS,
     validateCategoryInput,
@@ -248,4 +249,42 @@ describe("product.validator", () => {
             expect(result.data.order).toBe(0);
         });
     });
+
+    describe("sanitizeImageUrl", () => {
+        it("returns valid https URL", () => {
+            expect(sanitizeImageUrl("https://example.com/photo.jpg")).toBe("https://example.com/photo.jpg");
+        });
+
+        it("returns valid http URL", () => {
+            expect(sanitizeImageUrl("http://example.com/photo.jpg")).toBe("http://example.com/photo.jpg");
+        });
+
+        it("returns null for javascript:alert(1) scheme", () => {
+            expect(sanitizeImageUrl("javascript:alert(1)")).toBeNull();
+        });
+
+        it("returns null for data: base64 URI scheme", () => {
+            expect(sanitizeImageUrl("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")).toBeNull();
+        });
+
+        it("returns null for unformatted plain text", () => {
+            expect(sanitizeImageUrl("not-a-valid-url")).toBeNull();
+        });
+
+        it("returns null for empty or whitespace-only string", () => {
+            expect(sanitizeImageUrl("")).toBeNull();
+            expect(sanitizeImageUrl("    ")).toBeNull();
+        });
+
+        it("returns null for null and undefined", () => {
+            expect(sanitizeImageUrl(null)).toBeNull();
+            expect(sanitizeImageUrl(undefined)).toBeNull();
+        });
+
+        it("returns null for URLs exceeding 500 characters", () => {
+            const longUrl = "https://example.com/" + "x".repeat(500);
+            expect(sanitizeImageUrl(longUrl)).toBeNull();
+        });
+    });
 });
+

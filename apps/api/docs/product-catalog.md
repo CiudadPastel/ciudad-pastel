@@ -56,6 +56,11 @@ Este documento define las reglas de negocio, estructura de datos y preguntas abi
    - Las respuestas de error (500) nunca se almacenan en caché y se devuelven copias profundas/desacopladas para evitar mutaciones de estado en memoria.
 3. **Seguridad y Privacidad (NOTA PARA EL HUMANO):**
    - Configurar en las reglas de seguridad de Firestore (`firestore.rules`) que se **niegue todo acceso directo de clientes** a las colecciones `products` y `categories` (`allow read, write: if false;`), ya que toda consulta se realiza de forma segura mediante Firebase Admin SDK desde el backend.
+4. **Manejo de Imágenes de Productos (CIU-133):**
+   - **Decisión de diseño:** En esta primera etapa del catálogo, cada producto admite una única imagen referenciada mediante URL externa (`imageUrl`). Los enlaces deben usar protocolo `http` o `https` (máximo 500 caracteres).
+   - **Carga directa de fotografías propias:** La subida de imágenes locales directamente a la plataforma queda reservada para la historia de administración de productos (HU-T06), sujeta a la evaluación del plan de almacenamiento de Firebase (Cloud Storage requiere plan Blaze desde feb-2026).
+   - **Saneamiento y seguridad en visualización:** Toda imagen es validada al guardar y re-saneada con `sanitizeImageUrl` antes de exponerse en `GET /api/products`. Si una URL almacenada no es válida o utiliza protocolos no autorizados (como `javascript:` o `data:`), se neutraliza a `null` de forma defensiva para prevenir inyecciones. Cuando `imageUrl` es `null`, la interfaz de usuario muestra un placeholder visual por defecto.
+
 
 ---
 
