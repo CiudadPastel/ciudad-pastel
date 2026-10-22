@@ -24,9 +24,32 @@ Este documento define las reglas de negocio, estructura de datos y preguntas abi
 ## 2. Decisiones de Diseño y Arquitectura Técnica
 
 1. **Almacenamiento en Firestore:**
-   - Colección de categorías: `categories/{id}` con campos `id`, `name`, `order`, `createdAt`, `updatedAt`.
-   - Colección de productos: `products/{id}` con campos `id`, `name`, `description`, `price`, `categoryId`, `imageUrl`, `available`, `status`, `createdAt`, `updatedAt`.
-   - **Sin migraciones ni índices compuestos:** La consulta pública utiliza únicamente `where("status", "==", "published")` (filtro simple) y el ordenamiento multicriterio se realiza en memoria en la capa de servicios.
+   - **Colección `categories/{id}`:**
+     ```json
+     {
+       "id": "seed-cat-1",
+       "name": "Harinas y mezclas",
+       "order": 1,
+       "createdAt": "2026-10-21T00:00:00.000Z",
+       "updatedAt": "2026-10-21T00:00:00.000Z"
+     }
+     ```
+   - **Colección `products/{id}`:**
+     ```json
+     {
+       "id": "seed-prod-01",
+       "name": "Harina de trigo todo uso 1 kg",
+       "description": "Harina de trigo de alta calidad para repostería y panadería.",
+       "price": 1450,
+       "categoryId": "seed-cat-1",
+       "imageUrl": "https://placehold.co/600x400/png?text=Harina%20de%20trigo",
+       "available": true,
+       "status": "published",
+       "createdAt": "2026-10-21T00:00:00.000Z",
+       "updatedAt": "2026-10-21T00:00:00.000Z"
+     }
+     ```
+   - **Sin migraciones ni índices compuestos:** Se crean colecciones nuevas en Firestore sin requerir migraciones de datos previas. La consulta pública utiliza únicamente `where("status", "==", "published")` (filtro simple sobre un único campo, sin requerir índice compuesto) y el ordenamiento multicriterio (orden de categoría + nombre alfabético con `es`) se realiza en memoria en la capa de servicios.
 2. **Caché en memoria (Plan Spark):**
    - Para no agotar la cuota diaria gratuita de lecturas de Firestore (50 000 lecturas/día), el servicio cachea el catálogo público completo durante 60 segundos (`CATALOG_CACHE_TTL_MS = 60_000`).
    - Se expone `invalidateProductCatalogCache()` para que operaciones de escritura (HU-T06) invaliden la caché de forma inmediata.
