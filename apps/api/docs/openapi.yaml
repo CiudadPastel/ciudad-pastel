@@ -1600,7 +1600,9 @@ components:
         imageUrl:
           type: string
           nullable: true
-          description: Valid http or https URL to the product image, or null.
+          description: >-
+            Public image URL for the product, or null if omitted or invalid. Must use http or
+            https protocol with a maximum length of 500 characters. Automatically sanitized.
         available:
           type: boolean
           description: Indicates whether the product is currently in stock.

@@ -28,3 +28,26 @@ export function validateOptionalImageUrl(value, fieldName = "imageUrl", errors =
         return null;
     }
 }
+
+// Sanitizes an image URL for safe public rendering, returning the URL if valid and null otherwise.
+export function sanitizeImageUrl(value) {
+    if (!value || typeof value !== "string") {
+        return null;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed || trimmed.length > 500) {
+        return null;
+    }
+
+    try {
+        const parsed = new URL(trimmed);
+        if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+            return trimmed;
+        }
+        return null;
+    } catch {
+        return null;
+    }
+}
+

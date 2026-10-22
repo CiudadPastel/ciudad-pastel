@@ -318,4 +318,63 @@ describe("public-product.api", () => {
 
         consoleErrorSpy.mockRestore();
     });
+
+    describe("image handling in public endpoint (CIU-133)", () => {
+        it("sanitizes unsafe stored imageUrl (such as javascript:alert(1)) to null", async () => {
+            fake.setCategoriesList([{ id: "cat-1", name: "Insumos", order: 1 }]);
+            fake.setProductsList([
+                {
+                    id: "prod-xss",
+                    name: "Insumo con url maliciosa",
+                    price: 2000,
+                    categoryId: "cat-1",
+                    imageUrl: "javascript:alert(1)",
+                    available: true,
+                    status: "published"
+                }
+            ]);
+
+            const response = await request(app).get("/api/products");
+
+            expect(response.status).toBe(200);
+            expect(response.body).toHaveLength(1);
+            expect(response.body[0].imageUrl).toBeNull();
+        });
+
+        it("always returns imageUrl: null and never undefined for products without an image", async () => {
+            fake.setCategoriesList([{ id: "cat-1", name: "Insumos", order: 1 }]);
+            fake.setProductsList([
+                {
+                    id: "prod-no-img",
+                    name: "Insumo sin foto",
+                    price: 2500,
+                    categoryId: "cat-1",
+                    imageUrl: null,
+                    available: true,
+                    status: "published"
+                },
+                {
+                    id: "prod-undefined-img",
+                    name: "Insumo con imagen undefined",
+                    price: 3000,
+                    categoryId: "cat-1",
+                    imageUrl: undefined,
+                    available: true,
+                    status: "published"
+                }
+            ]);
+
+            const response = await request(app).get("/api/products");
+
+            expect(response.status).toBe(200);
+            expect(response.body).toHaveLength(2);
+
+            for (const item of response.body) {
+                expect(item).toHaveProperty("imageUrl");
+                expect(item.imageUrl).toBeNull();
+                expect(item.imageUrl).not.toBeUndefined();
+            }
+        });
+    });
 });
+

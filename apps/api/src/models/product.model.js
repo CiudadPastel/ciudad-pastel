@@ -1,3 +1,5 @@
+import { sanitizeImageUrl } from "../validators/image-url.validator.js";
+
 export const PRODUCT_STATUS = Object.freeze({
     PUBLISHED: "published",
     WITHDRAWN: "withdrawn"
@@ -26,7 +28,7 @@ export function toPublicProduct(product, category = null) {
         name: product.name,
         description: product.description ?? null,
         price: product.price,
-        imageUrl: product.imageUrl ?? null,
+        imageUrl: sanitizeImageUrl(product.imageUrl),
         available: Boolean(product.available),
         category: category ? { id: category.id, name: category.name } : null
     };
