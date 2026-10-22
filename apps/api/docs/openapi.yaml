@@ -20,8 +20,40 @@ tags:
     description: Enrollment requests from visitors (HU-A05)
   - name: Enrollments
     description: Confirmed enrollments registered by the administrator (HU-A09)
+  - name: Products
+    description: Public product catalog operations (HU-T01)
 
 paths:
+  /products:
+    get:
+      tags: [Products]
+      summary: Retrieve the public product catalog (CIU-132)
+      security: []
+      description: >-
+        Public endpoint; no authentication required. Returns the list of all
+        published products sorted by category display order and product name.
+        Cached in memory for 60 seconds.
+      responses:
+        "200":
+          description: List of published products in the catalog.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PublicProduct"
+        "500":
+          description: Safe internal failure when loading the catalog.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message:
+                    type: string
+                    example: Could not load the product catalog.
+
   /student-access/verify:
     post:
       tags: [Student access]
@@ -1535,3 +1567,43 @@ components:
         code:
           type: string
           enum: [COURSE_FULL, ALREADY_ENROLLED, COURSE_ARCHIVED, REQUEST_ALREADY_CONFIRMED, REQUEST_DISCARDED]
+
+    PublicProductCategory:
+      type: object
+      nullable: true
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          description: Category unique identifier.
+        name:
+          type: string
+          description: Category display name.
+
+    PublicProduct:
+      type: object
+      required: [id, name, description, price, imageUrl, available, category]
+      properties:
+        id:
+          type: string
+          description: Product unique identifier.
+        name:
+          type: string
+          description: Product display name.
+        description:
+          type: string
+          nullable: true
+          description: Product description, or null if not provided.
+        price:
+          type: integer
+          description: Price in Costa Rican colones (CRC).
+        imageUrl:
+          type: string
+          nullable: true
+          description: Valid http or https URL to the product image, or null.
+        available:
+          type: boolean
+          description: Indicates whether the product is currently in stock.
+        category:
+          $ref: "#/components/schemas/PublicProductCategory"
+
