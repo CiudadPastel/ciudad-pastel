@@ -43,6 +43,12 @@ import MyRecipeBooks
 import PublicCourseDetail
     from "./pages/public/CourseDetail";
 
+import PublicProductsList
+    from "./pages/public/ProductsList";
+
+import PublicProductDetailPlaceholder
+    from "./pages/public/ProductDetailPlaceholder";
+
 import Home
     from "./pages/Home";
 
@@ -66,6 +72,20 @@ function App() {
                 <Route
                     path=":id"
                     element={<PublicCourseDetail />}
+                />
+            </Route>
+
+            <Route
+                path="/tienda"
+                element={<PublicLayout />}
+            >
+                <Route
+                    index
+                    element={<PublicProductsList />}
+                />
+                <Route
+                    path=":id"
+                    element={<PublicProductDetailPlaceholder />}
                 />
             </Route>
 
