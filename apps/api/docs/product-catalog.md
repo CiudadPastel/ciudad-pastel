@@ -15,8 +15,8 @@ Este documento define las reglas de negocio, estructura de datos y preguntas abi
 | 5 | **Pertenencia única a categoría** | Cada producto pertenece a una sola categoría organizativa. Si no se encuentra su categoría, se presenta con `category: null` sin perderse. | PROPUESTA — falta confirmar con Ciudad Pastel |
 | 6 | **Estados del producto** | `status` interno: `"published"` (publicado) o `"withdrawn"` (retirado). La API pública filtra estrictamente y solo expone productos con `status === "published"`. El retiro se gestionará en HU-T06. | PROPUESTA — falta confirmar con Ciudad Pastel |
 | 7 | **Imágenes externas (fase 1)** | Una sola imagen por producto mediante URL externa (`http`/`https`). La carga directa de archivos de imagen a la plataforma queda supeditada a HU-T06 y al plan de almacenamiento de Firebase. | PROPUESTA — falta confirmar con Ciudad Pastel |
-| 8 | **Sin paginación** | Se asume un volumen de hasta ~300 productos en el catálogo activo, por lo que el endpoint devuelve la lista completa para facilitar navegación y filtrado rápido en el cliente. | PROPUESTA — falta confirmar con Ciudad Pastel |
-| 9 | **Criterio de ordenamiento** | Los productos se ordenan primero por el número de orden de su categoría (`category.order` ascendente; productos sin categoría van al final), y en segundo lugar alfabéticamente por nombre (`localeCompare` con localización `"es"`). | PROPUESTA — falta confirmar con Ciudad Pastel |
+| 8 | **Paginación en catálogo público** | Paginación mediante `page` (base 1, por defecto 1) y `limit` (por defecto 12, máx. 50). La respuesta devuelve `{ items, products, hasMore, total, page, limit }` con ordenamiento determinista y estable. Si no se envían parámetros, responde de forma compatible con la primera página (12 elementos). | ACEPTADO — incorporado para frontend |
+| 9 | **Criterio de ordenamiento** | Los productos se ordenan primero por el número de orden de su categoría (`category.order` ascendente; productos sin categoría van al final), en segundo lugar alfabéticamente por nombre (`localeCompare` con localización `"es"`), y en tercer lugar por `id` determinista. | PROPUESTA — falta confirmar con Ciudad Pastel |
 | 10 | **Precios fijos** | Todos los productos tienen un precio definido y exacto en colones. Si existen insumos sujetos a cotización ("precio a consultar"), requerirá confirmación de Ciudad Pastel. | PROPUESTA — falta confirmar con Ciudad Pastel |
 
 ---
@@ -60,6 +60,12 @@ Este documento define las reglas de negocio, estructura de datos y preguntas abi
    - **Decisión de diseño:** En esta primera etapa del catálogo, cada producto admite una única imagen referenciada mediante URL externa (`imageUrl`). Los enlaces deben usar protocolo `http` o `https` (máximo 500 caracteres).
    - **Carga directa de fotografías propias:** La subida de imágenes locales directamente a la plataforma queda reservada para la historia de administración de productos (HU-T06), sujeta a la evaluación del plan de almacenamiento de Firebase (Cloud Storage requiere plan Blaze desde feb-2026).
    - **Saneamiento y seguridad en visualización:** Toda imagen es validada al guardar y re-saneada con `sanitizeImageUrl` antes de exponerse en `GET /api/products`. Si una URL almacenada no es válida o utiliza protocolos no autorizados (como `javascript:` o `data:`), se neutraliza a `null` de forma defensiva para prevenir inyecciones. Cuando `imageUrl` es `null`, la interfaz de usuario muestra un placeholder visual por defecto.
+5. **Paginación en Catálogo Público (Alineación con Frontend):**
+   - **Parámetros:** Acepta `page` (base 1, por defecto 1) y `limit` (por defecto 12, máx. 50).
+   - **Respuesta:** Objeto `{ items, products, total, page, limit, hasMore }`.
+   - **Eficiencia con Caché en Memoria:** El catálogo completo de Firestore se mantiene en memoria durante 60 segundos; la paginación realiza el rebanado (`slice`) en memoria sin generar lecturas adicionales de base de datos entre páginas consecutivas.
+   - **Compatibilidad:** Si el cliente no envía parámetros de paginación (`GET /api/products`), la API entrega la primera página (12 elementos) con `hasMore: true/false` de forma transparente.
+
 
 
 ---
