@@ -1,0 +1,189 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.heading h1 {
+  font-size: 2rem;
+}
+
+.eyebrow {
+  margin-bottom: 0.3rem;
+  color: var(--cp-mint-700);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.subtitle {
+  margin-top: 0.4rem;
+  color: var(--cp-muted);
+}
+
+.loading {
+  color: var(--cp-muted);
+}
+
+.filtersPlaceholder {
+  min-height: 3.25rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.skeletonCard {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--cp-border);
+  border-radius: 8px;
+  background: var(--cp-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.skeletonImage,
+.skeletonName,
+.skeletonPrice {
+  background: linear-gradient(90deg, var(--cp-neutral-50) 25%, var(--cp-surface) 50%, var(--cp-neutral-50) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+.skeletonImage {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+}
+
+.skeletonBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.65rem;
+  min-height: 5.6rem;
+  padding: 1rem;
+}
+
+.skeletonName {
+  width: 75%;
+  height: 1.45rem;
+  border-radius: 4px;
+}
+
+.skeletonPrice {
+  width: 35%;
+  height: 1.25rem;
+  margin-top: auto;
+  border-radius: 4px;
+}
+
+@media (min-width: 601px) {
+  .grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  }
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid var(--cp-border);
+  border-radius: 8px;
+  background: var(--cp-surface);
+  box-shadow: var(--shadow-sm);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  border-color: var(--cp-mint-600);
+  box-shadow: var(--shadow-md);
+}
+
+.card:focus-visible {
+  outline: 3px solid var(--cp-mint);
+  outline-offset: 3px;
+}
+
+.image,
+.imageEmpty {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  background: var(--cp-mint-50);
+  color: var(--cp-mint-700);
+  place-items: center;
+}
+
+.cardBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 1rem;
+}
+
+.cardBody h2 {
+  font-size: 1.2rem;
+}
+
+.cardMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  margin-top: auto;
+}
+
+.cardMeta strong {
+  color: var(--cp-navy);
+}
+
+.unavailable {
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
+  background: var(--cp-neutral-50);
+  color: var(--cp-neutral-700);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.loadMore {
+  display: flex;
+  justify-content: center;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    transition: none;
+  }
+
+  .card:hover {
+    transform: none;
+  }
+
+  .skeletonImage,
+  .skeletonName,
+  .skeletonPrice {
+    animation: none;
+  }
+}

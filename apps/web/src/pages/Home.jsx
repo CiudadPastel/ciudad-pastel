@@ -12,11 +12,6 @@ import styles from "./Home.module.css";
  * El acceso de administración queda como enlace discreto al pie.
  */
 function Home() {
-    const storeQuestion = whatsappLink(
-        CIUDAD_PASTEL_WHATSAPP,
-        "Hola, quisiera consultar por insumos de repostería."
-    );
-
     return (
         <div className={styles.page}>
             <main className={styles.main}>
@@ -33,14 +28,12 @@ function Home() {
                         <span className={styles.doorAction}>Ver cursos</span>
                     </Link>
 
-                    <section className={`${styles.door} ${styles.store}`} aria-labelledby="home-store">
+                    <Link to="/tienda" className={`${styles.door} ${styles.store}`}>
                         <ShoppingBag size={34} aria-hidden="true" className={styles.doorIcon} />
-                        <h2 id="home-store">Tienda</h2>
-                        <p>Pronto podrás ver aquí nuestros insumos de repostería.</p>
-                        <a href={storeQuestion} target="_blank" rel="noreferrer" className={styles.doorAction}>
-                            Consultar por WhatsApp
-                        </a>
-                    </section>
+                        <h2>Tienda</h2>
+                        <p>Explora nuestros insumos de repostería.</p>
+                        <span className={styles.doorAction}>Ver productos</span>
+                    </Link>
                 </nav>
             </main>
 

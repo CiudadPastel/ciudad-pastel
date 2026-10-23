@@ -1,4 +1,4 @@
-import { BookMarked, BookOpen } from "lucide-react";
+import { BookMarked, BookOpen, ShoppingBag } from "lucide-react";
 import { Link, Outlet } from "react-router-dom";
 
 import styles from "./PublicLayout.module.css";
@@ -16,6 +16,10 @@ function PublicLayout() {
                         <Link to="/cursos" className="btn btn-secondary">
                             <BookOpen size={17} aria-hidden="true" />
                             Cursos
+                        </Link>
+                        <Link to="/tienda" className="btn btn-secondary">
+                            <ShoppingBag size={17} aria-hidden="true" />
+                            Tienda
                         </Link>
                         <Link to="/mis-libros-de-recetas" className="btn btn-secondary">
                             <BookMarked size={17} aria-hidden="true" />

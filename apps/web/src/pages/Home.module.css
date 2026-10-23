@@ -102,6 +102,16 @@
   background: var(--cp-mint-50);
   border: 1px solid #cfe7dc;
   color: var(--cp-mint-700);
+  transition: background 0.15s;
+}
+
+.store:hover {
+  background: #dff1e9;
+}
+
+.store:focus-visible {
+  outline: 3px solid var(--cp-mint-600);
+  outline-offset: 3px;
 }
 
 .store h2 {
