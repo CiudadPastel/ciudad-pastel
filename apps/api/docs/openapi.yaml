@@ -79,24 +79,49 @@ paths:
         category IDs (including missing category documents) and categories without published
         products return HTTP 200 with empty items/products, total 0 and hasMore false.
         Published out-of-stock products remain visible. Total and hasMore reflect the filter.
-        Omitting categoryId preserves the existing catalog behavior. The complete snapshot is
-        shared with /categories and cached in memory for 60 seconds; explicit invalidation
+        Omitting both category filters preserves the existing catalog behavior.
+        Provisional CIU-141 rules are pending confirmation with Ciudad Pastel.
+        Repeated categoryIds select the OR union without duplicates; filtering precedes pagination.
+        The complete snapshot is shared with /categories and cached in memory for 60 seconds; explicit invalidation
         refreshes both endpoints on the next request.
         Examples use the /api base path: /api/products, /api/products?categoryId=category-1,
-        /api/products?categoryId=category-1&page=2&limit=12.
+        /api/products?categoryId=category-1&page=2&limit=12,
+        /api/products?categoryIds=category-1&categoryIds=category-2.
       parameters:
         - name: categoryId
           in: query
           required: false
           description: >-
             Exact stored category identifier; not a display name. No trimming or case folding.
-            Omitted means no filter. Unknown IDs return an empty catalog. Empty, whitespace-only
+            Mutually exclusive with categoryIds. Omitted with no categoryIds means no filter.
+            Unknown IDs return an empty catalog. Empty, whitespace-only
             or non-string/repeated values (including bracket object/array notation) return
             HTTP 400, never the unfiltered catalog.
           schema:
             type: string
             minLength: 1
           example: category-1
+        - name: categoryIds
+          in: query
+          required: false
+          style: form
+          explode: true
+          description: >-
+            Repeat this exact parameter for an OR union of stored category IDs, before pagination.
+            One entry is supported. IDs are compared exactly, without trimming or case folding.
+            Duplicate IDs are ignored; unknown IDs are ignored and all-unknown selection returns
+            HTTP 200 with an empty filtered catalog. Maximum 20 entries before deduplication.
+            Empty or whitespace-only entries, bracket/object/nested notation, more than 20 entries,
+            or simultaneous categoryId and categoryIds return HTTP 400 without loading the catalog.
+            Commas are literal ID characters, never a list separator.
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 20
+            items:
+              type: string
+              minLength: 1
+          example: [category-1, category-2]
         - name: page
           in: query
           required: false
@@ -122,7 +147,13 @@ paths:
               schema:
                 $ref: "#/components/schemas/PublicProductListResponse"
         "400":
-          description: Malformed categoryId (empty, whitespace-only or non-string/repeated).
+          description: >-
+            Invalid filters; validation never falls back to the unfiltered catalog.
+            Messages (in validation precedence order): "categoryId must be a non-empty string.";
+            "categoryIds must use repeated non-empty string parameters; bracket notation is not supported.";
+            "categoryId and categoryIds cannot be used together.";
+            "categoryIds must contain at most 20 entries.";
+            "categoryIds must contain only non-empty strings."
           content:
             application/json:
               schema:
@@ -154,7 +185,11 @@ paths:
         one published product, including out-of-stock products. Empty categories, categories
         with only withdrawn products and missing category references are excluded.
         Ordered by configured display order ascending, then name using Spanish locale.
-        Only id and name are exposed, with no counts or administrative metadata.
+        Exactly id, name, productCount and imageUrl are exposed; no administrative metadata.
+        productCount counts published products regardless of availability, before pagination.
+        imageUrl is the first non-null sanitized public product image in deterministic catalog
+        order within that category, or null. No additional Firestore queries or stored fields.
+        These CIU-141 rules are provisional and pending confirmation with Ciudad Pastel.
         Shares the complete 60-second snapshot and explicit invalidation with /products.
       responses:
         "200":
@@ -168,8 +203,12 @@ paths:
               example:
                 - id: category-1
                   name: Chocolates
+                  productCount: 12
+                  imageUrl: https://example.com/chocolate.jpg
                 - id: category-2
                   name: Decoración
+                  productCount: 2
+                  imageUrl: null
         "500":
           description: Safe internal failure; exception details are never exposed or cached.
           content:
@@ -1735,12 +1774,22 @@ components:
     PublicCategory:
       type: object
       additionalProperties: false
-      required: [id, name]
+      required: [id, name, productCount, imageUrl]
       properties:
         id:
           type: string
         name:
           type: string
+        productCount:
+          type: integer
+          minimum: 0
+          description: Published product count in this existing category, including out-of-stock products; before pagination.
+        imageUrl:
+          type: string
+          format: uri
+          nullable: true
+          maxLength: 500
+          description: First sanitized http/https public product image in catalog order within this category, or null if none is valid.
 
     PublicProductCategory:
       type: object
@@ -1809,5 +1858,3 @@ components:
         limit:
           type: integer
           description: Number of products requested per page.
-
-

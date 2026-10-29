@@ -56,16 +56,25 @@ async function getCatalogSnapshot() {
             return a.product.id.localeCompare(b.product.id);
         });
 
-        const referencedCategories = new Set(products.map((product) => product.categoryId));
+        const entries = enriched.map(({ product, category }) => ({
+            categoryId: product.categoryId,
+            publicProduct: toPublicProduct(product, category)
+        }));
+        const categorySummaries = new Map();
+        // Reuse sanitized public products in catalog order, independently of pagination.
+        for (const { categoryId, publicProduct } of entries) {
+            if (!publicProduct.category) continue;
+            const summary = categorySummaries.get(categoryId) ?? { productCount: 0, imageUrl: null };
+            summary.productCount += 1;
+            summary.imageUrl ??= publicProduct.imageUrl;
+            categorySummaries.set(categoryId, summary);
+        }
         const snapshot = {
-            entries: enriched.map(({ product, category }) => ({
-                categoryId: product.categoryId,
-                publicProduct: toPublicProduct(product, category)
-            })),
+            entries,
             // The category repository owns display order, including Spanish name ties.
             categories: categories
-                .filter((category) => referencedCategories.has(category.id))
-                .map(({ id, name }) => ({ id, name }))
+                .filter((category) => categorySummaries.has(category.id))
+                .map(({ id, name }) => ({ id, name, ...categorySummaries.get(id) }))
         };
         if (pendingSnapshot === load) {
             cachedCatalog = snapshot;
@@ -89,12 +98,15 @@ export async function getPublicCategories() {
 }
 
 // Filters the complete cached catalog before calculating totals and pagination.
-export async function getPublicCatalog({ page = 1, limit = DEFAULT_PAGE_LIMIT, categoryId } = {}) {
+export async function getPublicCatalog({ page = 1, limit = DEFAULT_PAGE_LIMIT, categoryId, categoryIds } = {}) {
     const snapshot = await getCatalogSnapshot();
-    const entries = categoryId === undefined
+    const selectedIds = categoryIds === undefined
+        ? (categoryId === undefined ? null : new Set([categoryId]))
+        : new Set(categoryIds);
+    const entries = selectedIds === null
         ? snapshot.entries
         : snapshot.entries.filter((entry) =>
-            entry.categoryId === categoryId && entry.publicProduct.category !== null
+            selectedIds.has(entry.categoryId) && entry.publicProduct.category !== null
         );
 
     const safePage = Number.isInteger(page) && page >= 1 ? page : 1;
