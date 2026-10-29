@@ -10,6 +10,8 @@ servers:
     description: Local development server
 
 tags:
+  - name: Contact
+    description: Public business contact configuration (HU-T05 backend)
   - name: Student access
     description: Public student enrollment verification (CIU-119)
   - name: Courses
@@ -24,6 +26,47 @@ tags:
     description: Public product catalog operations (HU-T01)
 
 paths:
+  /contact/whatsapp:
+    get:
+      tags: [Contact]
+      summary: Retrieve configured WhatsApp contact (CIU-154)
+      security: []
+      description: >-
+        Public endpoint driven by WHATSAPP_CONTACT_PHONE and the optional
+        WHATSAPP_CONTACT_MESSAGE_TEMPLATE environment variables, read on each request.
+        No Firebase access or authentication. Surrounding whitespace is trimmed from both
+        values; internal whitespace is not removed. The phone must contain a leading + and
+        1-15 ASCII digits with a nonzero first digit. This validates structure only.
+        A missing or blank phone returns 404, even if a template is configured.
+        An invalid phone or custom template returns a safe 500 without configuration values.
+        Missing or blank templates use the provisional technical fallback
+        "Hola, quisiera información sobre {{productName}}."; this is not a client-approved
+        business statement. Custom templates must include the exact {{productName}}
+        placeholder and contain at most 1000 Unicode code points after trimming.
+        The response template is plain text: no HTML interpretation or placeholder substitution.
+        The future frontend replaces the placeholder and URL-encodes the message when opening
+        WhatsApp; this endpoint does not build a URL or send messages.
+        Official phone and business-approved message remain pending under CIU-152.
+      responses:
+        "200":
+          description: Exactly the normalized phone and resolved plain-text message template.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WhatsAppContact"
+        "404":
+          description: Phone is absent, empty or whitespace-only; no fallback number is supplied.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WhatsAppContactNotConfigured"
+        "500":
+          description: Invalid configured phone or template; no raw values or exception details.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WhatsAppContactConfigurationError"
+
   /products:
     get:
       tags: [Products]
@@ -1143,6 +1186,42 @@ components:
       bearerFormat: JWT
 
   schemas:
+    WhatsAppContact:
+      type: object
+      additionalProperties: false
+      required: [phone, messageTemplate]
+      properties:
+        phone:
+          type: string
+          minLength: 2
+          maxLength: 16
+          pattern: '^\+[1-9][0-9]{0,14}$'
+          description: Full international phone including +, with surrounding whitespace trimmed.
+        messageTemplate:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          pattern: '\{\{productName\}\}'
+          description: >-
+            Plain text with the exact {{productName}} placeholder preserved; surrounding
+            whitespace is trimmed. Length is measured in Unicode code points.
+          example: "Hola, quisiera información sobre {{productName}}."
+    WhatsAppContactNotConfigured:
+      type: object
+      additionalProperties: false
+      required: [message]
+      properties:
+        message:
+          type: string
+          enum: ["WhatsApp contact is not configured."]
+    WhatsAppContactConfigurationError:
+      type: object
+      additionalProperties: false
+      required: [message]
+      properties:
+        message:
+          type: string
+          enum: ["WhatsApp contact configuration is invalid."]
     StudentAccessFileError:
       type: object
       required: [message]

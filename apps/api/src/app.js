@@ -24,6 +24,7 @@ import studentAccessRoutes from "./routes/student-access.routes.js";
 import { courseEnrollmentRoutes, enrollmentRoutes } from "./routes/enrollment.routes.js";
 import publicProductRoutes from "./routes/public-product.routes.js";
 import publicCategoryRoutes from "./routes/public-category.routes.js";
+import publicContactRoutes from "./routes/public-contact.routes.js";
 
 
 dotenv.config();
@@ -112,6 +113,9 @@ app.use("/api/courses", publicCourseRoutes);
 // Public product catalog (HU-T01).
 app.use("/api/products", publicProductRoutes);
 app.use("/api/categories", publicCategoryRoutes);
+
+// Public environment-driven business contact configuration (CIU-154).
+app.use("/api/contact", publicContactRoutes);
 
 // Checks whether the API is running.
 app.get("/api/health", (req, res) => {
