@@ -32,8 +32,28 @@ paths:
       description: >-
         Public endpoint; no authentication required. Returns a paginated list of all
         published products sorted by category display order and product name.
-        Cached in memory for 60 seconds.
+        Optionally filters by the stored category relationship before pagination. Unknown
+        category IDs (including missing category documents) and categories without published
+        products return HTTP 200 with empty items/products, total 0 and hasMore false.
+        Published out-of-stock products remain visible. Total and hasMore reflect the filter.
+        Omitting categoryId preserves the existing catalog behavior. The complete snapshot is
+        shared with /categories and cached in memory for 60 seconds; explicit invalidation
+        refreshes both endpoints on the next request.
+        Examples use the /api base path: /api/products, /api/products?categoryId=category-1,
+        /api/products?categoryId=category-1&page=2&limit=12.
       parameters:
+        - name: categoryId
+          in: query
+          required: false
+          description: >-
+            Exact stored category identifier; not a display name. No trimming or case folding.
+            Omitted means no filter. Unknown IDs return an empty catalog. Empty, whitespace-only
+            or non-string/repeated values (including bracket object/array notation) return
+            HTTP 400, never the unfiltered catalog.
+          schema:
+            type: string
+            minLength: 1
+          example: category-1
         - name: page
           in: query
           required: false
@@ -58,6 +78,17 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PublicProductListResponse"
+        "400":
+          description: Malformed categoryId (empty, whitespace-only or non-string/repeated).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message:
+                    type: string
+                    example: categoryId must be a non-empty string.
         "500":
           description: Safe internal failure when loading the catalog.
           content:
@@ -69,6 +100,44 @@ paths:
                   message:
                     type: string
                     example: Could not load the product catalog.
+
+  /categories:
+    get:
+      tags: [Products]
+      summary: List public product categories (CIU-143)
+      security: []
+      description: >-
+        No authentication required. Includes only existing categories referenced by at least
+        one published product, including out-of-stock products. Empty categories, categories
+        with only withdrawn products and missing category references are excluded.
+        Ordered by configured display order ascending, then name using Spanish locale.
+        Only id and name are exposed, with no counts or administrative metadata.
+        Shares the complete 60-second snapshot and explicit invalidation with /products.
+      responses:
+        "200":
+          description: Ordered categories, or an empty array when none qualify.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PublicCategory"
+              example:
+                - id: category-1
+                  name: Chocolates
+                - id: category-2
+                  name: Decoración
+        "500":
+          description: Safe internal failure; exception details are never exposed or cached.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message:
+                    type: string
+                    example: Could not load the product categories.
 
   /student-access/verify:
     post:
@@ -1584,6 +1653,16 @@ components:
           type: string
           enum: [COURSE_FULL, ALREADY_ENROLLED, COURSE_ARCHIVED, REQUEST_ALREADY_CONFIRMED, REQUEST_DISCARDED]
 
+    PublicCategory:
+      type: object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+
     PublicProductCategory:
       type: object
       nullable: true
@@ -1627,7 +1706,7 @@ components:
 
     PublicProductListResponse:
       type: object
-      required: [items, hasMore, total, page, limit]
+      required: [items, products, hasMore, total, page, limit]
       properties:
         items:
           type: array
@@ -1641,10 +1720,10 @@ components:
           description: Alias to items for client convenience.
         hasMore:
           type: boolean
-          description: Indicates if there are subsequent pages available.
+          description: Indicates whether the optionally filtered collection has subsequent pages.
         total:
           type: integer
-          description: Total number of published products.
+          description: Total number of published products after the optional category filter, before pagination.
         page:
           type: integer
           description: Current page number (1-indexed).
