@@ -722,10 +722,10 @@ describe("public-product.api", () => {
             expect(response.status).toBe(200);
             expect(fake.verifyIdToken).not.toHaveBeenCalled();
             expect(response.body).toEqual([
-                { id: "a", name: "Decoración" },
-                { id: "tie-a", name: "Ázucar" },
-                { id: "b", name: "Chocolates" },
-                { id: "tie-z", name: "Zanahoria" }
+                { id: "a", name: "Decoración", productCount: 2, imageUrl: null },
+                { id: "tie-a", name: "Ázucar", productCount: 1, imageUrl: null },
+                { id: "b", name: "Chocolates", productCount: 1, imageUrl: null },
+                { id: "tie-z", name: "Zanahoria", productCount: 1, imageUrl: null }
             ]);
         });
 
@@ -733,7 +733,7 @@ describe("public-product.api", () => {
             fake.setProductsList([product("out", "b", { available: false })]);
             const response = await request(app).get("/api/categories");
             expect(response.status).toBe(200);
-            expect(response.body).toEqual([{ id: "b", name: "Chocolates" }]);
+            expect(response.body).toEqual([{ id: "b", name: "Chocolates", productCount: 1, imageUrl: null }]);
         });
 
         it.each([{ products: [] }, { products: [product("hidden", "a", { status: "withdrawn" })] }, { products: [product("orphan", "missing")] }])(
@@ -851,7 +851,7 @@ describe("public-product.api", () => {
             vi.setSystemTime(new Date("2026-10-29T00:00:59.999Z"));
             expect((await request(app).get("/api/products?categoryId=a")).body.total).toBe(2);
             vi.setSystemTime(new Date("2026-10-29T00:01:00Z"));
-            expect((await request(app).get("/api/categories")).body).toEqual([{ id: "empty", name: "Vacía" }]);
+            expect((await request(app).get("/api/categories")).body).toEqual([{ id: "empty", name: "Vacía", productCount: 1, imageUrl: null }]);
             expect((await request(app).get("/api/products?categoryId=empty")).body.total).toBe(1);
             expect(fake.productRepository.getPublishedProducts).toHaveBeenCalledTimes(2);
             expect(fake.categoryRepository.getCategories).toHaveBeenCalledTimes(2);
@@ -884,7 +884,7 @@ describe("public-product.api", () => {
             const gate = Promise.withResolvers();
             const published = fake.getProductsList().filter((p) => p.status === "published");
             fake.productRepository.getPublishedProducts.mockReturnValue(gate.promise);
-            const requests = concurrentRequests(["/api/products?categoryId=a", "/api/categories"]);
+            const requests = concurrentRequests(["/api/products?categoryId=a", "/api/categories", "/api/products?categoryIds=a&categoryIds=b"]);
             try {
                 await requests.entered;
                 expect(fake.productRepository.getPublishedProducts).toHaveBeenCalledTimes(1);
@@ -893,7 +893,9 @@ describe("public-product.api", () => {
                 gate.resolve(published);
                 await requests.responses;
             }
-            const [products, categories] = await requests.responses;
+            const [products, categories, multiple] = await requests.responses;
+            expect(multiple.status).toBe(200);
+            expect(multiple.body.total).toBe(3);
             expect(products.status).toBe(200);
             expect(products.body.total).toBe(2);
             expect(categories.status).toBe(200);
@@ -906,16 +908,16 @@ describe("public-product.api", () => {
             const oldRequest = concurrentRequests(["/api/products?categoryId=a"]);
             await oldRequest.entered;
             invalidateProductCatalogCache();
-            fake.setProductsList([product("new", "empty")]);
+            fake.setProductsList([product("new", "empty", { imageUrl: "https://example.com/new.jpg" })]);
             try {
                 const refreshed = await request(app).get("/api/categories");
                 expect(refreshed.status).toBe(200);
-                expect(refreshed.body).toEqual([{ id: "empty", name: "Vacía" }]);
+                expect(refreshed.body).toEqual([{ id: "empty", name: "Vacía", productCount: 1, imageUrl: "https://example.com/new.jpg" }]);
             } finally {
-                gate.resolve([product("old", "a")]);
+                gate.resolve([product("old", "a", { imageUrl: "https://example.com/old.jpg" })]);
                 await oldRequest.responses;
             }
-            expect((await request(app).get("/api/categories")).body).toEqual([{ id: "empty", name: "Vacía" }]);
+            expect((await request(app).get("/api/categories")).body).toEqual([{ id: "empty", name: "Vacía", productCount: 1, imageUrl: "https://example.com/new.jpg" }]);
             expect((await request(app).get("/api/products?categoryId=empty")).body.items.map((p) => p.id)).toEqual(["new"]);
             expect(fake.productRepository.getPublishedProducts).toHaveBeenCalledTimes(2);
         });
@@ -924,19 +926,22 @@ describe("public-product.api", () => {
             const spy = vi.spyOn(console, "error").mockImplementation(() => {});
             const gate = Promise.withResolvers();
             fake.productRepository.getPublishedProducts.mockReturnValueOnce(gate.promise);
-            const requests = concurrentRequests(["/api/products?categoryId=a", "/api/categories"]);
+            const requests = concurrentRequests(["/api/products?categoryId=a", "/api/categories", "/api/products?categoryIds=a&categoryIds=b"]);
             try {
                 await requests.entered;
             } finally {
                 gate.reject(new Error("private repository failure"));
             }
             try {
-                const [products, categories] = await requests.responses;
+                const [products, categories, multiple] = await requests.responses;
                 expect(products.status).toBe(500);
                 expect(categories.status).toBe(500);
+                expect(multiple.status).toBe(500);
+                expect(multiple.body).toEqual({ message: "Could not load the product catalog." });
                 expect(products.body).toEqual({ message: "Could not load the product catalog." });
                 expect(categories.body).toEqual({ message: "Could not load the product categories." });
                 expect((await request(app).get("/api/products?categoryId=a")).body.total).toBe(2);
+                expect((await request(app).get("/api/products?categoryIds=a&categoryIds=b")).body.total).toBe(3);
                 expect((await request(app).get("/api/categories")).body).toHaveLength(4);
                 expect(fake.productRepository.getPublishedProducts).toHaveBeenCalledTimes(2);
             } finally { spy.mockRestore(); }
@@ -962,9 +967,9 @@ describe("public-product.api", () => {
             fake.setProductsList([product("old", "a")]);
             await request(app).get("/api/products");
             fake.setProductsList([product("old", "a", { status: "withdrawn" }), product("new", "empty", { available: false })]);
-            expect((await request(app).get("/api/categories")).body).toEqual([{ id: "a", name: "Decoración" }]);
+            expect((await request(app).get("/api/categories")).body).toEqual([{ id: "a", name: "Decoración", productCount: 1, imageUrl: null }]);
             invalidateProductCatalogCache();
-            expect((await request(app).get("/api/categories")).body).toEqual([{ id: "empty", name: "Vacía" }]);
+            expect((await request(app).get("/api/categories")).body).toEqual([{ id: "empty", name: "Vacía", productCount: 1, imageUrl: null }]);
             expect((await request(app).get("/api/products?categoryId=a")).body).toEqual(emptyEnvelope());
             expect((await request(app).get("/api/products?categoryId=empty")).body.total).toBe(1);
             expect(fake.productRepository.getPublishedProducts).toHaveBeenCalledTimes(2);
@@ -1038,9 +1043,9 @@ describe("public-product.api", () => {
             });
             expect(categories.responses["500"]).toBeDefined();
             expect(spec.components.schemas.PublicCategory).toMatchObject({
-                type: "object", required: ["id", "name"], additionalProperties: false
+                type: "object", required: ["id", "name", "productCount", "imageUrl"], additionalProperties: false
             });
-            expect(Object.keys(spec.components.schemas.PublicCategory.properties).sort()).toEqual(["id", "name"]);
+            expect(Object.keys(spec.components.schemas.PublicCategory.properties).sort()).toEqual(["id", "imageUrl", "name", "productCount"]);
             const products = spec.paths["/products"].get;
             expect(products.security).toEqual([]);
             expect(products.parameters.find((p) => p.name === "categoryId")).toMatchObject({
@@ -1048,6 +1053,208 @@ describe("public-product.api", () => {
             });
             expect(products.responses["400"]).toBeDefined();
             expect(spec.components.schemas.PublicProductListResponse.required).toContain("products");
+        });
+    });
+
+
+    describe("CIU-141 provisional category exploration", () => {
+        const product = (id, categoryId, extra = {}) => ({
+            id, name: id, categoryId, price: 1500, available: true, status: "published", ...extra
+        });
+        beforeEach(() => {
+            fake.setCategoriesList([
+                { id: "a", name: "Chocolates", order: 1, createdAt: "private" },
+                { id: "b", name: "Decoration", order: 2 },
+                { id: "empty", name: "Empty", order: 3 }
+            ]);
+            fake.setProductsList([
+                product("a-3", "a", { imageUrl: "https://example.com/later.jpg" }),
+                product("a-2", "a", { imageUrl: " https://example.com/chocolate.jpg ", available: false }),
+                product("a-1", "a", { imageUrl: "javascript:alert(1)" }),
+                product("a-0", "a", { imageUrl: "https://example.com/withdrawn.jpg", status: "withdrawn" }),
+                product("b-1", "b", { imageUrl: "data:image/png;base64,AAAA" }),
+                product("orphan", "missing", { imageUrl: "https://example.com/orphan.jpg" })
+            ]);
+        });
+
+        it("counts all published products and chooses only the first valid public image within each category", async () => {
+            await request(app).get("/api/products?categoryId=b&limit=1&page=10");
+            const response = await request(app).get("/api/categories");
+            expect(response.status).toBe(200);
+            expect(response.body).toEqual([
+                { id: "a", name: "Chocolates", productCount: 3, imageUrl: "https://example.com/chocolate.jpg" },
+                { id: "b", name: "Decoration", productCount: 1, imageUrl: null }
+            ]);
+            expect(fake.verifyIdToken).not.toHaveBeenCalled();
+            expect(fake.productRepository.getPublishedProducts).toHaveBeenCalledTimes(1);
+            expect(fake.categoryRepository.getCategories).toHaveBeenCalledTimes(1);
+        });
+
+        it("selects the same image after repository reorder and uses product IDs to break equal-name ties", async () => {
+            fake.setProductsList([
+                product("z", "a", { name: "Equal", imageUrl: "https://example.com/z.jpg" }),
+                product("a", "a", { name: "Equal", imageUrl: "https://example.com/a.jpg" })
+            ]);
+            const first = await request(app).get("/api/categories");
+            expect(first.body[0].imageUrl).toBe("https://example.com/a.jpg");
+            fake.setProductsList([...fake.getProductsList()].reverse());
+            invalidateProductCatalogCache();
+            expect((await request(app).get("/api/categories")).body).toEqual(first.body);
+        });
+
+        it.each([null, undefined, "", "   ", "not a URL", "javascript:alert(1)", "data:image/png;base64,AAAA", "ftp://example.com/a.jpg", "https://example.com/" + "x".repeat(500)])(
+            "returns null when every published image is invalid (%s)", async (imageUrl) => {
+                fake.setProductsList([product("only", "a", { imageUrl })]);
+                const response = await request(app).get("/api/categories");
+                expect(response.body).toEqual([{ id: "a", name: "Chocolates", productCount: 1, imageUrl: null }]);
+            }
+        );
+
+        it.each([
+            ["categoryIds=a", ["a-1", "a-2", "a-3"]],
+            ["categoryIds=b&categoryIds=a", ["a-1", "a-2", "a-3", "b-1"]],
+            ["categoryIds=a&categoryIds=b&categoryIds=a", ["a-1", "a-2", "a-3", "b-1"]],
+            ["categoryIds=unknown&categoryIds=missing", []],
+            ["categoryIds=unknown&categoryIds=b&categoryIds=missing", ["b-1"]],
+            ["categoryIds=empty", []],
+            ["categoryIds=Chocolates", []],
+            ["categoryIds=A&categoryIds=%20a%20", []],
+            ["categoryIds=a,b", []]
+        ])("filters exact IDs as an OR union: %s", async (query, ids) => {
+            const response = await request(app).get("/api/products?" + query);
+            expect(response.status).toBe(200);
+            expect(response.body.items.map((p) => p.id)).toEqual(ids);
+            expect(new Set(response.body.items.map((p) => p.id)).size).toBe(ids.length);
+            expect(response.body).toMatchObject({ products: response.body.items, total: ids.length, page: 1, limit: 12, hasMore: false });
+            for (const item of response.body.items) {
+                expect(Object.keys(item).sort()).toEqual(["available", "category", "description", "id", "imageUrl", "name", "price"]);
+                expect(Object.keys(item.category).sort()).toEqual(["id", "name"]);
+            }
+            expect(fake.verifyIdToken).not.toHaveBeenCalled();
+        });
+
+        it.each(["categoryId", "categoryIds"])("preserves literal question marks inside stored IDs using %s", async (parameter) => {
+            fake.setCategoriesList([{ id: "a?b", name: "Literal", order: 1 }]);
+            fake.setProductsList([product("literal", "a?b")]);
+            const response = await request(app).get("/api/products?" + parameter + "=a?b");
+            expect(response.status).toBe(200);
+            expect(response.body.items.map((p) => p.id)).toEqual(["literal"]);
+        });
+
+        it("unites three populated categories without changing catalog order", async () => {
+            fake.setProductsList([...fake.getProductsList(), product("third", "empty")]);
+            const response = await request(app).get("/api/products?categoryIds=empty&categoryIds=b&categoryIds=a");
+            expect(response.status).toBe(200);
+            expect(response.body.items.map((p) => p.id)).toEqual(["a-1", "a-2", "a-3", "b-1", "third"]);
+            expect(response.body.total).toBe(5);
+        });
+
+        it("applies pagination after the union while preserving catalog order, totals and hasMore", async () => {
+            const first = await request(app).get("/api/products?categoryIds=b&categoryIds=a&limit=3");
+            const second = await request(app).get("/api/products?categoryIds=a&categoryIds=b&limit=3&page=2");
+            const beyond = await request(app).get("/api/products?categoryIds=a&categoryIds=b&limit=3&page=3");
+            expect(first.body).toMatchObject({ total: 4, page: 1, limit: 3, hasMore: true });
+            expect(first.body.items.map((p) => p.id)).toEqual(["a-1", "a-2", "a-3"]);
+            expect(second.body).toMatchObject({ total: 4, page: 2, limit: 3, hasMore: false });
+            expect(second.body.items.map((p) => p.id)).toEqual(["b-1"]);
+            expect(beyond.body).toEqual({ items: [], products: [], total: 4, page: 3, limit: 3, hasMore: false });
+            expect(fake.productRepository.getPublishedProducts).toHaveBeenCalledTimes(1);
+        });
+
+        const invalidQueries = [
+            ["categoryIds=", "categoryIds must contain only non-empty strings."],
+            ["categoryIds=%20%20", "categoryIds must contain only non-empty strings."],
+            ["categoryIds=a&categoryIds=", "categoryIds must contain only non-empty strings."],
+            ["categoryIds=&categoryIds=a", "categoryIds must contain only non-empty strings."],
+            ["categoryIds=a&categoryIds=%20", "categoryIds must contain only non-empty strings."],
+            ...["categoryIds[]=a", "categoryIds[0]=a", "categoryIds[id]=a", "categoryIds[0][id]=a", "categoryIds=a&categoryIds[]=b"].map((q) =>
+                [q, "categoryIds must use repeated non-empty string parameters; bracket notation is not supported."]),
+            ["categoryId=a&categoryIds=b", "categoryId and categoryIds cannot be used together."],
+            [Array.from({ length: 21 }, () => "categoryIds=a").join("&"), "categoryIds must contain at most 20 entries."]
+        ];
+        describe.each(["simple", "extended"])("%s query parser", (parser) => {
+            it.each(invalidQueries)("rejects invalid filters without loading a snapshot: %s", async (query, message) => {
+                const original = app.get("query parser");
+                app.set("query parser", parser);
+                try {
+                    const response = await request(app).get("/api/products?" + query);
+                    expect(response.status).toBe(400);
+                    expect(response.body).toEqual({ message });
+                    expect(fake.productRepository.getPublishedProducts).not.toHaveBeenCalled();
+                    expect(fake.categoryRepository.getCategories).not.toHaveBeenCalled();
+                } finally { app.set("query parser", original); }
+            });
+        });
+
+        it("accepts exactly 20 entries and deduplicates them", async () => {
+            const query = Array.from({ length: 20 }, () => "categoryIds=a").join("&");
+            const response = await request(app).get("/api/products?" + query);
+            expect(response.status).toBe(200);
+            expect(response.body.total).toBe(3);
+        });
+
+        it("does not lose filters after Express's query parameter limit", async () => {
+            const prefix = Array.from({ length: 1001 }, () => "x=1").join("&");
+            const filtered = await request(app).get("/api/products?" + prefix + "&categoryIds=b");
+            expect(filtered.status).toBe(200);
+            expect(filtered.body.items.map((p) => p.id)).toEqual(["b-1"]);
+            const rejected = await request(app).get("/api/products?" + prefix + "&categoryIds[]=a");
+            expect(rejected.status).toBe(400);
+        });
+
+        it.each(["expiration", "invalidation"])("refreshes counts, images and multi-selection products on %s", async (refresh) => {
+            vi.useFakeTimers({ toFake: ["Date"] });
+            const before = await request(app).get("/api/categories");
+            fake.setProductsList([
+                product("new-1", "a", { imageUrl: "https://example.com/new.jpg" }),
+                product("new-2", "a", { available: false }),
+                product("b-1", "b", { status: "withdrawn" })
+            ]);
+            expect((await request(app).get("/api/categories")).body).toEqual(before.body);
+            if (refresh === "expiration") vi.setSystemTime(Date.now() + 60_000);
+            else invalidateProductCatalogCache();
+            expect((await request(app).get("/api/categories")).body).toEqual([
+                { id: "a", name: "Chocolates", productCount: 2, imageUrl: "https://example.com/new.jpg" }
+            ]);
+            const products = await request(app).get("/api/products?categoryIds=a&categoryIds=b");
+            expect(products.body.items.map((p) => p.id)).toEqual(["new-1", "new-2"]);
+            expect(fake.productRepository.getPublishedProducts).toHaveBeenCalledTimes(2);
+            expect(fake.categoryRepository.getCategories).toHaveBeenCalledTimes(2);
+        });
+
+        it("protects summary fields and multi-selection nested products from service caller mutations", async () => {
+            const { getPublicCatalog, getPublicCategories } = await import("../src/services/product.service.js");
+            const categories = await getPublicCategories();
+            categories[0].productCount = -1;
+            categories[0].imageUrl = "javascript:alert(1)";
+            const catalog = await getPublicCatalog({ categoryIds: ["a", "b"] });
+            catalog.items[0].category.id = "corrupt";
+            catalog.products.pop();
+            expect((await getPublicCategories())[0]).toMatchObject({ productCount: 3, imageUrl: "https://example.com/chocolate.jpg" });
+            const fresh = await getPublicCatalog({ categoryIds: ["a", "b"] });
+            expect(fresh.total).toBe(4);
+            expect(fresh.items).toHaveLength(4);
+            expect(fresh.items[0].category.id).toBe("a");
+        });
+
+        it("documents all local OpenAPI references and the multi-selection schema", () => {
+            const doc = YAML.parseDocument(fs.readFileSync(openApiPath, "utf8"));
+            expect(doc.errors).toEqual([]);
+            const spec = doc.toJS();
+            function visit(value) {
+                if (!value || typeof value !== "object") return;
+                if (value.$ref?.startsWith("#/")) {
+                    const target = value.$ref.slice(2).split("/").reduce((node, key) => node?.[key.replaceAll("~1", "/").replaceAll("~0", "~")], spec);
+                    expect(target, value.$ref).toBeDefined();
+                }
+                Object.values(value).forEach(visit);
+            }
+            visit(spec);
+            expect(spec.paths["/products"].get.parameters.find((p) => p.name === "categoryIds")).toMatchObject({
+                style: "form", explode: true, schema: { type: "array", minItems: 1, maxItems: 20, items: { type: "string" } }
+            });
+            expect(spec.components.schemas.PublicCategory.properties.productCount).toMatchObject({ type: "integer", minimum: 0 });
+            expect(spec.components.schemas.PublicCategory.properties.imageUrl).toMatchObject({ type: "string", format: "uri", nullable: true });
         });
     });
 
