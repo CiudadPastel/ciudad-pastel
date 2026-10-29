@@ -8,23 +8,27 @@ export const MAX_PAGE_LIMIT = 50;
 
 let cachedCatalog = null;
 let cacheExpiresAt = 0;
+let pendingSnapshot = null;
 
 // Invalidates the in-memory public catalog cache immediately.
 export function invalidateProductCatalogCache() {
     cachedCatalog = null;
     cacheExpiresAt = 0;
+    // Detach any older load so it cannot repopulate this cache after invalidation.
+    pendingSnapshot = null;
 }
 
-// Retrieves the public product catalog sorted by category order, product name, and id.
-// Supports pagination with page and limit (default 12, max 50) and returns hasMore.
-// The underlying full catalog is cached in memory for 60 seconds to protect Spark plan limits.
-export async function getPublicCatalog({ page = 1, limit = DEFAULT_PAGE_LIMIT } = {}) {
+// Shares one complete published-product/category snapshot across both public endpoints.
+async function getCatalogSnapshot() {
     const now = Date.now();
-    let fullCatalog;
 
     if (cachedCatalog && now < cacheExpiresAt) {
-        fullCatalog = cachedCatalog;
-    } else {
+        return cachedCatalog;
+    }
+    if (pendingSnapshot) return pendingSnapshot;
+
+    // Concurrent requests share the same pair of repository reads.
+    const load = (async () => {
         const [products, categories] = await Promise.all([
             getPublishedProducts(),
             getCategories()
@@ -52,13 +56,46 @@ export async function getPublicCatalog({ page = 1, limit = DEFAULT_PAGE_LIMIT } 
             return a.product.id.localeCompare(b.product.id);
         });
 
-        fullCatalog = enriched.map(({ product, category }) =>
-            toPublicProduct(product, category)
-        );
+        const referencedCategories = new Set(products.map((product) => product.categoryId));
+        const snapshot = {
+            entries: enriched.map(({ product, category }) => ({
+                categoryId: product.categoryId,
+                publicProduct: toPublicProduct(product, category)
+            })),
+            // The category repository owns display order, including Spanish name ties.
+            categories: categories
+                .filter((category) => referencedCategories.has(category.id))
+                .map(({ id, name }) => ({ id, name }))
+        };
+        if (pendingSnapshot === load) {
+            cachedCatalog = snapshot;
+            cacheExpiresAt = now + CATALOG_CACHE_TTL_MS;
+        }
+        return snapshot;
+    })();
 
-        cachedCatalog = fullCatalog;
-        cacheExpiresAt = now + CATALOG_CACHE_TTL_MS;
+    pendingSnapshot = load;
+    try {
+        return await load;
+    } finally {
+        // A failure is retryable, and older loads must not clear a newer pending load.
+        if (pendingSnapshot === load) pendingSnapshot = null;
     }
+}
+
+export async function getPublicCategories() {
+    const snapshot = await getCatalogSnapshot();
+    return structuredClone(snapshot.categories);
+}
+
+// Filters the complete cached catalog before calculating totals and pagination.
+export async function getPublicCatalog({ page = 1, limit = DEFAULT_PAGE_LIMIT, categoryId } = {}) {
+    const snapshot = await getCatalogSnapshot();
+    const entries = categoryId === undefined
+        ? snapshot.entries
+        : snapshot.entries.filter((entry) =>
+            entry.categoryId === categoryId && entry.publicProduct.category !== null
+        );
 
     const safePage = Number.isInteger(page) && page >= 1 ? page : 1;
     let safeLimit = Number.isInteger(limit) && limit >= 1 ? limit : DEFAULT_PAGE_LIMIT;
@@ -66,10 +103,10 @@ export async function getPublicCatalog({ page = 1, limit = DEFAULT_PAGE_LIMIT } 
         safeLimit = MAX_PAGE_LIMIT;
     }
 
-    const total = fullCatalog.length;
+    const total = entries.length;
     const startIndex = (safePage - 1) * safeLimit;
     const endIndex = startIndex + safeLimit;
-    const items = structuredClone(fullCatalog.slice(startIndex, endIndex));
+    const items = structuredClone(entries.slice(startIndex, endIndex).map((entry) => entry.publicProduct));
     const hasMore = endIndex < total;
 
     return {

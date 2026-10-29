@@ -114,3 +114,72 @@ Para el desarrollo local y pruebas visuales previas a la pantalla administrativa
    ```
    Elimina **únicamente** los documentos cuyos identificadores inicien con el prefijo `seed-` en las colecciones `products` y `categories`, preservando cualquier otro documento existente.
 
+
+## 6. HU-T04 — Contrato backend (CIU-143, CIU-144 y CIU-149)
+
+Este contrato técnico sigue CIU-143 y CIU-144; no representa confirmación de la clienta
+sobre las decisiones abiertas de CIU-141. El modelo actual asigna una categoría por producto.
+
+### Categorías públicas
+
+GET /api/categories no requiere Authorization ni autenticación administrativa.
+Devuelve HTTP 200 con un arreglo de objetos que contienen exclusivamente id y name:
+
+```json
+[{"id":"category-1","name":"Chocolates"},{"id":"category-2","name":"Decoración"}]
+```
+
+Se incluyen únicamente categorías existentes con al menos un producto con status published,
+incluso si todos sus productos publicados tienen available false. Se excluyen categorías
+vacías, con solo productos retirados y referencias a categorías inexistentes. Sin categorías
+que cumplan, devuelve [] con HTTP 200. Se respeta order ascendente y, para empates, nombre
+con locale español según getCategories(). No se exponen order, fechas, rutas ni conteos.
+Un fallo de repositorio devuelve HTTP 500 con {"message":"Could not load the product categories."}.
+
+### Filtro opcional de productos
+
+Ejemplos: GET /api/products; GET /api/products?categoryId=category-1;
+GET /api/products?categoryId=category-1&page=2&limit=12.
+
+categoryId compara exactamente la relación almacenada, sin recortar ni cambiar mayúsculas,
+y nunca utiliza nombres de categoría. Omitirlo mantiene el comportamiento previo.
+El catálogo completo publicado se filtra primero; luego se calcula total, se pagina y se
+calcula hasMore. Se conservan items y su alias products, page por defecto 1, limit por
+defecto 12 y máximo 50, el orden existente y el saneamiento de imageUrl. No se exponen
+categoryId ni status. Los productos agotados publicados siguen visibles; los retirados no.
+
+Una categoría desconocida (incluyendo un documento inexistente referenciado por un producto)
+o sin productos publicados devuelve HTTP 200 con items y products vacíos, total 0,
+hasMore false y page/limit normalizados. Una cadena vacía, solo espacios, valores repetidos
+o un valor no string devuelve HTTP 400 con {"message":"categoryId must be a non-empty string."}.
+Cualquier otra cadena se interpreta como identificador literal; no activa un catálogo más amplio.
+La notación de objetos/arreglos con corchetes (categoryId[id], categoryId[]) también
+se rechaza con HTTP 400, tanto con el parser simple como con el extendido de Express.
+Los fallos del catálogo conservan HTTP 500 con {"message":"Could not load the product catalog."}.
+
+### Una caché compartida
+
+Una sola instantánea completa conserva la relación de categoría internamente, los productos
+públicos saneados y las categorías públicas en orden. Ambos endpoints reutilizan esa
+instantánea durante CATALOG_CACHE_TTL_MS = 60_000; cambiar categoría o página no provoca
+nuevas lecturas mientras sea válida. Al vencer, la siguiente solicitud refresca ambos datos.
+Las solicitudes concurrentes con caché vacía o vencida comparten una única carga en curso.
+invalidateProductCatalogCache() descarta la instantánea completa; la siguiente solicitud
+refleja tanto la desaparición de categorías cuyo último producto se retiró como la aparición
+de categorías con su primer producto publicado (disponible o agotado).
+Una carga iniciada antes de invalidar puede terminar para sus solicitudes originales, pero
+no vuelve a llenar la caché ni reemplaza una carga posterior a la invalidación.
+Se devuelven copias profundas, los errores no se cachean y no se escribe en Firestore.
+Se reutilizan getPublishedProducts() y getCategories() sin cambiar consultas, esquema,
+índices ni dependencias. El almacenamiento interno del filtro nunca se serializa al público.
+
+### Pendiente de confirmación — CIU-141
+
+- Si la selección de categorías en la UI será de una sola opción.
+- Si debe existir un control explícito “Todos los productos”.
+- Si alguna vez deben mostrarse categorías sin productos publicados.
+- Si se deben mostrar conteos de productos por categoría.
+
+No se implementa frontend ni conteos públicos en este lote. CIU-140 y CIU-144 parecen
+duplicar el alcance del filtro API; se implementa una sola extensión bajo CIU-144 y se deja
+la reconciliación del backlog a revisión humana, sin modificar Linear.

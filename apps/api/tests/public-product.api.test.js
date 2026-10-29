@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
 import request from "supertest";
+import express from "express";
 
 import { buildSeedData } from "../scripts/seed-products.js";
 
@@ -682,4 +683,372 @@ describe("public-product.api", () => {
             expect(response.body.items[1].category).toBeNull();
         });
     });
+
+    describe("HU-T04 category filter (CIU-143, CIU-144, CIU-149)", () => {
+        const product = (id, categoryId, extra = {}) => ({
+            id, name: id, categoryId, price: 1500, available: true,
+            status: "published", ...extra
+        });
+        const emptyEnvelope = (page = 1, limit = 12) => ({
+            items: [], products: [], total: 0, page, limit, hasMore: false
+        });
+
+        beforeEach(() => {
+            fake.setCategoriesList([
+                { id: "b", name: "Chocolates", order: 2, createdAt: "private" },
+                { id: "a", name: "Decoración", order: 1 },
+                { id: "tie-z", name: "Zanahoria", order: 2 },
+                { id: "tie-a", name: "Ázucar", order: 2 },
+                { id: "withdrawn", name: "Retirados", order: 0 },
+                { id: "empty", name: "Vacía", order: 0 }
+            ]);
+            // Match the existing repository contract; actual repository ordering is tested separately.
+            fake.categoryRepository.getCategories.mockImplementation(() => Promise.resolve(
+                [...fake.getCategoriesList()].sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, "es"))
+            ));
+            fake.setProductsList([
+                product("a-1", "a", { imageUrl: "javascript:alert(1)", createdAt: "private" }),
+                product("a-2", "a", { available: false }),
+                product("a-hidden", "a", { status: "withdrawn" }),
+                product("b-1", "b"),
+                product("tie-z-1", "tie-z"), product("tie-a-1", "tie-a"),
+                product("hidden", "withdrawn", { status: "withdrawn" }),
+                product("orphan", "missing")
+            ]);
+        });
+
+        it("lists only existing categories with published products, publicly and with exact safe keys", async () => {
+            const response = await request(app).get("/api/categories");
+            expect(response.status).toBe(200);
+            expect(fake.verifyIdToken).not.toHaveBeenCalled();
+            expect(response.body).toEqual([
+                { id: "a", name: "Decoración" },
+                { id: "tie-a", name: "Ázucar" },
+                { id: "b", name: "Chocolates" },
+                { id: "tie-z", name: "Zanahoria" }
+            ]);
+        });
+
+        it("includes categories whose only published product is out of stock", async () => {
+            fake.setProductsList([product("out", "b", { available: false })]);
+            const response = await request(app).get("/api/categories");
+            expect(response.status).toBe(200);
+            expect(response.body).toEqual([{ id: "b", name: "Chocolates" }]);
+        });
+
+        it.each([{ products: [] }, { products: [product("hidden", "a", { status: "withdrawn" })] }, { products: [product("orphan", "missing")] }])(
+            "returns an empty category array when no existing category qualifies (%j)", async ({ products }) => {
+                fake.setProductsList(products);
+                const response = await request(app).get("/api/categories");
+                expect(response.status).toBe(200);
+                expect(response.body).toEqual([]);
+            }
+        );
+
+        it("preserves the unfiltered response and filters by stored id, including out-of-stock products", async () => {
+            const all = await request(app).get("/api/products");
+            const filtered = await request(app).get("/api/products?categoryId=a");
+            expect(all.status).toBe(200);
+            expect(all.body.total).toBe(6);
+            expect(filtered.status).toBe(200);
+            expect(filtered.body).toEqual({
+                ...all.body,
+                items: all.body.items.filter((p) => p.category?.id === "a"),
+                products: all.body.products.filter((p) => p.category?.id === "a"), total: 2
+            });
+            expect(filtered.body.items.map((p) => p.id)).toEqual(["a-1", "a-2"]);
+            expect(filtered.body.items[1].available).toBe(false);
+            expect(filtered.body.items[0].imageUrl).toBeNull();
+            expect(Object.keys(filtered.body.items[0]).sort()).toEqual(
+                ["id", "name", "description", "price", "imageUrl", "available", "category"].sort()
+            );
+        });
+
+        it.each(["unknown", "missing", "empty", "withdrawn", "Decoración", " a "])(
+            "returns a normalized empty envelope for category %s", async (categoryId) => {
+                const response = await request(app).get("/api/products").query({ categoryId, page: -1, limit: "invalid" });
+                expect(response.status).toBe(200);
+                expect(response.body).toEqual(emptyEnvelope());
+            }
+        );
+
+        it("preserves requested page and clamped limit for unknown categories", async () => {
+            const response = await request(app).get("/api/products?categoryId=unknown&page=3&limit=999");
+            expect(response.status).toBe(200);
+            expect(response.body).toEqual(emptyEnvelope(3, 50));
+        });
+
+        it.each(["categoryId=", "categoryId=%20%20", "categoryId=a&categoryId=b", "categoryId[]=a", "categoryId[id]=a"])(
+            "rejects malformed input without broadening the catalog: %s", async (query) => {
+                const response = await request(app).get("/api/products?" + query);
+                expect(response.status).toBe(400);
+                expect(response.body).toEqual({ message: "categoryId must be a non-empty string." });
+                expect(fake.productRepository.getPublishedProducts).not.toHaveBeenCalled();
+            }
+        );
+
+        it("handles object-valued categoryId under an extended query parser", async () => {
+            const original = app.get("query parser");
+            app.set("query parser", "extended");
+            try {
+                const response = await request(app).get("/api/products?categoryId[id]=a");
+                expect(response.status).toBe(400);
+                expect(response.body).toEqual({ message: "categoryId must be a non-empty string." });
+            } finally {
+                app.set("query parser", original);
+            }
+        });
+
+        it("filters before pagination with filtered totals, stable name/id ordering and subsequent pages", async () => {
+            const products = Array.from({ length: 15 }, (_, i) => product("a-" + String(i).padStart(2, "0"), "a"));
+            fake.setProductsList([
+                ...Array.from({ length: 10 }, (_, i) => product("b-" + i, "b")),
+                ...products.slice().reverse(),
+                ...Array.from({ length: 4 }, (_, i) => product("hidden-" + i, "a", { status: "withdrawn" }))
+            ]);
+            const first = await request(app).get("/api/products?categoryId=a&limit=10");
+            const second = await request(app).get("/api/products?categoryId=a&page=2&limit=10");
+            const third = await request(app).get("/api/products?categoryId=a&page=3&limit=10");
+            expect(first.body).toMatchObject({ total: 15, page: 1, limit: 10, hasMore: true });
+            expect(first.body.items.map((p) => p.id)).toEqual(products.slice(0, 10).map((p) => p.id));
+            expect(second.body).toMatchObject({ total: 15, page: 2, limit: 10, hasMore: false });
+            expect(second.body.items.map((p) => p.id)).toEqual(products.slice(10).map((p) => p.id));
+            expect(third.body).toEqual({ ...emptyEnvelope(3, 10), total: 15 });
+        });
+
+        it("breaks equal product-name ties by id within a filtered category", async () => {
+            fake.setProductsList([product("z", "a", { name: "Igual" }), product("a", "a", { name: "Igual" })]);
+            const response = await request(app).get("/api/products?categoryId=a");
+            expect(response.body.items.map((p) => p.id)).toEqual(["a", "z"]);
+        });
+
+        it("keeps defaults and the maximum limit for filtered requests", async () => {
+            fake.setProductsList(Array.from({ length: 60 }, (_, i) => product("p" + i, "a")));
+            const defaults = await request(app).get("/api/products?categoryId=a");
+            const max = await request(app).get("/api/products?categoryId=a&limit=999");
+            expect(defaults.body).toMatchObject({ total: 60, page: 1, limit: 12, hasMore: true });
+            expect(defaults.body.items).toHaveLength(12);
+            expect(max.body.limit).toBe(50);
+            expect(max.body.items).toHaveLength(50);
+            expect(max.body.hasMore).toBe(true);
+        });
+
+        it.each(["/api/products", "/api/categories"])("shares one snapshot when first loaded through %s", async (firstPath) => {
+            await request(app).get(firstPath);
+            await request(app).get("/api/products");
+            await request(app).get("/api/products?categoryId=a");
+            await request(app).get("/api/products?categoryId=b");
+            await request(app).get("/api/categories");
+            expect(fake.productRepository.getPublishedProducts).toHaveBeenCalledTimes(1);
+            expect(fake.categoryRepository.getCategories).toHaveBeenCalledTimes(1);
+        });
+
+        it("refreshes both endpoints at the exact TTL boundary", async () => {
+            vi.useFakeTimers({ toFake: ["Date"] });
+            vi.setSystemTime(new Date("2026-10-29T00:00:00Z"));
+            await request(app).get("/api/categories");
+            fake.setProductsList([product("new", "empty")]);
+            vi.setSystemTime(new Date("2026-10-29T00:00:59.999Z"));
+            expect((await request(app).get("/api/products?categoryId=a")).body.total).toBe(2);
+            vi.setSystemTime(new Date("2026-10-29T00:01:00Z"));
+            expect((await request(app).get("/api/categories")).body).toEqual([{ id: "empty", name: "Vacía" }]);
+            expect((await request(app).get("/api/products?categoryId=empty")).body.total).toBe(1);
+            expect(fake.productRepository.getPublishedProducts).toHaveBeenCalledTimes(2);
+            expect(fake.categoryRepository.getCategories).toHaveBeenCalledTimes(2);
+        });
+
+        // Observe both real HTTP requests entering the app before releasing the repository.
+        function concurrentRequests(paths) {
+            const observedApp = express();
+            const entered = Promise.withResolvers();
+            let count = 0;
+            observedApp.use((req, res, next) => {
+                next();
+                if (++count === paths.length) entered.resolve();
+            });
+            observedApp.use(app);
+            return {
+                entered: entered.promise,
+                responses: Promise.all(paths.map((path) => request(observedApp).get(path).then((res) => res)))
+            };
+        }
+
+        it.each(["empty", "expired"])("coalesces concurrent HTTP requests with an %s cache", async (state) => {
+            vi.useFakeTimers({ toFake: ["Date"] });
+            if (state === "expired") {
+                await request(app).get("/api/products");
+                vi.setSystemTime(Date.now() + 60_000);
+            }
+            fake.productRepository.getPublishedProducts.mockClear();
+            fake.categoryRepository.getCategories.mockClear();
+            const gate = Promise.withResolvers();
+            const published = fake.getProductsList().filter((p) => p.status === "published");
+            fake.productRepository.getPublishedProducts.mockReturnValue(gate.promise);
+            const requests = concurrentRequests(["/api/products?categoryId=a", "/api/categories"]);
+            try {
+                await requests.entered;
+                expect(fake.productRepository.getPublishedProducts).toHaveBeenCalledTimes(1);
+                expect(fake.categoryRepository.getCategories).toHaveBeenCalledTimes(1);
+            } finally {
+                gate.resolve(published);
+                await requests.responses;
+            }
+            const [products, categories] = await requests.responses;
+            expect(products.status).toBe(200);
+            expect(products.body.total).toBe(2);
+            expect(categories.status).toBe(200);
+            expect(categories.body).toHaveLength(4);
+        });
+
+        it("does not let an older in-flight load repopulate the cache after invalidation", async () => {
+            const gate = Promise.withResolvers();
+            fake.productRepository.getPublishedProducts.mockReturnValueOnce(gate.promise);
+            const oldRequest = concurrentRequests(["/api/products?categoryId=a"]);
+            await oldRequest.entered;
+            invalidateProductCatalogCache();
+            fake.setProductsList([product("new", "empty")]);
+            try {
+                const refreshed = await request(app).get("/api/categories");
+                expect(refreshed.status).toBe(200);
+                expect(refreshed.body).toEqual([{ id: "empty", name: "Vacía" }]);
+            } finally {
+                gate.resolve([product("old", "a")]);
+                await oldRequest.responses;
+            }
+            expect((await request(app).get("/api/categories")).body).toEqual([{ id: "empty", name: "Vacía" }]);
+            expect((await request(app).get("/api/products?categoryId=empty")).body.items.map((p) => p.id)).toEqual(["new"]);
+            expect(fake.productRepository.getPublishedProducts).toHaveBeenCalledTimes(2);
+        });
+
+        it("retries after a shared in-flight failure without poisoning either endpoint", async () => {
+            const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+            const gate = Promise.withResolvers();
+            fake.productRepository.getPublishedProducts.mockReturnValueOnce(gate.promise);
+            const requests = concurrentRequests(["/api/products?categoryId=a", "/api/categories"]);
+            try {
+                await requests.entered;
+            } finally {
+                gate.reject(new Error("private repository failure"));
+            }
+            try {
+                const [products, categories] = await requests.responses;
+                expect(products.status).toBe(500);
+                expect(categories.status).toBe(500);
+                expect(products.body).toEqual({ message: "Could not load the product catalog." });
+                expect(categories.body).toEqual({ message: "Could not load the product categories." });
+                expect((await request(app).get("/api/products?categoryId=a")).body.total).toBe(2);
+                expect((await request(app).get("/api/categories")).body).toHaveLength(4);
+                expect(fake.productRepository.getPublishedProducts).toHaveBeenCalledTimes(2);
+            } finally { spy.mockRestore(); }
+        });
+
+        it("distinguishes stored category IDs with identical display names and paginates a later category", async () => {
+            fake.setCategoriesList([
+                { id: "a", name: "Igual", order: 1 },
+                { id: "b", name: "Igual", order: 2 }
+            ]);
+            fake.setProductsList([
+                ...Array.from({ length: 15 }, (_, i) => product("a-" + String(i).padStart(2, "0"), "a")),
+                ...Array.from({ length: 10 }, (_, i) => product("b-" + String(i).padStart(2, "0"), "b"))
+            ]);
+            const response = await request(app).get("/api/products?categoryId=b&page=2&limit=3");
+            expect(response.status).toBe(200);
+            expect(response.body).toMatchObject({ total: 10, page: 2, limit: 3, hasMore: true });
+            expect(response.body.items.map((p) => p.id)).toEqual(["b-03", "b-04", "b-05"]);
+            expect(response.body.items.every((p) => p.category.id === "b")).toBe(true);
+        });
+
+        it("invalidation removes the last withdrawn category and adds the first published category", async () => {
+            fake.setProductsList([product("old", "a")]);
+            await request(app).get("/api/products");
+            fake.setProductsList([product("old", "a", { status: "withdrawn" }), product("new", "empty", { available: false })]);
+            expect((await request(app).get("/api/categories")).body).toEqual([{ id: "a", name: "Decoración" }]);
+            invalidateProductCatalogCache();
+            expect((await request(app).get("/api/categories")).body).toEqual([{ id: "empty", name: "Vacía" }]);
+            expect((await request(app).get("/api/products?categoryId=a")).body).toEqual(emptyEnvelope());
+            expect((await request(app).get("/api/products?categoryId=empty")).body.total).toBe(1);
+            expect(fake.productRepository.getPublishedProducts).toHaveBeenCalledTimes(2);
+        });
+
+        it.each(["productRepository", "categoryRepository"])("does not cache %s failures or expose exception details", async (repository) => {
+            const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+            try {
+                const method = repository === "productRepository" ? "getPublishedProducts" : "getCategories";
+                fake[repository][method].mockRejectedValueOnce(new Error("secret Firestore path and credentials"));
+                const response = await request(app).get("/api/categories");
+                expect(response.status).toBe(500);
+                expect(response.body).toEqual({ message: "Could not load the product categories." });
+                expect((await request(app).get("/api/products?categoryId=a")).status).toBe(200);
+                expect((await request(app).get("/api/categories")).body).toHaveLength(4);
+                expect(fake[repository][method]).toHaveBeenCalledTimes(2);
+            } finally { spy.mockRestore(); }
+        });
+
+        it("response mutations cannot corrupt subsequent products or categories", async () => {
+            const response = await request(app).get("/api/products?categoryId=a");
+            response.body.items[0].name = "corrupt";
+            response.body.items[0].category.name = "corrupt";
+            const categories = await request(app).get("/api/categories");
+            categories.body[0].name = "corrupt";
+            expect((await request(app).get("/api/products?categoryId=a")).body.items[0].name).toBe("a-1");
+            expect((await request(app).get("/api/categories")).body[0].name).toBe("Decoración");
+        });
+
+        it("preserves safe catalog errors for filtered requests and recovers without caching failures", async () => {
+            const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+            try {
+                fake.productRepository.getPublishedProducts.mockRejectedValueOnce(new Error("private Firestore details"));
+                const response = await request(app).get("/api/products?categoryId=a");
+                expect(response.status).toBe(500);
+                expect(response.body).toEqual({ message: "Could not load the product catalog." });
+                const recovered = await request(app).get("/api/products?categoryId=a");
+                expect(recovered.status).toBe(200);
+                expect(recovered.body.total).toBe(2);
+                expect(fake.productRepository.getPublishedProducts).toHaveBeenCalledTimes(2);
+            } finally { spy.mockRestore(); }
+        });
+
+        it("returns detached service data, including nested categories", async () => {
+            const { getPublicCatalog, getPublicCategories } = await import("../src/services/product.service.js");
+            const catalog = await getPublicCatalog({ categoryId: "a" });
+            catalog.items[0].category.name = "corrupt";
+            catalog.items.splice(0);
+            const categories = await getPublicCategories();
+            categories[0].name = "corrupt";
+            expect((await getPublicCatalog({ categoryId: "a" })).items[0].category.name).toBe("Decoración");
+            expect((await getPublicCategories())[0].name).toBe("Decoración");
+        });
+
+        it("initializes the app and answers health without real Firebase or authentication", async () => {
+            const response = await request(app).get("/api/health");
+            expect(response.status).toBe(200);
+            expect(response.body).toEqual({ status: "ok", message: "Ciudad Pastel API is running" });
+            expect(fake.verifyIdToken).not.toHaveBeenCalled();
+            expect(fake.productRepository.getPublishedProducts).not.toHaveBeenCalled();
+        });
+
+        it("parses valid OpenAPI YAML documenting the public category/filter contracts", () => {
+            const doc = YAML.parseDocument(fs.readFileSync(openApiPath, "utf8"));
+            expect(doc.errors).toEqual([]);
+            const spec = doc.toJS();
+            const categories = spec.paths["/categories"].get;
+            expect(categories.security).toEqual([]);
+            expect(categories.responses["200"].content["application/json"].schema).toEqual({
+                type: "array", items: { $ref: "#/components/schemas/PublicCategory" }
+            });
+            expect(categories.responses["500"]).toBeDefined();
+            expect(spec.components.schemas.PublicCategory).toMatchObject({
+                type: "object", required: ["id", "name"], additionalProperties: false
+            });
+            expect(Object.keys(spec.components.schemas.PublicCategory.properties).sort()).toEqual(["id", "name"]);
+            const products = spec.paths["/products"].get;
+            expect(products.security).toEqual([]);
+            expect(products.parameters.find((p) => p.name === "categoryId")).toMatchObject({
+                in: "query", required: false, schema: { type: "string", minLength: 1 }
+            });
+            expect(products.responses["400"]).toBeDefined();
+            expect(spec.components.schemas.PublicProductListResponse.required).toContain("products");
+        });
+    });
+
 });
