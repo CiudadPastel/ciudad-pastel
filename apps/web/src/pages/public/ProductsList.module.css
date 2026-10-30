@@ -25,8 +25,49 @@
   color: var(--cp-muted);
 }
 
-.filtersPlaceholder {
-  min-height: 3.25rem;
+/* Categorías + resumen del resultado (HU-T04) */
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  min-height: 2rem;
+  color: var(--cp-muted);
+}
+
+.summary strong {
+  color: var(--cp-navy);
+}
+
+.clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.75rem;
+  border: 1px solid var(--cp-border);
+  border-radius: 999px;
+  background: var(--cp-surface);
+  color: var(--cp-navy);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.clear:hover {
+  border-color: var(--cp-mint-600);
+  background: var(--cp-mint-50);
+}
+
+.clear:focus-visible {
+  outline: 3px solid var(--cp-mint);
+  outline-offset: 2px;
 }
 
 .grid {

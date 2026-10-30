@@ -1,0 +1,140 @@
+/* Fila de categorías: se ajusta en varias líneas en escritorio
+   y se desliza de lado en el celular para no ocupar media pantalla. */
+.bar {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+}
+
+.chip {
+  /* contiene el texto sr-only para que no genere scroll horizontal */
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.95rem;
+  border: 1px solid var(--cp-border);
+  border-radius: 999px;
+  background: var(--cp-surface);
+  color: var(--cp-navy);
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s, color 0.15s;
+}
+
+.chip:hover:not(.selected) {
+  border-color: var(--cp-mint-600);
+  background: var(--cp-mint-50);
+}
+
+.chip:focus-visible {
+  outline: 3px solid var(--cp-mint);
+  outline-offset: 2px;
+}
+
+/* Estado elegido: relleno navy + check, no depende solo del color */
+.selected {
+  border-color: var(--cp-navy);
+  background: var(--cp-navy);
+  color: #fff;
+}
+
+.check {
+  flex-shrink: 0;
+}
+
+.count {
+  min-width: 1.6rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: var(--cp-mint-50);
+  color: var(--cp-mint-700);
+  font-size: 0.8rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.selected .count {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+.skeleton {
+  width: 8.5rem;
+  height: 2.75rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--cp-neutral-50) 25%, var(--cp-surface) 50%, var(--cp-neutral-50) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton:first-child {
+  width: 11rem;
+}
+
+.error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  min-height: 2.75rem;
+  color: var(--cp-muted);
+  font-size: 0.95rem;
+}
+
+.retry {
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--cp-border);
+  border-radius: 999px;
+  background: var(--cp-surface);
+  color: var(--cp-mint-700);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.retry:hover {
+  border-color: var(--cp-mint-600);
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (max-width: 600px) {
+  .bar {
+    flex-wrap: nowrap;
+    /* llega hasta el borde de la pantalla (el layout deja 0.75rem a cada lado) */
+    margin-inline: -0.75rem;
+    padding: 0.15rem 0.75rem 0.5rem;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+  }
+
+  .chip {
+    scroll-snap-align: start;
+  }
+
+  .skeleton {
+    flex-shrink: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chip {
+    transition: none;
+  }
+
+  .skeleton {
+    animation: none;
+  }
+}
