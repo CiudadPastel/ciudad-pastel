@@ -25,6 +25,12 @@ export async function getCategories() {
         .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, "es"));
 }
 
+// Retrieves one category by document ID, or null when it does not exist (HU-T02).
+export async function getCategoryById(id) {
+    const snapshot = await db.collection(CATEGORY_COLLECTION).doc(id).get();
+    return snapshot.exists ? mapCategoryDocument(snapshot) : null;
+}
+
 // Creates or updates a category document in Firestore.
 export async function upsertCategory(category) {
     const { id, ...data } = category;

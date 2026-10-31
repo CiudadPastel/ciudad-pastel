@@ -3,7 +3,10 @@ import { validateOptionalImageUrl } from "./image-url.validator.js";
 export const PRODUCT_LIMITS = Object.freeze({
     product: {
         name: { min: 3, max: 120 },
+        brand: { max: 60 },
         description: { max: 1000 },
+        weight: { max: 40 },
+        size: { max: 40 },
         price: { min: 1, max: 10_000_000 },
         imageUrl: { max: 500 }
     },
@@ -11,6 +14,21 @@ export const PRODUCT_LIMITS = Object.freeze({
         name: { min: 2, max: 60 }
     }
 });
+
+// Optional short text: null when missing or blank, trimmed otherwise.
+function validateOptionalShortText(value, field, max, errors) {
+    if (value === undefined || value === null) return null;
+    if (typeof value !== "string") {
+        errors.push(`${field} must be a text string.`);
+        return null;
+    }
+    const trimmed = value.trim();
+    if (trimmed.length > max) {
+        errors.push(`${field} must not exceed ${max} characters.`);
+        return null;
+    }
+    return trimmed || null;
+}
 
 // Validates product input and strips internal/protected fields.
 export function validateProductInput(input) {
@@ -33,6 +51,11 @@ export function validateProductInput(input) {
     } else if (rawName.length > PRODUCT_LIMITS.product.name.max) {
         errors.push(`name must not exceed ${PRODUCT_LIMITS.product.name.max} characters.`);
     }
+
+    // 1b. Brand, weight and size (optional short texts, e.g. "Dos Leones", "500 g", "24 cm")
+    const brand = validateOptionalShortText(input.brand, "brand", PRODUCT_LIMITS.product.brand.max, errors);
+    const weight = validateOptionalShortText(input.weight, "weight", PRODUCT_LIMITS.product.weight.max, errors);
+    const size = validateOptionalShortText(input.size, "size", PRODUCT_LIMITS.product.size.max, errors);
 
     // 2. Description validation (optional)
     let sanitizedDescription = null;
@@ -82,7 +105,10 @@ export function validateProductInput(input) {
         errors: [],
         data: {
             name: rawName,
+            brand,
             description: sanitizedDescription,
+            weight,
+            size,
             price,
             categoryId,
             imageUrl,

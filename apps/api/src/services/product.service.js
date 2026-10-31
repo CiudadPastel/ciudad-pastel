@@ -1,6 +1,10 @@
-import { toPublicProduct } from "../models/product.model.js";
-import { getCategories } from "../repositories/category.repository.js";
-import { getPublishedProducts } from "../repositories/product.repository.js";
+import { PRODUCT_STATUS, toPublicProduct, toPublicProductDetail } from "../models/product.model.js";
+import { getCategories, getCategoryById } from "../repositories/category.repository.js";
+import { getProductById, getPublishedProducts } from "../repositories/product.repository.js";
+
+// Firestore document IDs used by the store: letters, numbers, "-" and "_".
+// Anything else (slashes, very long values) can never match a product.
+const PRODUCT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 
 export const CATALOG_CACHE_TTL_MS = 60_000;
 export const DEFAULT_PAGE_LIMIT = 12;
@@ -129,4 +133,18 @@ export async function getPublicCatalog({ page = 1, limit = DEFAULT_PAGE_LIMIT, c
         limit: safeLimit,
         hasMore
     };
+}
+
+// Returns the public detail of one product, or null when it does not exist or
+// is hidden (not published), so hidden products cannot be opened by direct link.
+// Reads Firestore directly instead of the 60 s catalog cache, so a withdrawn
+// product stops being visible immediately.
+export async function getPublicProductDetail(id) {
+    if (typeof id !== "string" || !PRODUCT_ID_PATTERN.test(id)) return null;
+
+    const product = await getProductById(id);
+    if (!product || product.status !== PRODUCT_STATUS.PUBLISHED) return null;
+
+    const category = product.categoryId ? await getCategoryById(product.categoryId) : null;
+    return toPublicProductDetail(product, category);
 }

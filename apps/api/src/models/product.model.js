@@ -10,7 +10,10 @@ export function buildProduct(data) {
     return {
         id: data.id,
         name: data.name,
+        brand: data.brand ?? null,
         description: data.description ?? null,
+        weight: data.weight ?? null,
+        size: data.size ?? null,
         price: data.price,
         categoryId: data.categoryId,
         imageUrl: data.imageUrl ?? null,
@@ -31,5 +34,26 @@ export function toPublicProduct(product, category = null) {
         imageUrl: sanitizeImageUrl(product.imageUrl),
         available: Boolean(product.available),
         category: category ? { id: category.id, name: category.name } : null
+    };
+}
+
+// Full public representation for the product detail page (HU-T02).
+// Extends the catalog card fields with brand, weight and size; internal fields
+// (status, categoryId, timestamps) are never exposed.
+export function toPublicProductDetail(product, category = null) {
+    const base = toPublicProduct(product, category);
+    if (!base) return null;
+
+    return {
+        id: base.id,
+        name: base.name,
+        brand: product.brand ?? null,
+        description: base.description,
+        weight: product.weight ?? null,
+        size: product.size ?? null,
+        price: base.price,
+        imageUrl: base.imageUrl,
+        available: base.available,
+        category: base.category
     };
 }

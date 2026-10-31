@@ -46,8 +46,8 @@ import PublicCourseDetail
 import PublicProductsList
     from "./pages/public/ProductsList";
 
-import PublicProductDetailPlaceholder
-    from "./pages/public/ProductDetailPlaceholder";
+import PublicProductDetail
+    from "./pages/public/ProductDetail";
 
 import Home
     from "./pages/Home";
@@ -85,7 +85,7 @@ function App() {
                 />
                 <Route
                     path=":id"
-                    element={<PublicProductDetailPlaceholder />}
+                    element={<PublicProductDetail />}
                 />
             </Route>
 

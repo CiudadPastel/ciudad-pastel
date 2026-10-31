@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ImageOff, LayoutGrid, X } from "lucide-react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import CategoryFilter from "../../components/public/CategoryFilter";
 import StateMessage, { RetryButton } from "../../components/ui/StateMessage";
@@ -10,6 +10,14 @@ import { formatPrice } from "../../utils/format";
 import styles from "./ProductsList.module.css";
 
 const PAGE_SIZE = 12;
+// Máximo de páginas que se vuelven a cargar al regresar del detalle (12 × 10 = 120 productos)
+const MAX_RESTORED_PAGES = 10;
+
+/** Cuántas páginas ("Cargar más") tenía abiertas el cliente, según ?pagina= */
+function pagesFromUrl() {
+    const value = Number.parseInt(new URLSearchParams(window.location.search).get("pagina"), 10);
+    return Number.isInteger(value) && value > 1 ? Math.min(value, MAX_RESTORED_PAGES) : 1;
+}
 
 function validateProductsPage(response) {
     if (
@@ -24,11 +32,17 @@ function validateProductsPage(response) {
     return response;
 }
 
-function ProductCard({ product }) {
+function ProductCard({ product, backTo, onOpen }) {
     const [imageFailed, setImageFailed] = useState(false);
 
     return (
-        <Link to={`/tienda/${encodeURIComponent(product.id)}`} className={styles.card}>
+        <Link
+            to={`/tienda/${encodeURIComponent(product.id)}`}
+            state={{ from: backTo }}
+            onClick={() => onOpen(product.id)}
+            className={styles.card}
+            data-product-id={product.id}
+        >
             {product.imageUrl && !imageFailed ? (
                 <img
                     src={product.imageUrl}
@@ -85,6 +99,9 @@ function ProductsList() {
     // y para que el botón "atrás" del navegador deshaga el filtro.
     const [searchParams, setSearchParams] = useSearchParams();
     const categoryId = searchParams.get("categoria") || null;
+    const location = useLocation();
+    const navigate = useNavigate();
+    const catalogUrl = `${location.pathname}${location.search}`;
 
     const [reloadKey, setReloadKey] = useState(0);
     const requestKey = `${categoryId ?? ""}|${reloadKey}`;
@@ -114,15 +131,30 @@ function ProductsList() {
     useEffect(() => {
         let active = true;
 
-        getPublicProducts({ page: 1, limit: PAGE_SIZE, categoryId: categoryId ?? undefined })
-            .then(validateProductsPage)
-            .then((result) => {
+        // Al volver del detalle se recargan las mismas páginas que el cliente
+        // tenía abiertas (?pagina=3 -> páginas 1, 2 y 3), en paralelo.
+        const pages = Array.from({ length: pagesFromUrl() }, (_, index) => index + 1);
+
+        Promise.all(pages.map((page) =>
+            getPublicProducts({ page, limit: PAGE_SIZE, categoryId: categoryId ?? undefined })
+                .then(validateProductsPage)
+        ))
+            .then((results) => {
                 if (!active) return;
+                // Se corta en la última página que existe (por si el catálogo cambió)
+                const lastIndex = results.findIndex((page) => !page.hasMore);
+                const loaded = lastIndex === -1 ? results : results.slice(0, lastIndex + 1);
+                const seen = new Set();
+                const products = loaded
+                    .flatMap((page) => page.items)
+                    .filter((product) => !seen.has(product.id) && seen.add(product.id));
+                const result = loaded[loaded.length - 1];
+
                 setState({
                     ...EMPTY_PRODUCTS,
                     key: requestKey,
                     status: "success",
-                    products: result.items,
+                    products,
                     total: Number.isInteger(result.total) ? result.total : null,
                     page: result.page,
                     hasMore: result.hasMore
@@ -159,6 +191,12 @@ function ProductsList() {
                 const knownIds = new Set(current.products.map((product) => product.id));
                 const newProducts = result.items.filter((product) => !knownIds.has(product.id));
 
+                // Se guarda en la URL (sin crear otra entrada en el historial) para
+                // que "Volver al catálogo" recupere los mismos productos.
+                const next = new URLSearchParams(window.location.search);
+                next.set("pagina", result.page);
+                setSearchParams(next, { replace: true });
+
                 return {
                     ...current,
                     products: [...current.products, ...newProducts],
@@ -182,8 +220,27 @@ function ProductsList() {
         const next = new URLSearchParams(searchParams);
         if (id) next.set("categoria", id);
         else next.delete("categoria");
+        next.delete("pagina");
         setSearchParams(next);
     }
+
+    // Antes de abrir un producto se anota en esta entrada del historial cuál
+    // fue, para que al volver (con el enlace o con "atrás") quede a la vista.
+    function rememberProduct(productId) {
+        navigate(catalogUrl, { replace: true, state: { focusProductId: productId } });
+    }
+
+    const focusProductId = location.state?.focusProductId;
+    const listReady = state.key === requestKey && state.status === "success";
+
+    useEffect(() => {
+        if (!listReady || !focusProductId) return;
+        const card = [...document.querySelectorAll("[data-product-id]")]
+            .find((element) => element.dataset.productId === focusProductId);
+        if (!card) return;
+        card.scrollIntoView({ block: "center" });
+        card.focus({ preventScroll: true });
+    }, [listReady, focusProductId]);
 
     const status = state.key === requestKey ? state.status : "loading";
     const categoriesStatus = categoriesState.key === categoriesReloadKey ? categoriesState.status : "loading";
@@ -273,7 +330,7 @@ function ProductsList() {
                     <ul className={styles.grid} aria-label={categoryName ? `Productos de ${categoryName}` : "Productos"}>
                         {state.products.map((product) => (
                             <li key={product.id}>
-                                <ProductCard product={product} />
+                                <ProductCard product={product} backTo={catalogUrl} onOpen={rememberProduct} />
                             </li>
                         ))}
                     </ul>
