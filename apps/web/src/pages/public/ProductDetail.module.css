@@ -136,9 +136,18 @@
   color: var(--cp-muted);
 }
 
-/* Lugar del botón de WhatsApp (HU-T05); vacío no ocupa espacio */
-.contactSlot:empty {
-  display: none;
+/* Botón de WhatsApp (HU-T05) */
+.contact {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.contactNote {
+  color: var(--cp-muted);
+  font-size: 0.9rem;
 }
 
 .specs {

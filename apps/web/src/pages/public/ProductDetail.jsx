@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, CircleCheck, CircleX, PackageSearch } from "lucide-react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
+import WhatsAppButton from "../../components/public/WhatsAppButton";
 import StateMessage, { RetryButton } from "../../components/ui/StateMessage";
+import { useWhatsAppContact } from "../../hooks/useWhatsAppContact";
 import { getPublicProduct } from "../../services/publicProducts.service";
 import { formatPrice } from "../../utils/format";
 
@@ -19,6 +21,8 @@ function ProductDetail() {
     const navigate = useNavigate();
     const [reloadKey, setReloadKey] = useState(0);
     const [state, setState] = useState({ id: null, key: null, status: "loading", product: null, error: null });
+    // Número de WhatsApp configurado en el API (HU-T05); null = sin botón
+    const whatsappContact = useWhatsAppContact();
 
     useEffect(() => {
         let active = true;
@@ -164,8 +168,17 @@ function ProductDetail() {
                         </p>
                     )}
 
-                    {/* Espacio reservado para el botón "Consultar por WhatsApp" (HU-T05) */}
-                    <div className={styles.contactSlot} data-slot="whatsapp" />
+                    {/* HU-T05: abre WhatsApp con un mensaje que ya trae el nombre del producto */}
+                    {whatsappContact && (
+                        <div className={styles.contact}>
+                            <WhatsAppButton contact={whatsappContact} productName={product.name} variant="detail" />
+                            <p className={styles.contactNote}>
+                                {product.available
+                                    ? "Escríbenos para pedirlo o hacer consultas. Te respondemos por WhatsApp."
+                                    : "Pregúntanos cuándo vuelve a estar disponible."}
+                            </p>
+                        </div>
+                    )}
 
                     {specs.length > 0 && (
                         <dl className={styles.specs}>
