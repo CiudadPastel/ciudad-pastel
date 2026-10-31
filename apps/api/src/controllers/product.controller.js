@@ -1,4 +1,4 @@
-import { getPublicCatalog } from "../services/product.service.js";
+import { getPublicCatalog, getPublicProductDetail } from "../services/product.service.js";
 
 export const MAX_CATEGORY_FILTER_ENTRIES = 20;
 
@@ -39,5 +39,21 @@ export async function getPublicProducts(req, res) {
         return res.status(500).json({
             message: "Could not load the product catalog."
         });
+    }
+}
+
+// Public product detail (HU-T02): 404 for missing and hidden products alike.
+export async function getPublicProductById(req, res) {
+    try {
+        const product = await getPublicProductDetail(req.params.id);
+
+        if (!product) {
+            return res.status(404).json({ message: "Product not found." });
+        }
+
+        return res.status(200).json(product);
+    } catch (error) {
+        console.error("Product detail error:", error);
+        return res.status(500).json({ message: "Could not load the product." });
     }
 }

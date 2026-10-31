@@ -175,6 +175,59 @@ paths:
                     type: string
                     example: Could not load the product catalog.
 
+  /products/{id}:
+    get:
+      tags: [Products]
+      summary: Get the public detail of one product (HU-T02)
+      security: []
+      description: >-
+        No authentication required. Returns the full public information of one published
+        product: name, brand, description, weight, size, price, image, category and stock
+        availability (available = inStock). Returns 404 with the same message when the product
+        does not exist or is hidden (status other than published), so hidden products cannot
+        be opened even with their direct link. IDs with characters other than letters, digits,
+        "-" or "_" (or longer than 128) are answered with 404 without querying Firestore.
+        Reads Firestore directly (not the 60-second catalog cache), so a withdrawn product
+        stops being visible immediately. Internal fields (status, categoryId, createdAt,
+        updatedAt) are never exposed.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 128
+          example: seed-prod-05
+      responses:
+        "200":
+          description: Public product detail.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicProductDetail"
+        "404":
+          description: Product does not exist or is hidden.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message:
+                    type: string
+                    example: Product not found.
+        "500":
+          description: Safe internal failure when loading the product.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message:
+                    type: string
+                    example: Could not load the product.
+
   /categories:
     get:
       tags: [Products]
@@ -1829,6 +1882,49 @@ components:
         available:
           type: boolean
           description: Indicates whether the product is currently in stock.
+        category:
+          $ref: "#/components/schemas/PublicProductCategory"
+
+    PublicProductDetail:
+      type: object
+      description: Full public product information for the detail page (HU-T02).
+      required: [id, name, brand, description, weight, size, price, imageUrl, available, category]
+      properties:
+        id:
+          type: string
+          description: Product unique identifier.
+        name:
+          type: string
+          description: Product display name.
+        brand:
+          type: string
+          nullable: true
+          maxLength: 60
+          description: Brand, or null if not registered.
+        description:
+          type: string
+          nullable: true
+          description: Product description, or null if not provided.
+        weight:
+          type: string
+          nullable: true
+          maxLength: 40
+          description: Free-text net weight or volume (e.g. "500 g", "120 ml"), or null.
+        size:
+          type: string
+          nullable: true
+          maxLength: 40
+          description: Free-text dimensions (e.g. "24 cm de diámetro"), or null.
+        price:
+          type: integer
+          description: Price in Costa Rican colones (CRC).
+        imageUrl:
+          type: string
+          nullable: true
+          description: Sanitized http/https image URL, or null (the client shows a placeholder).
+        available:
+          type: boolean
+          description: In stock (the "inStock" field of HU-T02). Out-of-stock products are still public.
         category:
           $ref: "#/components/schemas/PublicProductCategory"
 

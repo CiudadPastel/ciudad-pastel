@@ -11,7 +11,10 @@ export function mapProductDocument(documentSnapshot) {
     return {
         id: documentSnapshot.id,
         name: data.name,
+        brand: data.brand ?? null,
         description: data.description ?? null,
+        weight: data.weight ?? null,
+        size: data.size ?? null,
         price: data.price,
         categoryId: data.categoryId,
         imageUrl: data.imageUrl ?? null,
@@ -32,6 +35,12 @@ export async function getPublishedProducts() {
     return snapshot.docs.map(mapProductDocument);
 }
 
+// Retrieves one product by document ID, or null when it does not exist (HU-T02).
+export async function getProductById(id) {
+    const snapshot = await db.collection(PRODUCT_COLLECTION).doc(id).get();
+    return snapshot.exists ? mapProductDocument(snapshot) : null;
+}
+
 // Creates or updates a product document in Firestore.
 export async function upsertProduct(product) {
     const { id, ...data } = product;
@@ -40,7 +49,10 @@ export async function upsertProduct(product) {
 
     const payload = {
         name: data.name,
+        brand: data.brand ?? null,
         description: data.description ?? null,
+        weight: data.weight ?? null,
+        size: data.size ?? null,
         price: data.price,
         categoryId: data.categoryId,
         imageUrl: data.imageUrl ?? null,

@@ -25,7 +25,10 @@ describe("product.validator", () => {
             expect(result.errors).toEqual([]);
             expect(result.data).toEqual({
                 name: "Harina de trigo 1 kg",
+                brand: null,
                 description: "Harina de trigo refinada especial para repostería.",
+                weight: null,
+                size: null,
                 price: 1500,
                 categoryId: "cat-123",
                 imageUrl: "https://example.com/images/harina.jpg",
@@ -194,6 +197,54 @@ describe("product.validator", () => {
                 expect(result.data.status).toBeUndefined();
                 expect(result.data.createdAt).toBeUndefined();
                 expect(result.data.updatedAt).toBeUndefined();
+            });
+        });
+
+        describe("brand, weight and size (HU-T02)", () => {
+            it("keeps trimmed brand, weight and size", () => {
+                const result = validateProductInput({
+                    ...validProduct,
+                    brand: "  Molinos del Valle ",
+                    weight: " 1 kg ",
+                    size: "24 cm de diámetro"
+                });
+                expect(result.valid).toBe(true);
+                expect(result.data).toMatchObject({
+                    brand: "Molinos del Valle",
+                    weight: "1 kg",
+                    size: "24 cm de diámetro"
+                });
+            });
+
+            it("stores blank or missing values as null", () => {
+                const result = validateProductInput({ ...validProduct, brand: "   ", weight: null });
+                expect(result.valid).toBe(true);
+                expect(result.data).toMatchObject({ brand: null, weight: null, size: null });
+            });
+
+            it("rejects non-text values", () => {
+                const result = validateProductInput({ ...validProduct, brand: 5, weight: true, size: {} });
+                expect(result.valid).toBe(false);
+                expect(result.errors).toEqual([
+                    "brand must be a text string.",
+                    "weight must be a text string.",
+                    "size must be a text string."
+                ]);
+            });
+
+            it("rejects values over the maximum length", () => {
+                const result = validateProductInput({
+                    ...validProduct,
+                    brand: "a".repeat(61),
+                    weight: "1".repeat(41),
+                    size: "x".repeat(41)
+                });
+                expect(result.valid).toBe(false);
+                expect(result.errors).toEqual([
+                    "brand must not exceed 60 characters.",
+                    "weight must not exceed 40 characters.",
+                    "size must not exceed 40 characters."
+                ]);
             });
         });
     });

@@ -117,6 +117,32 @@ The cache is process-local, not distributed, and stale data can remain visible u
 
 Scope is backend API, tests, and documentation only. No React/CSS, HU-T02, WhatsApp, administrative authentication, product CRUD, Firestore structure/migrations/rules, unrelated endpoints, or Linear changes are included.
 
+## Public product detail (HU-T02)
+
+`GET /api/products/:id` is public (no authentication) and returns exactly:
+
+```json
+{
+  "id": "seed-prod-01",
+  "name": "Harina de trigo todo uso 1 kg",
+  "brand": "Molinos del Valle",
+  "description": "Harina de trigo todo uso de alta calidad para repostería y panadería.",
+  "weight": "1 kg",
+  "size": null,
+  "price": 1450,
+  "imageUrl": "https://…",
+  "available": true,
+  "category": { "id": "seed-cat-1", "name": "Harinas y mezclas" }
+}
+```
+
+- `brand`, `weight` and `size` are new optional product fields (free text, max 60/40/40 characters, `null` when not registered). Weight and size are text because the store sells products measured in g, kg, ml or cm.
+- The story's `inStock` field is the existing `available` field, and `isVisible` is `status === "published"`. The names were kept so the catalog list and the detail use the same contract.
+- Missing products and hidden products (any status other than `published`) both return `404 { "message": "Product not found." }`, so a direct link to a hidden product reveals nothing.
+- IDs that are not 1–128 letters, digits, `-` or `_` return 404 without querying Firestore.
+- The detail reads Firestore directly (one product read plus one category read) instead of the 60-second catalog cache, so a withdrawn product stops opening immediately.
+- `status`, `categoryId`, `createdAt` and `updatedAt` are never exposed. The catalog list keeps its previous fields (no brand/weight/size).
+
 ## Local sample data
 
 The existing `apps/api/scripts/seed-products.js` provides deterministic sample data (6 categories, 18 products).
