@@ -122,6 +122,25 @@ paths:
               type: string
               minLength: 1
           example: [category-1, category-2]
+        - name: q
+          in: query
+          required: false
+          description: >-
+            Optional text search (HU-T03) over product name and brand, and also description
+            (ranked lower). Ignores uppercase/lowercase, accents and punctuation ("jabon" finds
+            "Jabón") and matches partial words ("choco" finds "Chocolate oscuro"). With several
+            words, every word must appear, in any order. Searches shorter than 2 characters
+            (after removing spaces and punctuation) are ignored and return the normal catalog.
+            Can be combined with categoryId or categoryIds and with pagination; total and
+            hasMore refer to the matching products. Hidden (withdrawn) products never appear.
+            Results are ordered by relevance (name starting with the search, then name, then
+            brand, then description), keeping catalog order for ties. Repeated or bracket
+            notation returns 400 "q must be a single text value."; more than 100 characters
+            returns 400 "q must not exceed 100 characters.".
+          schema:
+            type: string
+            maxLength: 100
+          example: fondant
         - name: page
           in: query
           required: false

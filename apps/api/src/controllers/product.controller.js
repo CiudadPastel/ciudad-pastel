@@ -1,4 +1,5 @@
 import { getPublicCatalog, getPublicProductDetail } from "../services/product.service.js";
+import { MAX_SEARCH_LENGTH } from "../utils/search-text.js";
 
 export const MAX_CATEGORY_FILTER_ENTRIES = 20;
 
@@ -27,12 +28,21 @@ export async function getPublicProducts(req, res) {
         if (multiple.some((id) => !id.trim())) {
             return res.status(400).json({ message: "categoryIds must contain only non-empty strings." });
         }
+        // Text search (HU-T03): one optional q value, up to 100 characters.
+        const searches = query.getAll("q");
+        if (keys.some((key) => key.startsWith("q[")) || searches.length > 1) {
+            return res.status(400).json({ message: "q must be a single text value." });
+        }
+        if (searches.length === 1 && searches[0].length > MAX_SEARCH_LENGTH) {
+            return res.status(400).json({ message: `q must not exceed ${MAX_SEARCH_LENGTH} characters.` });
+        }
+        const search = searches.length ? searches[0] : undefined;
         const categoryId = single.length ? single[0] : undefined;
         const categoryIds = multiple.length ? [...new Set(multiple)] : undefined;
         const page = req.query.page !== undefined ? parseInt(req.query.page, 10) : undefined;
         const limit = req.query.limit !== undefined ? parseInt(req.query.limit, 10) : undefined;
 
-        const catalog = await getPublicCatalog({ page, limit, categoryId, categoryIds });
+        const catalog = await getPublicCatalog({ page, limit, categoryId, categoryIds, search });
         return res.status(200).json(catalog);
     } catch (error) {
         console.error("Product catalog error:", error);

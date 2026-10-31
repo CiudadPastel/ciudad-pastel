@@ -6,9 +6,10 @@ import styles from "./StateMessage.module.css";
  * Mensaje para estados vacíos o de error.
  *   variant: "empty" | "error"
  *   action: botón o enlace opcional (ej. Reintentar, Volver)
+ *   icon: ícono opcional de lucide-react (por defecto, según la variante)
  */
-function StateMessage({ variant = "empty", title, description, action }) {
-    const Icon = variant === "error" ? CircleAlert : Inbox;
+function StateMessage({ variant = "empty", title, description, action, icon }) {
+    const Icon = icon ?? (variant === "error" ? CircleAlert : Inbox);
 
     return (
         <div

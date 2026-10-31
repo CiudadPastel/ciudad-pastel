@@ -143,6 +143,41 @@ Scope is backend API, tests, and documentation only. No React/CSS, HU-T02, Whats
 - The detail reads Firestore directly (one product read plus one category read) instead of the 60-second catalog cache, so a withdrawn product stops opening immediately.
 - `status`, `categoryId`, `createdAt` and `updatedAt` are never exposed. The catalog list keeps its previous fields (no brand/weight/size).
 
+## Product search (HU-T03)
+
+`GET /api/products?q=texto` searches the public catalog. It can be combined with `categoryId`/`categoryIds`, `page` and `limit` (for example `/api/products?q=choco&categoryId=seed-cat-2&page=1`).
+
+- **Fields:** name and brand, and also description (ranked lower).
+- **Matching:** ignores uppercase/lowercase, accents and punctuation (`jabon` finds "Jabón", `espatula` finds "Espátula"). Partial words match (`choco` finds "Chocolate oscuro"). With several words, every word must appear, in any order (`oscuro choco`).
+- **Short searches:** fewer than 2 characters, after removing spaces and punctuation, are ignored, and the normal catalog is returned.
+- **Errors:** more than 100 characters returns 400. Repeated `q` or bracket notation also returns 400 (same style as the category filters).
+- **Visibility:** only published products are searched. Withdrawn products never appear. Out-of-stock products do appear, with `available: false`.
+- **Order:**
+  1. Name starts with the search.
+  2. A word of the name starts with the first search word.
+  3. All words in the name.
+  4. Name + brand.
+  5. Description only.
+
+  Ties keep the normal catalog order. `total` and `hasMore` count only the matching products.
+
+### Performance approach
+
+Firestore has no full-text search: an index on `name` or `brand` only helps exact or case-sensitive prefix queries. It cannot ignore accents or match the middle of a word, so adding those indexes would not help this search. Instead:
+
+1. The catalog already keeps one 60-second in-memory snapshot of all published products, read with a single `status == "published"` query. That query uses Firestore's automatic single-field index, so no composite index is needed.
+2. When the snapshot is built, each product's name, brand and description are normalized once (lowercase, no accents, no punctuation). This is the search "index".
+3. Each search filters those prepared strings in memory. There are no extra Firestore reads per search or per keystroke.
+
+Measured locally (Node 22, in-process, fake Firestore, 50 rounds of 6 searches such as `choco`, `jabon`, `harina 2 kg`, `xyz`):
+
+| Catalog | Build snapshot + index (first search) | Search median | Search p95 |
+|---|---|---|---|
+| Seed data (16 published) | 10.2 ms | 0.015 ms | 0.04 ms |
+| 2,016 published products | 14.9 ms | 0.39 ms | 0.76 ms |
+
+The first-search time does not include the real Firestore read, which happens at most once per minute per server instance. The automated test `public-product-search.api.test.js` checks that 2,000 products answer through HTTP well under 150 ms per search. If the store ever grows far beyond a few thousand products, the next step would be an external search service (for example Algolia or Typesense), keeping the same `q` contract.
+
 ## Local sample data
 
 The existing `apps/api/scripts/seed-products.js` provides deterministic sample data (6 categories, 18 products).
