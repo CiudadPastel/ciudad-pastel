@@ -4,7 +4,9 @@ import { Link, useLocation, useNavigate, useSearchParams } from "react-router-do
 
 import CategoryFilter from "../../components/public/CategoryFilter";
 import SearchBar from "../../components/public/SearchBar";
+import WhatsAppButton from "../../components/public/WhatsAppButton";
 import StateMessage, { RetryButton } from "../../components/ui/StateMessage";
+import { useWhatsAppContact } from "../../hooks/useWhatsAppContact";
 import { getPublicCategories, getPublicProducts } from "../../services/publicProducts.service";
 import { formatPrice } from "../../utils/format";
 
@@ -33,38 +35,47 @@ function validateProductsPage(response) {
     return response;
 }
 
-function ProductCard({ product, backTo, onOpen }) {
+// La tarjeta es un enlace al detalle; el botón de WhatsApp va aparte (no se
+// puede poner un enlace dentro de otro).
+function ProductCard({ product, backTo, onOpen, contact }) {
     const [imageFailed, setImageFailed] = useState(false);
 
     return (
-        <Link
-            to={`/tienda/${encodeURIComponent(product.id)}`}
-            state={{ from: backTo }}
-            onClick={() => onOpen(product.id)}
-            className={styles.card}
-            data-product-id={product.id}
-        >
-            {product.imageUrl && !imageFailed ? (
-                <img
-                    src={product.imageUrl}
-                    alt={`Imagen de ${product.name}`}
-                    className={styles.image}
-                    loading="lazy"
-                    onError={() => setImageFailed(true)}
-                />
-            ) : (
-                <div className={styles.imageEmpty} aria-hidden="true">
-                    <ImageOff size={28} />
+        <article className={styles.cardShell}>
+            <Link
+                to={`/tienda/${encodeURIComponent(product.id)}`}
+                state={{ from: backTo }}
+                onClick={() => onOpen(product.id)}
+                className={styles.card}
+                data-product-id={product.id}
+            >
+                {product.imageUrl && !imageFailed ? (
+                    <img
+                        src={product.imageUrl}
+                        alt={`Imagen de ${product.name}`}
+                        className={styles.image}
+                        loading="lazy"
+                        onError={() => setImageFailed(true)}
+                    />
+                ) : (
+                    <div className={styles.imageEmpty} aria-hidden="true">
+                        <ImageOff size={28} />
+                    </div>
+                )}
+                <div className={styles.cardBody}>
+                    <h2>{product.name}</h2>
+                    <div className={styles.cardMeta}>
+                        <strong>{formatPrice(product.price)}</strong>
+                        {!product.available && <span className={styles.unavailable}>Agotado</span>}
+                    </div>
+                </div>
+            </Link>
+            {contact && (
+                <div className={styles.cardActions}>
+                    <WhatsAppButton contact={contact} productName={product.name} variant="card" />
                 </div>
             )}
-            <div className={styles.cardBody}>
-                <h2>{product.name}</h2>
-                <div className={styles.cardMeta}>
-                    <strong>{formatPrice(product.price)}</strong>
-                    {!product.available && <span className={styles.unavailable}>Agotado</span>}
-                </div>
-            </div>
-        </Link>
+        </article>
     );
 }
 
@@ -119,6 +130,8 @@ function ProductsList() {
     const [categoriesState, setCategoriesState] = useState({ key: null, status: "loading", items: [] });
     // Total sin filtro, para el chip "Todos los productos"
     const [allTotal, setAllTotal] = useState(null);
+    // Número de WhatsApp configurado en el API (HU-T05); null = sin botones
+    const whatsappContact = useWhatsAppContact();
 
     useEffect(() => {
         let active = true;
@@ -360,8 +373,13 @@ function ProductsList() {
                                         Buscar en todas las categorías
                                     </button>
                                 )}
-                                {/* Espacio reservado para "Pregúntanos por WhatsApp" (HU-T05) */}
-                                <div className={styles.contactSlot} data-slot="whatsapp" />
+                                {/* HU-T05: si no lo encuentran, pueden preguntar por WhatsApp */}
+                                <WhatsAppButton
+                                    contact={whatsappContact}
+                                    productName={searchQuery}
+                                    variant="inline"
+                                    label="Pregúntanos por WhatsApp"
+                                />
                             </div>
                         )}
                     />
@@ -381,7 +399,12 @@ function ProductsList() {
                     <ul className={styles.grid} aria-label={listLabel}>
                         {state.products.map((product) => (
                             <li key={product.id}>
-                                <ProductCard product={product} backTo={catalogUrl} onOpen={rememberProduct} />
+                                <ProductCard
+                                    product={product}
+                                    backTo={catalogUrl}
+                                    onOpen={rememberProduct}
+                                    contact={whatsappContact}
+                                />
                             </li>
                         ))}
                     </ul>
