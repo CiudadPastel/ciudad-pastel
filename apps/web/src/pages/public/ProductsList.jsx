@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
-import { ImageOff, LayoutGrid, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { ImageOff, LayoutGrid, SearchX, X } from "lucide-react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import CategoryFilter from "../../components/public/CategoryFilter";
+import SearchBar from "../../components/public/SearchBar";
 import StateMessage, { RetryButton } from "../../components/ui/StateMessage";
 import { getPublicCategories, getPublicProducts } from "../../services/publicProducts.service";
 import { formatPrice } from "../../utils/format";
@@ -94,17 +95,24 @@ function productCountLabel(count) {
     return `${count} ${count === 1 ? "producto" : "productos"}`;
 }
 
+function resultCountLabel(count) {
+    return `${count} ${count === 1 ? "resultado" : "resultados"}`;
+}
+
 function ProductsList() {
     // La categoría elegida vive en la URL (?categoria=id) para poder compartirla
     // y para que el botón "atrás" del navegador deshaga el filtro.
     const [searchParams, setSearchParams] = useSearchParams();
     const categoryId = searchParams.get("categoria") || null;
+    // Búsqueda (HU-T03) en la URL (?q=fondant); menos de 2 letras no se aplica
+    const rawQuery = (searchParams.get("q") ?? "").trim();
+    const searchQuery = rawQuery.length >= 2 ? rawQuery : "";
     const location = useLocation();
     const navigate = useNavigate();
     const catalogUrl = `${location.pathname}${location.search}`;
 
     const [reloadKey, setReloadKey] = useState(0);
-    const requestKey = `${categoryId ?? ""}|${reloadKey}`;
+    const requestKey = `${categoryId ?? ""}|${searchQuery}|${reloadKey}`;
     const [state, setState] = useState({ key: null, ...EMPTY_PRODUCTS });
 
     const [categoriesReloadKey, setCategoriesReloadKey] = useState(0);
@@ -136,7 +144,7 @@ function ProductsList() {
         const pages = Array.from({ length: pagesFromUrl() }, (_, index) => index + 1);
 
         Promise.all(pages.map((page) =>
-            getPublicProducts({ page, limit: PAGE_SIZE, categoryId: categoryId ?? undefined })
+            getPublicProducts({ page, limit: PAGE_SIZE, categoryId: categoryId ?? undefined, q: searchQuery })
                 .then(validateProductsPage)
         ))
             .then((results) => {
@@ -159,7 +167,7 @@ function ProductsList() {
                     page: result.page,
                     hasMore: result.hasMore
                 });
-                if (!categoryId && Number.isInteger(result.total)) setAllTotal(result.total);
+                if (!categoryId && !searchQuery && Number.isInteger(result.total)) setAllTotal(result.total);
             })
             .catch((error) => {
                 if (active) setState({ ...EMPTY_PRODUCTS, key: requestKey, status: "error", error });
@@ -168,7 +176,7 @@ function ProductsList() {
         return () => {
             active = false;
         };
-    }, [categoryId, requestKey]);
+    }, [categoryId, searchQuery, requestKey]);
 
     async function loadMore() {
         if (state.loadingMore || !state.hasMore) return;
@@ -182,7 +190,8 @@ function ProductsList() {
                 await getPublicProducts({
                     page: state.page + 1,
                     limit: PAGE_SIZE,
-                    categoryId: categoryId ?? undefined
+                    categoryId: categoryId ?? undefined,
+                    q: searchQuery
                 })
             );
 
@@ -224,6 +233,18 @@ function ProductsList() {
         setSearchParams(next);
     }
 
+    // Mientras se escribe se reemplaza la entrada del historial (no se llena
+    // el botón "atrás" con cada letra). Siempre vuelve a la primera página.
+    const applySearch = useCallback((text) => {
+        setSearchParams((current) => {
+            const next = new URLSearchParams(current);
+            if (text) next.set("q", text);
+            else next.delete("q");
+            next.delete("pagina");
+            return next;
+        }, { replace: true });
+    }, [setSearchParams]);
+
     // Antes de abrir un producto se anota en esta entrada del historial cuál
     // fue, para que al volver (con el enlace o con "atrás") quede a la vista.
     function rememberProduct(productId) {
@@ -252,6 +273,10 @@ function ProductsList() {
     const unknownCategory = Boolean(categoryId) && categoriesStatus === "success" && !selectedCategory;
     const categoryName = selectedCategory?.name;
 
+    const listLabel = searchQuery
+        ? `Resultados para ${searchQuery}`
+        : categoryName ? `Productos de ${categoryName}` : "Productos";
+
     const showAllButton = (
         <button type="button" className="btn btn-primary" onClick={() => selectCategory(null)}>
             <LayoutGrid size={16} aria-hidden="true" />
@@ -270,6 +295,12 @@ function ProductsList() {
             </header>
 
             <div className={styles.filters}>
+                <SearchBar
+                    value={searchQuery}
+                    onSearch={applySearch}
+                    busy={Boolean(searchQuery) && status === "loading"}
+                />
+
                 <CategoryFilter
                     categories={categories}
                     selectedId={categoryId}
@@ -282,13 +313,11 @@ function ProductsList() {
                 <div className={styles.summary} aria-live="polite">
                     {status === "success" && state.products.length > 0 && Number.isInteger(state.total) && (
                         <p>
-                            {categoryId && categoryName ? (
-                                <>
-                                    <strong>{productCountLabel(state.total)}</strong> en <strong>{categoryName}</strong>
-                                </>
-                            ) : (
-                                <strong>{productCountLabel(state.total)}</strong>
-                            )}
+                            <strong>
+                                {searchQuery ? resultCountLabel(state.total) : productCountLabel(state.total)}
+                            </strong>
+                            {searchQuery && <> para <strong>«{searchQuery}»</strong></>}
+                            {categoryId && categoryName && <> en <strong>{categoryName}</strong></>}
                         </p>
                     )}
                     {categoryId && status !== "loading" && state.products.length > 0 && (
@@ -314,7 +343,29 @@ function ProductsList() {
                     action={<RetryButton onClick={() => setReloadKey((key) => key + 1)} />}
                 />
             ) : state.products.length === 0 ? (
-                categoryId ? (
+                searchQuery ? (
+                    <StateMessage
+                        icon={SearchX}
+                        title={`No encontramos productos para «${searchQuery}»${categoryId && categoryName ? ` en ${categoryName}` : ""}`}
+                        description="Revisa que esté bien escrito o prueba con una palabra más corta (por ejemplo, «choco» en vez de «chocolates»)."
+                        action={(
+                            <div className={styles.emptyActions}>
+                                <button type="button" className="btn btn-primary" onClick={() => applySearch("")}>
+                                    <X size={16} aria-hidden="true" />
+                                    Limpiar búsqueda
+                                </button>
+                                {categoryId && (
+                                    <button type="button" className="btn btn-secondary" onClick={() => selectCategory(null)}>
+                                        <LayoutGrid size={16} aria-hidden="true" />
+                                        Buscar en todas las categorías
+                                    </button>
+                                )}
+                                {/* Espacio reservado para "Pregúntanos por WhatsApp" (HU-T05) */}
+                                <div className={styles.contactSlot} data-slot="whatsapp" />
+                            </div>
+                        )}
+                    />
+                ) : categoryId ? (
                     <StateMessage
                         title={unknownCategory
                             ? "Esta categoría no está disponible"
@@ -327,7 +378,7 @@ function ProductsList() {
                 )
             ) : (
                 <>
-                    <ul className={styles.grid} aria-label={categoryName ? `Productos de ${categoryName}` : "Productos"}>
+                    <ul className={styles.grid} aria-label={listLabel}>
                         {state.products.map((product) => (
                             <li key={product.id}>
                                 <ProductCard product={product} backTo={catalogUrl} onOpen={rememberProduct} />

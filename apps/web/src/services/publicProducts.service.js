@@ -2,17 +2,18 @@ import { apiFetch } from "./api";
 
 /*
  * Catálogo público de la tienda (sin sesión).
- *   GET /api/products?page&limit&categoryId  -> { items, total, page, limit, hasMore }
+ *   GET /api/products?page&limit&categoryId&q -> { items, total, page, limit, hasMore }
+ *     (q = búsqueda por nombre/marca, HU-T03; se combina con categoryId)
  *   GET /api/products/:id                     -> detalle (HU-T02); 404 si no existe o está oculto
  *   GET /api/categories                       -> [{ id, name, productCount, imageUrl }]
  *     (solo categorías con al menos un producto publicado)
  */
 
-export function getPublicProducts({ page, limit, search, categoryId } = {}) {
+export function getPublicProducts({ page, limit, q, categoryId } = {}) {
     const params = new URLSearchParams();
     if (page != null) params.set("page", page);
     if (limit != null) params.set("limit", limit);
-    if (search) params.set("search", search);
+    if (q) params.set("q", q);
     if (categoryId) params.set("categoryId", categoryId);
     const query = params.toString();
     return apiFetch(`/products${query ? `?${query}` : ""}`);

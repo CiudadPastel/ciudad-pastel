@@ -1,6 +1,7 @@
 import { PRODUCT_STATUS, toPublicProduct, toPublicProductDetail } from "../models/product.model.js";
 import { getCategories, getCategoryById } from "../repositories/category.repository.js";
 import { getProductById, getPublishedProducts } from "../repositories/product.repository.js";
+import { normalizeSearchText, toSearchTerms } from "../utils/search-text.js";
 
 // Firestore document IDs used by the store: letters, numbers, "-" and "_".
 // Anything else (slashes, very long values) can never match a product.
@@ -62,7 +63,14 @@ async function getCatalogSnapshot() {
 
         const entries = enriched.map(({ product, category }) => ({
             categoryId: product.categoryId,
-            publicProduct: toPublicProduct(product, category)
+            publicProduct: toPublicProduct(product, category),
+            // In-memory search index (HU-T03): normalized once per snapshot, so
+            // each search only compares plain strings.
+            search: {
+                name: normalizeSearchText(product.name),
+                brand: normalizeSearchText(product.brand),
+                description: normalizeSearchText(product.description)
+            }
         }));
         const categorySummaries = new Map();
         // Reuse sanitized public products in catalog order, independently of pagination.
@@ -101,17 +109,47 @@ export async function getPublicCategories() {
     return structuredClone(snapshot.categories);
 }
 
+// Relevance of one entry for the search, or -1 when it does not match.
+// Every word must appear (partial words allowed) in the name, brand or description.
+// Lower is better: name starts with the search, a name word starts with the
+// first word, all words in the name, name + brand, and finally the description.
+function searchRank(entry, terms) {
+    const { name, brand, description } = entry.search;
+    const nameAndBrand = `${name} ${brand}`;
+    const everything = `${nameAndBrand} ${description}`;
+
+    if (!terms.words.every((word) => everything.includes(word))) return -1;
+    if (name.startsWith(terms.normalized)) return 0;
+    if (terms.words.every((word) => name.includes(word))) {
+        return ` ${name}`.includes(` ${terms.words[0]}`) ? 1 : 2;
+    }
+    if (terms.words.every((word) => nameAndBrand.includes(word))) return 3;
+    return 4;
+}
+
 // Filters the complete cached catalog before calculating totals and pagination.
-export async function getPublicCatalog({ page = 1, limit = DEFAULT_PAGE_LIMIT, categoryId, categoryIds } = {}) {
+// Category filter and text search can be combined (HU-T03 + HU-T04).
+export async function getPublicCatalog({ page = 1, limit = DEFAULT_PAGE_LIMIT, categoryId, categoryIds, search } = {}) {
     const snapshot = await getCatalogSnapshot();
     const selectedIds = categoryIds === undefined
         ? (categoryId === undefined ? null : new Set([categoryId]))
         : new Set(categoryIds);
-    const entries = selectedIds === null
+    let entries = selectedIds === null
         ? snapshot.entries
         : snapshot.entries.filter((entry) =>
             selectedIds.has(entry.categoryId) && entry.publicProduct.category !== null
         );
+
+    // Searches shorter than 2 characters are ignored (same result as no search).
+    const terms = toSearchTerms(search);
+    if (terms) {
+        entries = entries
+            .map((entry) => ({ entry, rank: searchRank(entry, terms) }))
+            .filter(({ rank }) => rank >= 0)
+            // Array sort is stable: equal ranks keep the catalog order.
+            .sort((a, b) => a.rank - b.rank)
+            .map(({ entry }) => entry);
+    }
 
     const safePage = Number.isInteger(page) && page >= 1 ? page : 1;
     let safeLimit = Number.isInteger(limit) && limit >= 1 ? limit : DEFAULT_PAGE_LIMIT;
