@@ -35,3 +35,10 @@ export function updateAdminProduct(id, product) {
         body: JSON.stringify(product)
     });
 }
+
+export function removeAdminProduct(id) {
+    return apiFetch(`/admin/products/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        requiresAuth: true
+    });
+}

@@ -1054,6 +1054,17 @@ describe("Admin Products and Categories API (HU-T06 / CIU-6)", () => {
             expect(res.status).toBe(500);
             expect(res.body).toEqual({ message: "Could not remove product." });
             expect(JSON.stringify(res.body)).not.toContain("replica sync");
+
+            const listRes = await request(app)
+                .get("/api/admin/products")
+                .set(ADMIN_AUTH_HEADER);
+
+            expect(listRes.status).toBe(200);
+            expect(listRes.body).toHaveLength(1);
+            expect(listRes.body[0]).toMatchObject({
+                id: productToRemove.id,
+                status: "published"
+            });
         });
     });
 

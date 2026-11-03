@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, ImageOff, Package, Pencil, Trash2 } from "lucide-react";
 import { Link, useLocation, useParams } from "react-router-dom";
 
+import ConfirmDialog from "../../components/ui/ConfirmDialog";
 import Notice from "../../components/ui/Notice";
 import StateMessage, { RetryButton } from "../../components/ui/StateMessage";
-import { getAdminProductById } from "../../services/products.service";
+import { getAdminProductById, removeAdminProduct } from "../../services/products.service";
 import { formatDateTime, formatPrice } from "../../utils/format";
 
 import styles from "./Products.module.css";
@@ -19,7 +20,11 @@ function ProductDetail() {
     const location = useLocation();
     const [state, setState] = useState({ id: null, status: "loading", product: null, error: null });
     const [reloadKey, setReloadKey] = useState(0);
-    const [notice, setNotice] = useState(location.state?.flash ?? "");
+    const [notice, setNotice] = useState(
+        location.state?.flash ? { variant: "success", text: location.state.flash } : null
+    );
+    const [confirmingRemoval, setConfirmingRemoval] = useState(false);
+    const [removing, setRemoving] = useState(false);
 
     useEffect(() => {
         let active = true;
@@ -42,6 +47,35 @@ function ProductDetail() {
         setReloadKey((key) => key + 1);
     }
 
+    async function confirmRemoveProduct() {
+        if (!product || removing) return;
+
+        setRemoving(true);
+        setNotice(null);
+        try {
+            await removeAdminProduct(product.id);
+            setState((previous) => ({
+                ...previous,
+                product: previous.product?.id === product.id
+                    ? { ...previous.product, status: "withdrawn" }
+                    : previous.product
+            }));
+            setNotice({
+                variant: "success",
+                text: `«${product.name}» se retiró y dejó de mostrarse en la tienda.`
+            });
+            setConfirmingRemoval(false);
+        } catch (error) {
+            setNotice({
+                variant: "error",
+                text: error.message || `No se pudo retirar «${product.name}».`
+            });
+            setConfirmingRemoval(false);
+        } finally {
+            setRemoving(false);
+        }
+    }
+
     const isCurrentState = state.id === id;
     const status = isCurrentState ? state.status : "loading";
     const product = isCurrentState ? state.product : null;
@@ -55,8 +89,8 @@ function ProductDetail() {
             </Link>
 
             {notice && (
-                <Notice variant="success" onClose={() => setNotice("")}>
-                    {notice}
+                <Notice variant={notice.variant} onClose={() => setNotice(null)}>
+                    {notice.text}
                 </Notice>
             )}
 
@@ -169,10 +203,16 @@ function ProductDetail() {
                                     Editar
                                 </Link>
                             )}
-                            <button type="button" className="btn btn-secondary" disabled>
-                                <Trash2 size={16} aria-hidden="true" />
-                                Retirar producto
-                            </button>
+                            {product.status !== "withdrawn" && (
+                                <button
+                                    type="button"
+                                    className="btn btn-danger"
+                                    onClick={() => setConfirmingRemoval(true)}
+                                >
+                                    <Trash2 size={16} aria-hidden="true" />
+                                    Retirar
+                                </button>
+                            )}
                         </div>
                     </section>
                 </>
@@ -189,6 +229,20 @@ function ProductDetail() {
                         </Link>
                     }
                 />
+            )}
+
+            {confirmingRemoval && product && (
+                <ConfirmDialog
+                    open
+                    title={`¿Retirar «${product.name}»?`}
+                    confirmLabel={removing ? "Retirando…" : "Sí, retirar"}
+                    confirmIcon={Trash2}
+                    busy={removing}
+                    onConfirm={confirmRemoveProduct}
+                    onCancel={() => setConfirmingRemoval(false)}
+                >
+                    <p>Dejará de mostrarse en la tienda. El producto permanecerá en la lista de administración como retirado.</p>
+                </ConfirmDialog>
             )}
         </section>
     );
