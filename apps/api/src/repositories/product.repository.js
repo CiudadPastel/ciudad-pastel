@@ -35,6 +35,12 @@ export async function getPublishedProducts() {
     return snapshot.docs.map(mapProductDocument);
 }
 
+// Retrieves all products from Firestore regardless of status.
+export async function getAllProducts() {
+    const snapshot = await db.collection(PRODUCT_COLLECTION).get();
+    return snapshot.docs.map(mapProductDocument);
+}
+
 // Retrieves one product by document ID, or null when it does not exist (HU-T02).
 export async function getProductById(id) {
     const snapshot = await db.collection(PRODUCT_COLLECTION).doc(id).get();

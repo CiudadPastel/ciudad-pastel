@@ -25,6 +25,7 @@ import { courseEnrollmentRoutes, enrollmentRoutes } from "./routes/enrollment.ro
 import publicProductRoutes from "./routes/public-product.routes.js";
 import publicCategoryRoutes from "./routes/public-category.routes.js";
 import publicContactRoutes from "./routes/public-contact.routes.js";
+import adminProductRoutes, { adminCategoryRoutes } from "./routes/admin-product.routes.js";
 
 
 dotenv.config();
@@ -106,6 +107,10 @@ app.use(
     "/api/admin/enrollment-requests",
     enrollmentRequestRoutes
 );
+
+// Public published-course listing.
+app.use("/api/admin/products", adminProductRoutes);
+app.use("/api/admin/categories", adminCategoryRoutes);
 
 // Public published-course listing.
 app.use("/api/courses", publicCourseRoutes);
