@@ -1448,11 +1448,12 @@ describe("Admin Products and Categories API (HU-T06 / CIU-6)", () => {
             ]);
         });
 
-        it("executes the complete product lifecycle: Create -> List/Detail -> Modify -> Remove -> Visibility & Invalidation", async () => {
+        it("refleja creación, cambio de precio y eliminación aunque el catálogo esté en caché", async () => {
             // Initial state: public catalog is empty
             const initialPublic = await request(app).get("/api/products");
             expect(initialPublic.status).toBe(200);
             expect(initialPublic.body.items).toHaveLength(0);
+            expect(fake.productRepository.getPublishedProducts).toHaveBeenCalledTimes(1);
 
             // 1. Create product as admin (AC 1)
             const createPayload = {
@@ -1502,6 +1503,7 @@ describe("Admin Products and Categories API (HU-T06 / CIU-6)", () => {
             // 3. Immediately reflected in public catalog without waiting for cache TTL (AC 5)
             const publicAfterCreate = await request(app).get("/api/products");
             expect(publicAfterCreate.status).toBe(200);
+            expect(fake.productRepository.getPublishedProducts).toHaveBeenCalledTimes(2);
             expect(publicAfterCreate.body.items).toHaveLength(1);
             expect(publicAfterCreate.body.items[0].id).toBe(productId);
             expect(publicAfterCreate.body.items[0].name).toBe("Tarta de Fresas Silvestres");
@@ -1535,6 +1537,7 @@ describe("Admin Products and Categories API (HU-T06 / CIU-6)", () => {
             // Public catalog reflects update immediately (AC 5)
             const publicAfterUpdate = await request(app).get("/api/products");
             expect(publicAfterUpdate.status).toBe(200);
+            expect(fake.productRepository.getPublishedProducts).toHaveBeenCalledTimes(3);
             expect(publicAfterUpdate.body.items[0].name).toBe("Tarta de Fresas y Chocolate");
             expect(publicAfterUpdate.body.items[0].price).toBe(15000);
             expect(publicAfterUpdate.body.items[0].available).toBe(false);
@@ -1549,6 +1552,7 @@ describe("Admin Products and Categories API (HU-T06 / CIU-6)", () => {
             // Disappears from public catalog immediately (AC 4 & AC 5)
             const publicAfterDelete = await request(app).get("/api/products");
             expect(publicAfterDelete.status).toBe(200);
+            expect(fake.productRepository.getPublishedProducts).toHaveBeenCalledTimes(4);
             expect(publicAfterDelete.body.items).toHaveLength(0);
 
             // Remains in admin detail with status "withdrawn"
