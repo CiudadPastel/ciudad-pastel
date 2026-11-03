@@ -1231,6 +1231,156 @@ describe("Admin Products and Categories API (HU-T06 / CIU-6)", () => {
         });
     });
 
+    describe("Product Administration Authentication and Authorization Matrix (Rama 7 / CIU-6)", () => {
+        beforeEach(() => {
+            fake.setCategoriesList([
+                { id: "cat-auth-1", name: "Categoría Auth", order: 1 }
+            ]);
+            fake.setProductsList([
+                {
+                    id: "prod-auth-1",
+                    name: "Producto Auth",
+                    description: "Para pruebas de autorización",
+                    price: 10000,
+                    categoryId: "cat-auth-1",
+                    imageUrl: null,
+                    available: true,
+                    status: "published",
+                    createdAt: "2026-01-01T00:00:00.000Z",
+                    updatedAt: "2026-01-01T00:00:00.000Z"
+                }
+            ]);
+        });
+
+        const endpoints = [
+            {
+                name: "GET /api/admin/categories",
+                call: (auth) => {
+                    const req = request(app).get("/api/admin/categories");
+                    return auth ? req.set("Authorization", auth) : req;
+                },
+                expectedSuccessStatus: 200,
+                checkReposNotCalled: () => {
+                    expect(fake.categoryRepository.getCategories).not.toHaveBeenCalled();
+                }
+            },
+            {
+                name: "GET /api/admin/products",
+                call: (auth) => {
+                    const req = request(app).get("/api/admin/products");
+                    return auth ? req.set("Authorization", auth) : req;
+                },
+                expectedSuccessStatus: 200,
+                checkReposNotCalled: () => {
+                    expect(fake.productRepository.getAllProducts).not.toHaveBeenCalled();
+                }
+            },
+            {
+                name: "GET /api/admin/products/:id",
+                call: (auth) => {
+                    const req = request(app).get("/api/admin/products/prod-auth-1");
+                    return auth ? req.set("Authorization", auth) : req;
+                },
+                expectedSuccessStatus: 200,
+                checkReposNotCalled: () => {
+                    expect(fake.productRepository.getProductById).not.toHaveBeenCalled();
+                }
+            },
+            {
+                name: "POST /api/admin/products",
+                call: (auth) => {
+                    const req = request(app).post("/api/admin/products").send({
+                        name: "Producto Nuevo",
+                        price: 5000,
+                        categoryId: "cat-auth-1"
+                    });
+                    return auth ? req.set("Authorization", auth) : req;
+                },
+                expectedSuccessStatus: 201,
+                checkReposNotCalled: () => {
+                    expect(fake.productRepository.upsertProduct).not.toHaveBeenCalled();
+                }
+            },
+            {
+                name: "PUT /api/admin/products/:id",
+                call: (auth) => {
+                    const req = request(app).put("/api/admin/products/prod-auth-1").send({
+                        name: "Producto Editado",
+                        price: 6000,
+                        categoryId: "cat-auth-1"
+                    });
+                    return auth ? req.set("Authorization", auth) : req;
+                },
+                expectedSuccessStatus: 200,
+                checkReposNotCalled: () => {
+                    expect(fake.productRepository.getProductById).not.toHaveBeenCalled();
+                    expect(fake.productRepository.upsertProduct).not.toHaveBeenCalled();
+                }
+            },
+            {
+                name: "DELETE /api/admin/products/:id",
+                call: (auth) => {
+                    const req = request(app).delete("/api/admin/products/prod-auth-1");
+                    return auth ? req.set("Authorization", auth) : req;
+                },
+                expectedSuccessStatus: 204,
+                checkReposNotCalled: () => {
+                    expect(fake.productRepository.getProductById).not.toHaveBeenCalled();
+                    expect(fake.productRepository.upsertProduct).not.toHaveBeenCalled();
+                }
+            }
+        ];
+
+        endpoints.forEach(({ name, call, expectedSuccessStatus, checkReposNotCalled }) => {
+            describe(name, () => {
+                it("returns 401 without token and never invokes repository", async () => {
+                    const res = await call(null);
+                    expect(res.status).toBe(401);
+                    expect(res.body).toEqual({ message: "Authentication required" });
+                    checkReposNotCalled();
+                });
+
+                it("returns 401 with invalid token and never invokes repository", async () => {
+                    const res = await call("Bearer invalid-token-xyz");
+                    expect(res.status).toBe(401);
+                    expect(res.body).toEqual({ message: "Invalid or expired authentication token" });
+                    checkReposNotCalled();
+                });
+
+                it("returns 403 for non-admin user and never invokes repository", async () => {
+                    const res = await call("Bearer regular-user-token");
+                    expect(res.status).toBe(403);
+                    expect(res.body).toEqual({ message: "Administrator privileges required" });
+                    checkReposNotCalled();
+                });
+
+                it("succeeds for authenticated administrator", async () => {
+                    const res = await call("Bearer valid-admin-token");
+                    expect(res.status).toBe(expectedSuccessStatus);
+                });
+            });
+        });
+
+        describe("Public endpoints isolation", () => {
+            it("verifies GET /api/products remains public without requiring token", async () => {
+                const res = await request(app).get("/api/products");
+                expect(res.status).toBe(200);
+                expect(fake.verifyIdToken).not.toHaveBeenCalled();
+            });
+
+            it("verifies POST, PUT, DELETE on /api/products return 404 (not routable publicly)", async () => {
+                const postRes = await request(app).post("/api/products").send({ name: "Test" });
+                expect(postRes.status).toBe(404);
+
+                const putRes = await request(app).put("/api/products/prod-auth-1").send({ name: "Test" });
+                expect(putRes.status).toBe(404);
+
+                const delRes = await request(app).delete("/api/products/prod-auth-1");
+                expect(delRes.status).toBe(404);
+            });
+        });
+    });
+
     describe("OpenAPI Documentation Compliance", () => {
         it("defines /admin/categories, /admin/products and /admin/products/{id} paths and matching schemas", () => {
             const rawYaml = fs.readFileSync(openApiPath, "utf8");
