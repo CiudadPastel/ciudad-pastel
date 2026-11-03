@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ImageOff, LoaderCircle, Pencil, Plus, Trash2 } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import ConfirmDialog from "../../components/ui/ConfirmDialog";
 import Notice from "../../components/ui/Notice";
@@ -59,16 +59,33 @@ function ProductsList() {
     const [pendingProductId, setPendingProductId] = useState(null);
     const [notice, setNotice] = useState(null);
     const navigate = useNavigate();
+    const location = useLocation();
+    const noticeAfterReload = useRef(null);
+    const locationFlashHandled = useRef(false);
 
     useEffect(() => {
         let active = true;
 
         getAdminProducts()
             .then((products) => {
-                if (active) setState({ status: "success", products, error: null });
+                if (!active) return;
+
+                setState({ status: "success", products, error: null });
+                if (noticeAfterReload.current) {
+                    setNotice({ variant: "success", text: noticeAfterReload.current });
+                    noticeAfterReload.current = null;
+                }
             })
             .catch((error) => {
-                if (active) setState({ status: "error", products: [], error });
+                if (!active) return;
+
+                setState({ status: "error", products: [], error });
+                if (noticeAfterReload.current) {
+                    setNotice({
+                        variant: "error",
+                        text: "El producto se retiró, pero no se pudo actualizar la lista. Intente de nuevo."
+                    });
+                }
             });
 
         return () => {
@@ -76,7 +93,18 @@ function ProductsList() {
         };
     }, [reloadKey]);
 
+    useEffect(() => {
+        const flash = location.state?.flash;
+        if (!flash || locationFlashHandled.current) return;
+
+        if (state.status !== "success") return;
+
+        locationFlashHandled.current = true;
+        navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+    }, [location.pathname, location.search, location.state?.flash, navigate, state.status]);
+
     function retry() {
+        setNotice(null);
         setState({ status: "loading", products: [], error: null });
         setReloadKey((key) => key + 1);
     }
@@ -90,17 +118,10 @@ function ProductsList() {
 
         try {
             await removeAdminProduct(product.id);
-            setState((previous) => ({
-                ...previous,
-                products: previous.products.map((item) =>
-                    item.id === product.id ? { ...item, status: "withdrawn" } : item
-                )
-            }));
-            setNotice({
-                variant: "success",
-                text: `«${product.name}» se retiró y dejó de mostrarse en la tienda.`
-            });
+            noticeAfterReload.current = "Producto retirado correctamente.";
             setConfirmingProduct(null);
+            setState((previous) => ({ ...previous, status: "loading", error: null }));
+            setReloadKey((key) => key + 1);
         } catch (error) {
             setNotice({
                 variant: "error",
@@ -120,6 +141,11 @@ function ProductsList() {
     const visibleProducts = state.products.filter((product) =>
         filter === "all" || product.status === filter
     );
+    const visibleNotice = notice ?? (
+        state.status === "success" && location.state?.flash
+            ? { variant: "success", text: location.state.flash }
+            : null
+    );
 
     return (
         <section className={styles.page}>
@@ -136,12 +162,20 @@ function ProductsList() {
                 </Link>
             </header>
 
-            {notice && (
+            {visibleNotice && (
                 <Notice
-                    variant={notice.variant}
-                    onClose={() => setNotice(null)}
+                    variant={visibleNotice.variant}
+                    onClose={() => {
+                        setNotice(null);
+                        if (location.state?.flash) {
+                            navigate(`${location.pathname}${location.search}`, {
+                                replace: true,
+                                state: null
+                            });
+                        }
+                    }}
                 >
-                    {notice.text}
+                    {visibleNotice.text}
                 </Notice>
             )}
 

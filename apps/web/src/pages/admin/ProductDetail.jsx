@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft, ImageOff, Package, Pencil, Trash2 } from "lucide-react";
-import { Link, useLocation, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import ConfirmDialog from "../../components/ui/ConfirmDialog";
 import Notice from "../../components/ui/Notice";
@@ -18,6 +18,7 @@ const PRODUCT_STATUS_LABELS = {
 function ProductDetail() {
     const { id } = useParams();
     const location = useLocation();
+    const navigate = useNavigate();
     const [state, setState] = useState({ id: null, status: "loading", product: null, error: null });
     const [reloadKey, setReloadKey] = useState(0);
     const [notice, setNotice] = useState(
@@ -54,17 +55,10 @@ function ProductDetail() {
         setNotice(null);
         try {
             await removeAdminProduct(product.id);
-            setState((previous) => ({
-                ...previous,
-                product: previous.product?.id === product.id
-                    ? { ...previous.product, status: "withdrawn" }
-                    : previous.product
-            }));
-            setNotice({
-                variant: "success",
-                text: `«${product.name}» se retiró y dejó de mostrarse en la tienda.`
+            navigate("/admin/productos", {
+                replace: true,
+                state: { flash: "Producto retirado correctamente." }
             });
-            setConfirmingRemoval(false);
         } catch (error) {
             setNotice({
                 variant: "error",

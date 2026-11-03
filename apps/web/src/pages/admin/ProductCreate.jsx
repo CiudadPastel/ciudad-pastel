@@ -256,16 +256,15 @@ function ProductCreate({ product = null }) {
                 imageUrl: values.imageUrl.trim() || null,
                 available: values.available
             };
-            const savedProduct = isEditing
-                ? await updateAdminProduct(product.id, payload)
-                : await createAdminProduct(payload);
+            if (isEditing) await updateAdminProduct(product.id, payload);
+            else await createAdminProduct(payload);
 
-            navigate(`/admin/productos/${encodeURIComponent(savedProduct.id)}`, {
+            navigate("/admin/productos", {
                 replace: true,
                 state: {
                     flash: isEditing
-                        ? `El producto «${savedProduct.name}» se actualizó correctamente.`
-                        : `El producto «${savedProduct.name}» se creó correctamente.`
+                        ? "Producto actualizado correctamente."
+                        : "Producto creado correctamente."
                 }
             });
         } catch (error) {

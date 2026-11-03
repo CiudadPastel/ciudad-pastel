@@ -1,23 +1,25 @@
 import { apiFetch } from "./api";
 
 export function getAdminProducts() {
-    return apiFetch("/admin/products", { requiresAuth: true });
+    return apiFetch("/admin/products", { requiresAuth: true, cache: "no-store" });
 }
 
 export function getAdminProductById(id) {
     return apiFetch(`/admin/products/${encodeURIComponent(id)}`, {
-        requiresAuth: true
+        requiresAuth: true,
+        cache: "no-store"
     });
 }
 
 export function getAdminProductForEdit(id) {
     return apiFetch(`/admin/products/${encodeURIComponent(id)}/edit`, {
-        requiresAuth: true
+        requiresAuth: true,
+        cache: "no-store"
     });
 }
 
 export function getAdminCategories() {
-    return apiFetch("/admin/categories", { requiresAuth: true });
+    return apiFetch("/admin/categories", { requiresAuth: true, cache: "no-store" });
 }
 
 export function createAdminProduct(product) {
