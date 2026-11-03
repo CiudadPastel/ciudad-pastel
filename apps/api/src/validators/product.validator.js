@@ -89,8 +89,15 @@ export function validateProductInput(input) {
     // 5. ImageUrl validation (optional)
     const imageUrl = validateOptionalImageUrl(input.imageUrl, "imageUrl", errors);
 
-    // 6. Available validation (boolean, defaults to true)
-    const available = input.available !== undefined ? Boolean(input.available) : true;
+    // 6. Available validation (optional boolean; undefined when omitted)
+    let available = undefined;
+    if (input.available !== undefined) {
+        if (typeof input.available !== "boolean") {
+            errors.push("available must be a boolean.");
+        } else {
+            available = input.available;
+        }
+    }
 
     if (errors.length > 0) {
         return {
