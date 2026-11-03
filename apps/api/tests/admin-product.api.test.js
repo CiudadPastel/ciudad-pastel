@@ -1434,4 +1434,340 @@ describe("Admin Products and Categories API (HU-T06 / CIU-6)", () => {
             ]);
         });
     });
+
+    describe("Full Acceptance Criteria and Lifecycle Verification (Rama 8 / CIU-6)", () => {
+        const rawYaml = fs.readFileSync(openApiPath, "utf8");
+        const doc = YAML.parse(rawYaml);
+        const expectedAdminProductProps = Object.keys(doc.components.schemas.AdminProduct.properties).sort();
+        const expectedAdminCategoryProps = Object.keys(doc.components.schemas.AdminCategory.properties).sort();
+
+        beforeEach(() => {
+            fake.setCategoriesList([
+                { id: "cat-life-1", name: "Pastelería Fina", order: 1 },
+                { id: "cat-life-2", name: "Bebidas", order: 2 }
+            ]);
+        });
+
+        it("executes the complete product lifecycle: Create -> List/Detail -> Modify -> Remove -> Visibility & Invalidation", async () => {
+            // Initial state: public catalog is empty
+            const initialPublic = await request(app).get("/api/products");
+            expect(initialPublic.status).toBe(200);
+            expect(initialPublic.body.items).toHaveLength(0);
+
+            // 1. Create product as admin (AC 1)
+            const createPayload = {
+                name: "Tarta de Fresas Silvestres",
+                description: "Fresas frescas seleccionadas con crema chantilly",
+                price: 13500,
+                categoryId: "cat-life-1",
+                imageUrl: "https://example.com/tarta-fresas.jpg",
+                available: true
+            };
+
+            const createRes = await request(app)
+                .post("/api/admin/products")
+                .set(ADMIN_AUTH_HEADER)
+                .send(createPayload);
+
+            expect(createRes.status).toBe(201);
+            const created = createRes.body;
+            expect(created.id).toBeDefined();
+            expect(created.name).toBe("Tarta de Fresas Silvestres");
+            expect(created.price).toBe(13500);
+            expect(created.status).toBe("published");
+            expect(created.available).toBe(true);
+            expect(created.category).toEqual({ id: "cat-life-1", name: "Pastelería Fina" });
+            expect(Object.keys(created).sort()).toEqual(expectedAdminProductProps);
+
+            const productId = created.id;
+
+            // 2. View in Admin List & Admin Detail (AC 2)
+            const adminDetailRes = await request(app)
+                .get(`/api/admin/products/${productId}`)
+                .set(ADMIN_AUTH_HEADER);
+
+            expect(adminDetailRes.status).toBe(200);
+            expect(adminDetailRes.body).toEqual(created);
+            expect(Object.keys(adminDetailRes.body).sort()).toEqual(expectedAdminProductProps);
+
+            const adminListRes = await request(app)
+                .get("/api/admin/products")
+                .set(ADMIN_AUTH_HEADER);
+
+            expect(adminListRes.status).toBe(200);
+            const foundInAdminList = adminListRes.body.find((p) => p.id === productId);
+            expect(foundInAdminList).toBeDefined();
+            expect(foundInAdminList.name).toBe("Tarta de Fresas Silvestres");
+
+            // 3. Immediately reflected in public catalog without waiting for cache TTL (AC 5)
+            const publicAfterCreate = await request(app).get("/api/products");
+            expect(publicAfterCreate.status).toBe(200);
+            expect(publicAfterCreate.body.items).toHaveLength(1);
+            expect(publicAfterCreate.body.items[0].id).toBe(productId);
+            expect(publicAfterCreate.body.items[0].name).toBe("Tarta de Fresas Silvestres");
+            expect(publicAfterCreate.body.items[0].price).toBe(13500);
+
+            // 4. Modify product (AC 3)
+            const updatePayload = {
+                name: "Tarta de Fresas y Chocolate",
+                description: "Fresas frescas con ganache de chocolate belga",
+                price: 15000,
+                categoryId: "cat-life-1",
+                imageUrl: "https://example.com/tarta-chocolate.jpg",
+                available: false
+            };
+
+            const updateRes = await request(app)
+                .put(`/api/admin/products/${productId}`)
+                .set(ADMIN_AUTH_HEADER)
+                .send(updatePayload);
+
+            expect(updateRes.status).toBe(200);
+            const updated = updateRes.body;
+            expect(updated.id).toBe(productId);
+            expect(updated.name).toBe("Tarta de Fresas y Chocolate");
+            expect(updated.description).toBe("Fresas frescas con ganache de chocolate belga");
+            expect(updated.price).toBe(15000);
+            expect(updated.available).toBe(false);
+            expect(updated.createdAt).toBe(created.createdAt);
+            expect(Object.keys(updated).sort()).toEqual(expectedAdminProductProps);
+
+            // Public catalog reflects update immediately (AC 5)
+            const publicAfterUpdate = await request(app).get("/api/products");
+            expect(publicAfterUpdate.status).toBe(200);
+            expect(publicAfterUpdate.body.items[0].name).toBe("Tarta de Fresas y Chocolate");
+            expect(publicAfterUpdate.body.items[0].price).toBe(15000);
+            expect(publicAfterUpdate.body.items[0].available).toBe(false);
+
+            // 5. Remove product (AC 4)
+            const deleteRes = await request(app)
+                .delete(`/api/admin/products/${productId}`)
+                .set(ADMIN_AUTH_HEADER);
+
+            expect(deleteRes.status).toBe(204);
+
+            // Disappears from public catalog immediately (AC 4 & AC 5)
+            const publicAfterDelete = await request(app).get("/api/products");
+            expect(publicAfterDelete.status).toBe(200);
+            expect(publicAfterDelete.body.items).toHaveLength(0);
+
+            // Remains in admin detail with status "withdrawn"
+            const adminDetailAfterDelete = await request(app)
+                .get(`/api/admin/products/${productId}`)
+                .set(ADMIN_AUTH_HEADER);
+
+            expect(adminDetailAfterDelete.status).toBe(200);
+            expect(adminDetailAfterDelete.body.status).toBe("withdrawn");
+            expect(adminDetailAfterDelete.body.name).toBe("Tarta de Fresas y Chocolate");
+
+            // Remains in admin list with status "withdrawn"
+            const adminListAfterDelete = await request(app)
+                .get("/api/admin/products")
+                .set(ADMIN_AUTH_HEADER);
+
+            expect(adminListAfterDelete.status).toBe(200);
+            const withdrawnInList = adminListAfterDelete.body.find((p) => p.id === productId);
+            expect(withdrawnInList).toBeDefined();
+            expect(withdrawnInList.status).toBe("withdrawn");
+
+            // 6. Withdrawn products cannot be updated (returns 409 Conflict)
+            const updateWithdrawnRes = await request(app)
+                .put(`/api/admin/products/${productId}`)
+                .set(ADMIN_AUTH_HEADER)
+                .send(updatePayload);
+
+            expect(updateWithdrawnRes.status).toBe(409);
+            expect(updateWithdrawnRes.body).toEqual({
+                message: "Removed products cannot be updated."
+            });
+
+            // 7. Removing an already withdrawn product is idempotent (204)
+            const deleteAgainRes = await request(app)
+                .delete(`/api/admin/products/${productId}`)
+                .set(ADMIN_AUTH_HEADER);
+
+            expect(deleteAgainRes.status).toBe(204);
+        });
+
+        it("validates live endpoint response shapes strictly against OpenAPI schema without leaking internal fields", async () => {
+            fake.setProductsList([
+                {
+                    id: "prod-strict-1",
+                    name: "Pastel Zanahoria",
+                    description: "Con nueces y especias",
+                    price: 11000,
+                    categoryId: "cat-life-1",
+                    imageUrl: "https://example.com/zanahoria.jpg",
+                    available: true,
+                    status: "published",
+                    createdAt: "2026-02-01T10:00:00.000Z",
+                    updatedAt: "2026-02-01T10:00:00.000Z",
+                    // Sensitive / internal fields that MUST NEVER leak to clients:
+                    _firestoreCollection: "products",
+                    _internalDocId: "internal-uuid-9999",
+                    brand: "Secreto repostero",
+                    wholesaleCost: 6500,
+                    tenantId: "cr-central-1"
+                }
+            ]);
+
+            // Test GET /api/admin/products
+            const listRes = await request(app)
+                .get("/api/admin/products")
+                .set(ADMIN_AUTH_HEADER);
+
+            expect(listRes.status).toBe(200);
+            expect(listRes.body).toHaveLength(1);
+            const itemFromList = listRes.body[0];
+            expect(Object.keys(itemFromList).sort()).toEqual(expectedAdminProductProps);
+            expect(itemFromList.categoryId).toBeUndefined();
+            expect(itemFromList._firestoreCollection).toBeUndefined();
+            expect(itemFromList.wholesaleCost).toBeUndefined();
+            expect(itemFromList.tenantId).toBeUndefined();
+
+            // Test GET /api/admin/products/:id
+            const detailRes = await request(app)
+                .get("/api/admin/products/prod-strict-1")
+                .set(ADMIN_AUTH_HEADER);
+
+            expect(detailRes.status).toBe(200);
+            expect(Object.keys(detailRes.body).sort()).toEqual(expectedAdminProductProps);
+            expect(detailRes.body.categoryId).toBeUndefined();
+            expect(detailRes.body._firestoreCollection).toBeUndefined();
+            expect(detailRes.body.wholesaleCost).toBeUndefined();
+
+            // Test GET /api/admin/categories
+            const categoriesRes = await request(app)
+                .get("/api/admin/categories")
+                .set(ADMIN_AUTH_HEADER);
+
+            expect(categoriesRes.status).toBe(200);
+            expect(categoriesRes.body.length).toBeGreaterThan(0);
+            for (const cat of categoriesRes.body) {
+                expect(Object.keys(cat).sort()).toEqual(expectedAdminCategoryProps);
+                expect(cat.createdAt).toBeUndefined();
+                expect(cat.updatedAt).toBeUndefined();
+            }
+        });
+
+        describe("Repository unexpected failure isolation (returns 500 without internals across all 6 endpoints)", () => {
+            const faultMatrix = [
+                {
+                    endpoint: "GET /api/admin/categories",
+                    invoke: () => request(app).get("/api/admin/categories").set(ADMIN_AUTH_HEADER),
+                    setupFault: () => {
+                        fake.categoryRepository.getCategories.mockRejectedValueOnce(
+                            new Error("DB_FATAL_SOCKET: cluster host unavailable at 10.0.0.1:27017")
+                        );
+                    },
+                    expectedMessage: "Could not retrieve categories."
+                },
+                {
+                    endpoint: "GET /api/admin/products",
+                    invoke: () => request(app).get("/api/admin/products").set(ADMIN_AUTH_HEADER),
+                    setupFault: () => {
+                        fake.productRepository.getAllProducts.mockRejectedValueOnce(
+                            new Error("DB_FATAL_SOCKET: cluster host unavailable at 10.0.0.1:27017")
+                        );
+                    },
+                    expectedMessage: "Could not retrieve products."
+                },
+                {
+                    endpoint: "GET /api/admin/products/:id",
+                    invoke: () => request(app).get("/api/admin/products/prod-strict-1").set(ADMIN_AUTH_HEADER),
+                    setupFault: () => {
+                        fake.productRepository.getProductById.mockRejectedValueOnce(
+                            new Error("DB_FATAL_SOCKET: cluster host unavailable at 10.0.0.1:27017")
+                        );
+                    },
+                    expectedMessage: "Could not retrieve product."
+                },
+                {
+                    endpoint: "POST /api/admin/products",
+                    invoke: () =>
+                        request(app)
+                            .post("/api/admin/products")
+                            .set(ADMIN_AUTH_HEADER)
+                            .send({
+                                name: "Pastel Falla",
+                                price: 10000,
+                                categoryId: "cat-life-1"
+                            }),
+                    setupFault: () => {
+                        fake.productRepository.upsertProduct.mockRejectedValueOnce(
+                            new Error("DB_FATAL_SOCKET: cluster host unavailable at 10.0.0.1:27017")
+                        );
+                    },
+                    expectedMessage: "Could not create product."
+                },
+                {
+                    endpoint: "PUT /api/admin/products/:id",
+                    invoke: () =>
+                        request(app)
+                            .put("/api/admin/products/prod-fault-put")
+                            .set(ADMIN_AUTH_HEADER)
+                            .send({
+                                name: "Pastel Falla Update",
+                                price: 12000,
+                                categoryId: "cat-life-1"
+                            }),
+                    setupFault: () => {
+                        fake.setProductsList([
+                            {
+                                id: "prod-fault-put",
+                                name: "Pastel Falla Update",
+                                price: 10000,
+                                categoryId: "cat-life-1",
+                                status: "published",
+                                createdAt: "2026-01-01T00:00:00.000Z",
+                                updatedAt: "2026-01-01T00:00:00.000Z"
+                            }
+                        ]);
+                        fake.productRepository.upsertProduct.mockRejectedValueOnce(
+                            new Error("DB_FATAL_SOCKET: cluster host unavailable at 10.0.0.1:27017")
+                        );
+                    },
+                    expectedMessage: "Could not update product."
+                },
+                {
+                    endpoint: "DELETE /api/admin/products/:id",
+                    invoke: () =>
+                        request(app)
+                            .delete("/api/admin/products/prod-fault-del")
+                            .set(ADMIN_AUTH_HEADER),
+                    setupFault: () => {
+                        fake.setProductsList([
+                            {
+                                id: "prod-fault-del",
+                                name: "Pastel Falla Delete",
+                                price: 10000,
+                                categoryId: "cat-life-1",
+                                status: "published",
+                                createdAt: "2026-01-01T00:00:00.000Z",
+                                updatedAt: "2026-01-01T00:00:00.000Z"
+                            }
+                        ]);
+                        fake.productRepository.upsertProduct.mockRejectedValueOnce(
+                            new Error("DB_FATAL_SOCKET: cluster host unavailable at 10.0.0.1:27017")
+                        );
+                    },
+                    expectedMessage: "Could not remove product."
+                }
+            ];
+
+            for (const item of faultMatrix) {
+                it(`returns 500 with sanitized message on ${item.endpoint}`, async () => {
+                    item.setupFault();
+                    const res = await item.invoke();
+
+                    expect(res.status).toBe(500);
+                    expect(res.body).toEqual({ message: item.expectedMessage });
+                    expect(res.body.stack).toBeUndefined();
+                    expect(JSON.stringify(res.body)).not.toContain("DB_FATAL_SOCKET");
+                    expect(JSON.stringify(res.body)).not.toContain("10.0.0.1");
+                });
+            }
+        });
+    });
+
 });
