@@ -3,6 +3,7 @@ import { getAllProducts, getProductById, upsertProduct } from "../repositories/p
 import { getCategories, getCategoryById } from "../repositories/category.repository.js";
 import { buildProduct, toAdminProduct, PRODUCT_STATUS } from "../models/product.model.js";
 import { validateProductInput } from "../validators/product.validator.js";
+import { invalidateProductCatalogCache } from "./product.service.js";
 
 function namedError(name, message, details = null, code = null) {
     const error = new Error(message);
@@ -52,6 +53,7 @@ export async function getAdminProduct(id) {
 
 /**
  * Creates a new catalog product with published status and defaults available to true if omitted.
+ * Invalidates the public catalog cache immediately upon success.
  */
 export async function createProduct(input) {
     const validation = validateProductInput(input);
@@ -79,6 +81,7 @@ export async function createProduct(input) {
     });
 
     const saved = await upsertProduct(productEntity);
+    invalidateProductCatalogCache();
     return toAdminProduct(saved, category);
 }
 
@@ -86,6 +89,7 @@ export async function createProduct(input) {
  * Updates an existing catalog product.
  * Returns 404 when product does not exist, and 409 when the product is withdrawn.
  * Preserves id, status and createdAt; replaces mutable fields; omits available to preserve current value.
+ * Invalidates the public catalog cache immediately upon success.
  */
 export async function updateProduct(id, input) {
     const existing = await getProductById(id);
@@ -122,6 +126,7 @@ export async function updateProduct(id, input) {
     });
 
     const saved = await upsertProduct(updatedEntity);
+    invalidateProductCatalogCache();
     return toAdminProduct(saved, category);
 }
 
@@ -129,6 +134,7 @@ export async function updateProduct(id, input) {
  * Soft-deletes a catalog product by setting its status to withdrawn.
  * Idempotent: if the product is already withdrawn, returns without error.
  * Returns 404 if the product does not exist.
+ * Invalidates the public catalog cache immediately upon success.
  */
 export async function removeProduct(id) {
     const existing = await getProductById(id);
@@ -146,6 +152,7 @@ export async function removeProduct(id) {
     });
 
     await upsertProduct(updatedEntity);
+    invalidateProductCatalogCache();
 }
 
 /**
