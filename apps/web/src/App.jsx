@@ -34,6 +34,18 @@ import CoursesList
 import EnrollmentRequests
     from "./pages/admin/EnrollmentRequests";
 
+import ProductDetail
+    from "./pages/admin/ProductDetail";
+
+import ProductCreate
+    from "./pages/admin/ProductCreate";
+
+import ProductEdit
+    from "./pages/admin/ProductEdit";
+
+import ProductsList
+    from "./pages/admin/ProductsList";
+
 import PublicCoursesList
     from "./pages/public/CoursesList";
 
@@ -132,6 +144,26 @@ function App() {
                     <Route
                         path="cursos/:id/editar"
                         element={<CourseEdit />}
+                    />
+
+                    <Route
+                        path="productos"
+                        element={<ProductsList />}
+                    />
+
+                    <Route
+                        path="productos/nuevo"
+                        element={<ProductCreate />}
+                    />
+
+                    <Route
+                        path="productos/:id/editar"
+                        element={<ProductEdit />}
+                    />
+
+                    <Route
+                        path="productos/:id"
+                        element={<ProductDetail />}
                     />
 
                     <Route

@@ -1,6 +1,7 @@
 import {
     listAdminProducts as listAdminProductsService,
     getAdminProduct as getAdminProductService,
+    getAdminProductForEdit as getAdminProductForEditService,
     createProduct as createProductService,
     updateProduct as updateProductService,
     removeProduct as removeProductService,
@@ -47,6 +48,19 @@ export async function getAdminProductById(req, res) {
 
         console.error("Admin product detail error:", error);
         return res.status(500).json({ message: "Could not retrieve product." });
+    }
+}
+
+// GET /api/admin/products/:id/edit
+export async function getAdminProductForEdit(req, res) {
+    try {
+        const product = await getAdminProductForEditService(req.params.id);
+        return res.status(200).json(product);
+    } catch (error) {
+        if (sendKnownError(res, error)) return;
+
+        console.error("Admin product edit data error:", error);
+        return res.status(500).json({ message: "Could not retrieve product for editing." });
     }
 }
 

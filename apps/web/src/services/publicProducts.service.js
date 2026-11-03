@@ -16,11 +16,11 @@ export function getPublicProducts({ page, limit, q, categoryId } = {}) {
     if (q) params.set("q", q);
     if (categoryId) params.set("categoryId", categoryId);
     const query = params.toString();
-    return apiFetch(`/products${query ? `?${query}` : ""}`);
+    return apiFetch(`/products${query ? `?${query}` : ""}`, { cache: "no-store" });
 }
 
 export async function getPublicCategories() {
-    const categories = await apiFetch("/categories");
+    const categories = await apiFetch("/categories", { cache: "no-store" });
 
     if (!Array.isArray(categories)) {
         throw new Error("La lista de categorías no es válida.");
@@ -31,5 +31,5 @@ export async function getPublicCategories() {
 
 /** Detalle público de un producto: { id, name, brand, description, weight, size, price, imageUrl, available, category }. */
 export function getPublicProduct(id) {
-    return apiFetch(`/products/${encodeURIComponent(id)}`);
+    return apiFetch(`/products/${encodeURIComponent(id)}`, { cache: "no-store" });
 }

@@ -439,6 +439,54 @@ describe("Admin Products and Categories API (HU-T06 / CIU-6)", () => {
         });
     });
 
+    describe("GET /api/admin/products/:id/edit", () => {
+        it("returns editable fields without changing the existing AdminProduct response", async () => {
+            fake.setProductsList([
+                {
+                    id: "prod-edit-1",
+                    name: "Harina de trigo",
+                    brand: "Dos Pinos",
+                    description: "Harina para repostería",
+                    weight: "1 kg",
+                    size: null,
+                    price: 2500,
+                    categoryId: "cat-1",
+                    imageUrl: "https://example.com/harina.jpg",
+                    available: false,
+                    status: "published"
+                }
+            ]);
+
+            const response = await request(app)
+                .get("/api/admin/products/prod-edit-1/edit")
+                .set(ADMIN_AUTH_HEADER);
+
+            expect(response.status).toBe(200);
+            expect(response.body).toEqual({
+                id: "prod-edit-1",
+                name: "Harina de trigo",
+                brand: "Dos Pinos",
+                description: "Harina para repostería",
+                weight: "1 kg",
+                size: null,
+                price: 2500,
+                categoryId: "cat-1",
+                imageUrl: "https://example.com/harina.jpg",
+                available: false,
+                status: "published"
+            });
+        });
+
+        it("returns 404 when the product to edit does not exist", async () => {
+            const response = await request(app)
+                .get("/api/admin/products/nonexistent-id/edit")
+                .set(ADMIN_AUTH_HEADER);
+
+            expect(response.status).toBe(404);
+            expect(response.body).toEqual({ message: "Product not found." });
+        });
+    });
+
     describe("POST /api/admin/products", () => {
         const validPayload = {
             name: "Torta Chilena",
@@ -1006,6 +1054,17 @@ describe("Admin Products and Categories API (HU-T06 / CIU-6)", () => {
             expect(res.status).toBe(500);
             expect(res.body).toEqual({ message: "Could not remove product." });
             expect(JSON.stringify(res.body)).not.toContain("replica sync");
+
+            const listRes = await request(app)
+                .get("/api/admin/products")
+                .set(ADMIN_AUTH_HEADER);
+
+            expect(listRes.status).toBe(200);
+            expect(listRes.body).toHaveLength(1);
+            expect(listRes.body[0]).toMatchObject({
+                id: productToRemove.id,
+                status: "published"
+            });
         });
     });
 
@@ -1448,11 +1507,12 @@ describe("Admin Products and Categories API (HU-T06 / CIU-6)", () => {
             ]);
         });
 
-        it("executes the complete product lifecycle: Create -> List/Detail -> Modify -> Remove -> Visibility & Invalidation", async () => {
+        it("refleja creación, cambio de precio y eliminación aunque el catálogo esté en caché", async () => {
             // Initial state: public catalog is empty
             const initialPublic = await request(app).get("/api/products");
             expect(initialPublic.status).toBe(200);
             expect(initialPublic.body.items).toHaveLength(0);
+            expect(fake.productRepository.getPublishedProducts).toHaveBeenCalledTimes(1);
 
             // 1. Create product as admin (AC 1)
             const createPayload = {
@@ -1502,6 +1562,7 @@ describe("Admin Products and Categories API (HU-T06 / CIU-6)", () => {
             // 3. Immediately reflected in public catalog without waiting for cache TTL (AC 5)
             const publicAfterCreate = await request(app).get("/api/products");
             expect(publicAfterCreate.status).toBe(200);
+            expect(fake.productRepository.getPublishedProducts).toHaveBeenCalledTimes(2);
             expect(publicAfterCreate.body.items).toHaveLength(1);
             expect(publicAfterCreate.body.items[0].id).toBe(productId);
             expect(publicAfterCreate.body.items[0].name).toBe("Tarta de Fresas Silvestres");
@@ -1535,6 +1596,7 @@ describe("Admin Products and Categories API (HU-T06 / CIU-6)", () => {
             // Public catalog reflects update immediately (AC 5)
             const publicAfterUpdate = await request(app).get("/api/products");
             expect(publicAfterUpdate.status).toBe(200);
+            expect(fake.productRepository.getPublishedProducts).toHaveBeenCalledTimes(3);
             expect(publicAfterUpdate.body.items[0].name).toBe("Tarta de Fresas y Chocolate");
             expect(publicAfterUpdate.body.items[0].price).toBe(15000);
             expect(publicAfterUpdate.body.items[0].available).toBe(false);
@@ -1549,6 +1611,7 @@ describe("Admin Products and Categories API (HU-T06 / CIU-6)", () => {
             // Disappears from public catalog immediately (AC 4 & AC 5)
             const publicAfterDelete = await request(app).get("/api/products");
             expect(publicAfterDelete.status).toBe(200);
+            expect(fake.productRepository.getPublishedProducts).toHaveBeenCalledTimes(4);
             expect(publicAfterDelete.body.items).toHaveLength(0);
 
             // Remains in admin detail with status "withdrawn"

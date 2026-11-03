@@ -1364,6 +1364,37 @@ paths:
         "500":
           description: Internal server error.
 
+  /admin/products/{id}/edit:
+    get:
+      tags:
+        - Admin Products
+      summary: Get editable administrative product fields
+      description: Returns only the product fields required to populate the administrative edit form. Requires administrative privileges.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Identifier of the product to retrieve for editing.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Editable product fields retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminProductEdit"
+        "401":
+          description: Authentication required or invalid token.
+        "403":
+          description: Administrator privileges required.
+        "404":
+          description: Product not found.
+        "500":
+          description: Internal server error.
+
   /admin/products/{id}:
     get:
       tags:
@@ -2213,6 +2244,41 @@ components:
           type: string
           format: date-time
           description: Document last update timestamp in ISO 8601 format.
+
+    AdminProductEdit:
+      type: object
+      description: Editable product fields for the administrative edit form.
+      required: [id, name, brand, description, weight, size, price, categoryId, imageUrl, available, status]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        brand:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        weight:
+          type: string
+          nullable: true
+        size:
+          type: string
+          nullable: true
+        price:
+          type: integer
+          description: Price in Costa Rican colones (CRC).
+        categoryId:
+          type: string
+        imageUrl:
+          type: string
+          nullable: true
+        available:
+          type: boolean
+        status:
+          type: string
+          enum: [published, withdrawn]
 
     CreateProductRequest:
       type: object
