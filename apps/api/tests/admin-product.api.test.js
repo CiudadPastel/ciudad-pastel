@@ -893,6 +893,117 @@ describe("Admin Products and Categories API (HU-T06 / CIU-6)", () => {
         });
     });
 
+    describe("DELETE /api/admin/products/:id", () => {
+        const productToRemove = {
+            id: "prod-del-1",
+            name: "Pastel a Retirar",
+            description: "Para dar de baja",
+            price: 10000,
+            categoryId: "cat-1",
+            imageUrl: "https://example.com/del.jpg",
+            available: true,
+            status: "published",
+            createdAt: "2026-01-01T10:00:00.000Z",
+            updatedAt: "2026-01-01T10:00:00.000Z"
+        };
+
+        beforeEach(() => {
+            fake.setCategoriesList([
+                { id: "cat-1", name: "Pasteles", order: 1 }
+            ]);
+            fake.setProductsList([
+                { ...productToRemove }
+            ]);
+        });
+
+        it("requires authentication (returns 401 without token)", async () => {
+            const res = await request(app)
+                .delete(`/api/admin/products/${productToRemove.id}`);
+
+            expect(res.status).toBe(401);
+            expect(res.body).toEqual({ message: "Authentication required" });
+            expect(fake.productRepository.upsertProduct).not.toHaveBeenCalled();
+        });
+
+        it("requires administrator privileges (returns 403 for non-admin)", async () => {
+            const res = await request(app)
+                .delete(`/api/admin/products/${productToRemove.id}`)
+                .set(USER_AUTH_HEADER);
+
+            expect(res.status).toBe(403);
+            expect(res.body).toEqual({ message: "Administrator privileges required" });
+            expect(fake.productRepository.upsertProduct).not.toHaveBeenCalled();
+        });
+
+        it("returns 204 with no body and marks the product status as withdrawn in detail view", async () => {
+            const res = await request(app)
+                .delete(`/api/admin/products/${productToRemove.id}`)
+                .set(ADMIN_AUTH_HEADER);
+
+            expect(res.status).toBe(204);
+            expect(res.text).toBe("");
+
+            const detailRes = await request(app)
+                .get(`/api/admin/products/${productToRemove.id}`)
+                .set(ADMIN_AUTH_HEADER);
+
+            expect(detailRes.status).toBe(200);
+            expect(detailRes.body.status).toBe("withdrawn");
+        });
+
+        it("keeps the withdrawn product visible in the admin products list", async () => {
+            await request(app)
+                .delete(`/api/admin/products/${productToRemove.id}`)
+                .set(ADMIN_AUTH_HEADER);
+
+            const listRes = await request(app)
+                .get("/api/admin/products")
+                .set(ADMIN_AUTH_HEADER);
+
+            expect(listRes.status).toBe(200);
+            const found = listRes.body.find((p) => p.id === productToRemove.id);
+            expect(found).toBeDefined();
+            expect(found.status).toBe("withdrawn");
+        });
+
+        it("is idempotent: deleting an already withdrawn product returns 204", async () => {
+            const firstDelete = await request(app)
+                .delete(`/api/admin/products/${productToRemove.id}`)
+                .set(ADMIN_AUTH_HEADER);
+
+            expect(firstDelete.status).toBe(204);
+
+            const secondDelete = await request(app)
+                .delete(`/api/admin/products/${productToRemove.id}`)
+                .set(ADMIN_AUTH_HEADER);
+
+            expect(secondDelete.status).toBe(204);
+        });
+
+        it("returns 404 when product does not exist", async () => {
+            const res = await request(app)
+                .delete("/api/admin/products/nonexistent-product-id")
+                .set(ADMIN_AUTH_HEADER);
+
+            expect(res.status).toBe(404);
+            expect(res.body).toEqual({ message: "Product not found." });
+        });
+
+        it("returns clean 500 when product removal repository fails", async () => {
+            fake.productRepository.upsertProduct.mockRejectedValueOnce(
+                new Error("Firestore node replica sync failure")
+            );
+
+            const res = await request(app)
+                .delete(`/api/admin/products/${productToRemove.id}`)
+                .set(ADMIN_AUTH_HEADER);
+
+            expect(res.status).toBe(500);
+            expect(res.body).toEqual({ message: "Could not remove product." });
+            expect(JSON.stringify(res.body)).not.toContain("replica sync");
+        });
+    });
+
     describe("GET /api/admin/categories", () => {
         it("requires authentication (returns 401 without token)", async () => {
             const res = await request(app).get("/api/admin/categories");
@@ -984,6 +1095,8 @@ describe("Admin Products and Categories API (HU-T06 / CIU-6)", () => {
             expect(doc.paths["/admin/products/{id}"].get.tags).toContain("Admin Products");
             expect(doc.paths["/admin/products/{id}"].put).toBeDefined();
             expect(doc.paths["/admin/products/{id}"].put.tags).toContain("Admin Products");
+            expect(doc.paths["/admin/products/{id}"].delete).toBeDefined();
+            expect(doc.paths["/admin/products/{id}"].delete.tags).toContain("Admin Products");
 
             expect(doc.components.schemas.AdminProduct).toBeDefined();
             expect(doc.components.schemas.AdminCategory).toBeDefined();

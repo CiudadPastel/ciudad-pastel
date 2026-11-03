@@ -1435,6 +1435,32 @@ paths:
         "500":
           description: Internal server error.
 
+    delete:
+      tags:
+        - Admin Products
+      summary: Remove a catalog product
+      description: Soft-deletes a product by changing its lifecycle status to withdrawn. Idempotent operation that preserves product data. Requires administrative privileges.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Identifier of the product to remove.
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Product removed successfully or already withdrawn.
+        "401":
+          description: Authentication required or invalid token.
+        "403":
+          description: Administrator privileges required.
+        "404":
+          description: Product not found.
+        "500":
+          description: Internal server error.
+
 components:
   securitySchemes:
     studentAccessBearer:
