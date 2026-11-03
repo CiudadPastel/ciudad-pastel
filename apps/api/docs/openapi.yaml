@@ -1335,6 +1335,35 @@ paths:
         "500":
           description: Internal server error.
 
+    post:
+      tags:
+        - Admin Products
+      summary: Create a catalog product
+      description: Creates a new catalog product with published status and defaults available to true if omitted. Requires administrative privileges.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductRequest"
+      responses:
+        "201":
+          description: Product created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminProduct"
+        "400":
+          description: Invalid product input or category does not exist.
+        "401":
+          description: Authentication required or invalid token.
+        "403":
+          description: Administrator privileges required.
+        "500":
+          description: Internal server error.
+
   /admin/products/{id}:
     get:
       tags:
@@ -2118,3 +2147,36 @@ components:
           type: string
           format: date-time
           description: Document last update timestamp in ISO 8601 format.
+
+    CreateProductRequest:
+      type: object
+      description: Payload for creating a new catalog product.
+      required: [name, price, categoryId]
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 120
+          description: Product display name.
+        description:
+          type: string
+          nullable: true
+          maxLength: 1000
+          description: Optional description.
+        price:
+          type: integer
+          minimum: 1
+          maximum: 10000000
+          description: Price in Costa Rican colones (CRC).
+        categoryId:
+          type: string
+          description: Identifier of an existing category.
+        imageUrl:
+          type: string
+          nullable: true
+          maxLength: 500
+          description: Optional http/https image URL.
+        available:
+          type: boolean
+          default: true
+          description: Availability status. Defaults to true if omitted.
