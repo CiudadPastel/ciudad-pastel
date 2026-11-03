@@ -23,21 +23,7 @@ const fake = vi.hoisted(() => {
             getAllProducts: vi.fn(() => Promise.resolve([...productsList])),
             getProductById: vi.fn((id) => Promise.resolve(productsList.find((p) => p.id === id) || null)),
             getPublishedProducts: vi.fn(() => Promise.resolve(productsList.filter((p) => p.status === "published"))),
-            upsertProduct: vi.fn((product) => {
-                const now = new Date().toISOString();
-                const existingIndex = productsList.findIndex((p) => p.id === product.id);
-                const saved = {
-                    ...product,
-                    createdAt: existingIndex >= 0 ? productsList[existingIndex].createdAt : now,
-                    updatedAt: now
-                };
-                if (existingIndex >= 0) {
-                    productsList[existingIndex] = saved;
-                } else {
-                    productsList.push(saved);
-                }
-                return Promise.resolve(saved);
-            })
+            upsertProduct: vi.fn()
         },
         categoryRepository: {
             getCategories: vi.fn(() => Promise.resolve([...categoriesList])),
@@ -90,6 +76,23 @@ describe("Admin Products and Categories API (HU-T06 / CIU-6)", () => {
         fake.productRepository.getProductById.mockImplementation((id) =>
             Promise.resolve(fake.getProductsList().find((p) => p.id === id) || null)
         );
+        fake.productRepository.upsertProduct.mockImplementation((product) => {
+            const now = new Date().toISOString();
+            const list = fake.getProductsList();
+            const existingIndex = list.findIndex((p) => p.id === product.id);
+            const saved = {
+                ...product,
+                createdAt: existingIndex >= 0 ? list[existingIndex].createdAt : now,
+                updatedAt: now
+            };
+            if (existingIndex >= 0) {
+                list[existingIndex] = saved;
+            } else {
+                list.push(saved);
+            }
+            return Promise.resolve(saved);
+        });
+
         fake.categoryRepository.getCategories.mockImplementation(() =>
             Promise.resolve([...fake.getCategoriesList()])
         );
@@ -431,6 +434,258 @@ describe("Admin Products and Categories API (HU-T06 / CIU-6)", () => {
         });
     });
 
+    describe("POST /api/admin/products", () => {
+        const validPayload = {
+            name: "Torta Chilena",
+            description: "Capas crujientes con dulce de leche",
+            price: 16000,
+            categoryId: "cat-1",
+            imageUrl: "https://example.com/chilena.jpg",
+            available: false
+        };
+
+        beforeEach(() => {
+            fake.setCategoriesList([
+                { id: "cat-1", name: "Pasteles", order: 1 }
+            ]);
+        });
+
+        it("requires authentication (returns 401 without token)", async () => {
+            const res = await request(app)
+                .post("/api/admin/products")
+                .send(validPayload);
+
+            expect(res.status).toBe(401);
+            expect(res.body).toEqual({ message: "Authentication required" });
+            expect(fake.productRepository.upsertProduct).not.toHaveBeenCalled();
+        });
+
+        it("requires administrator privileges (returns 403 for non-admin)", async () => {
+            const res = await request(app)
+                .post("/api/admin/products")
+                .set(USER_AUTH_HEADER)
+                .send(validPayload);
+
+            expect(res.status).toBe(403);
+            expect(res.body).toEqual({ message: "Administrator privileges required" });
+            expect(fake.productRepository.upsertProduct).not.toHaveBeenCalled();
+        });
+
+        it("creates a product and returns 201 with the full AdminProduct representation", async () => {
+            const res = await request(app)
+                .post("/api/admin/products")
+                .set(ADMIN_AUTH_HEADER)
+                .send(validPayload);
+
+            expect(res.status).toBe(201);
+            expect(res.body.name).toBe("Torta Chilena");
+            expect(res.body.description).toBe("Capas crujientes con dulce de leche");
+            expect(res.body.price).toBe(16000);
+            expect(res.body.imageUrl).toBe("https://example.com/chilena.jpg");
+            expect(res.body.available).toBe(false);
+            expect(res.body.status).toBe("published");
+            expect(res.body.category).toEqual({ id: "cat-1", name: "Pasteles" });
+            expect(typeof res.body.id).toBe("string");
+            expect(res.body.id.length).toBeGreaterThan(10);
+            expect(res.body.createdAt).toBeDefined();
+            expect(res.body.updatedAt).toBeDefined();
+
+            // Verify exact keys of AdminProduct
+            const expectedKeys = [
+                "available",
+                "category",
+                "createdAt",
+                "description",
+                "id",
+                "imageUrl",
+                "name",
+                "price",
+                "status",
+                "updatedAt"
+            ].sort();
+            expect(Object.keys(res.body).sort()).toEqual(expectedKeys);
+        });
+
+        it("defaults available to true when omitted", async () => {
+            const { available, ...payloadWithoutAvailable } = validPayload;
+            const res = await request(app)
+                .post("/api/admin/products")
+                .set(ADMIN_AUTH_HEADER)
+                .send(payloadWithoutAvailable);
+
+            expect(res.status).toBe(201);
+            expect(res.body.available).toBe(true);
+        });
+
+        it("sets optional description and imageUrl to null when omitted or blank", async () => {
+            const minimalPayload = {
+                name: "Pan Casero",
+                price: 1500,
+                categoryId: "cat-1"
+            };
+
+            const res = await request(app)
+                .post("/api/admin/products")
+                .set(ADMIN_AUTH_HEADER)
+                .send(minimalPayload);
+
+            expect(res.status).toBe(201);
+            expect(res.body.description).toBeNull();
+            expect(res.body.imageUrl).toBeNull();
+        });
+
+        it("returns 400 when required fields are missing", async () => {
+            const res = await request(app)
+                .post("/api/admin/products")
+                .set(ADMIN_AUTH_HEADER)
+                .send({});
+
+            expect(res.status).toBe(400);
+            expect(res.body.message).toBe("Validation failed.");
+            expect(res.body.errors).toContain("name is required.");
+            expect(res.body.errors).toContain("price must be an integer between 1 and 10000000.");
+            expect(res.body.errors).toContain("categoryId is required.");
+        });
+
+        it("returns 400 when body is not a JSON object", async () => {
+            const res = await request(app)
+                .post("/api/admin/products")
+                .set(ADMIN_AUTH_HEADER)
+                .send(["not", "an", "object"]);
+
+            expect(res.status).toBe(400);
+            expect(res.body.errors).toContain("Product body must be a valid JSON object.");
+        });
+
+        it("returns 400 when price is 0, decimal, string, negative, or exceeds maximum", async () => {
+            const invalidPrices = [0, 15.75, "15000", -500, 10_000_001];
+
+            for (const invalidPrice of invalidPrices) {
+                const res = await request(app)
+                    .post("/api/admin/products")
+                    .set(ADMIN_AUTH_HEADER)
+                    .send({ ...validPayload, price: invalidPrice });
+
+                expect(res.status).toBe(400);
+                expect(res.body.errors).toEqual(
+                    expect.arrayContaining([
+                        "price must be an integer between 1 and 10000000."
+                    ])
+                );
+            }
+        });
+
+        it("returns 400 when name is too short or too long", async () => {
+            const shortRes = await request(app)
+                .post("/api/admin/products")
+                .set(ADMIN_AUTH_HEADER)
+                .send({ ...validPayload, name: "AB" });
+
+            expect(shortRes.status).toBe(400);
+            expect(shortRes.body.errors).toContain("name must contain at least 3 characters.");
+
+            const longRes = await request(app)
+                .post("/api/admin/products")
+                .set(ADMIN_AUTH_HEADER)
+                .send({ ...validPayload, name: "A".repeat(121) });
+
+            expect(longRes.status).toBe(400);
+            expect(longRes.body.errors).toContain("name must not exceed 120 characters.");
+        });
+
+        it("returns 400 when imageUrl is not a valid http/https URL or exceeds length", async () => {
+            const jsRes = await request(app)
+                .post("/api/admin/products")
+                .set(ADMIN_AUTH_HEADER)
+                .send({ ...validPayload, imageUrl: "javascript:alert(1)" });
+
+            expect(jsRes.status).toBe(400);
+            expect(jsRes.body.errors).toContain("imageUrl must be a valid http or https URL.");
+
+            const ftpRes = await request(app)
+                .post("/api/admin/products")
+                .set(ADMIN_AUTH_HEADER)
+                .send({ ...validPayload, imageUrl: "ftp://example.com/cake.jpg" });
+
+            expect(ftpRes.status).toBe(400);
+            expect(ftpRes.body.errors).toContain("imageUrl must be a valid http or https URL.");
+
+            const longUrlRes = await request(app)
+                .post("/api/admin/products")
+                .set(ADMIN_AUTH_HEADER)
+                .send({ ...validPayload, imageUrl: "https://example.com/" + "a".repeat(500) });
+
+            expect(longUrlRes.status).toBe(400);
+            expect(longUrlRes.body.errors).toContain("imageUrl must not exceed 500 characters.");
+        });
+
+        it("returns 400 when categoryId references a nonexistent category", async () => {
+            const res = await request(app)
+                .post("/api/admin/products")
+                .set(ADMIN_AUTH_HEADER)
+                .send({ ...validPayload, categoryId: "nonexistent-category" });
+
+            expect(res.status).toBe(400);
+            expect(res.body.message).toBe("Validation failed.");
+            expect(res.body.errors).toContain("categoryId must reference an existing category.");
+        });
+
+        it("ignores protected fields (status: 'withdrawn', id, createdAt, updatedAt) provided in the request body", async () => {
+            const maliciousPayload = {
+                ...validPayload,
+                id: "client-provided-custom-id",
+                status: "withdrawn",
+                createdAt: "2020-01-01T00:00:00.000Z",
+                updatedAt: "2020-01-01T00:00:00.000Z"
+            };
+
+            const res = await request(app)
+                .post("/api/admin/products")
+                .set(ADMIN_AUTH_HEADER)
+                .send(maliciousPayload);
+
+            expect(res.status).toBe(201);
+            expect(res.body.id).not.toBe("client-provided-custom-id");
+            expect(res.body.status).toBe("published");
+            expect(res.body.createdAt).not.toBe("2020-01-01T00:00:00.000Z");
+        });
+
+        it("allows the created product to appear in GET /api/admin/products", async () => {
+            const createRes = await request(app)
+                .post("/api/admin/products")
+                .set(ADMIN_AUTH_HEADER)
+                .send(validPayload);
+
+            expect(createRes.status).toBe(201);
+            const createdId = createRes.body.id;
+
+            const listRes = await request(app)
+                .get("/api/admin/products")
+                .set(ADMIN_AUTH_HEADER);
+
+            expect(listRes.status).toBe(200);
+            const found = listRes.body.find((p) => p.id === createdId);
+            expect(found).toBeDefined();
+            expect(found.name).toBe("Torta Chilena");
+            expect(found.category).toEqual({ id: "cat-1", name: "Pasteles" });
+        });
+
+        it("returns clean 500 when product creation repository fails", async () => {
+            fake.productRepository.upsertProduct.mockRejectedValueOnce(
+                new Error("Firestore commit transaction lock timeout")
+            );
+
+            const res = await request(app)
+                .post("/api/admin/products")
+                .set(ADMIN_AUTH_HEADER)
+                .send(validPayload);
+
+            expect(res.status).toBe(500);
+            expect(res.body).toEqual({ message: "Could not create product." });
+            expect(JSON.stringify(res.body)).not.toContain("Firestore commit");
+        });
+    });
+
     describe("GET /api/admin/categories", () => {
         it("requires authentication (returns 401 without token)", async () => {
             const res = await request(app).get("/api/admin/categories");
@@ -515,12 +770,15 @@ describe("Admin Products and Categories API (HU-T06 / CIU-6)", () => {
 
             expect(doc.paths["/admin/products"]).toBeDefined();
             expect(doc.paths["/admin/products"].get.tags).toContain("Admin Products");
+            expect(doc.paths["/admin/products"].post).toBeDefined();
+            expect(doc.paths["/admin/products"].post.tags).toContain("Admin Products");
 
             expect(doc.paths["/admin/products/{id}"]).toBeDefined();
             expect(doc.paths["/admin/products/{id}"].get.tags).toContain("Admin Products");
 
             expect(doc.components.schemas.AdminProduct).toBeDefined();
             expect(doc.components.schemas.AdminCategory).toBeDefined();
+            expect(doc.components.schemas.CreateProductRequest).toBeDefined();
 
             const adminProductProps = Object.keys(doc.components.schemas.AdminProduct.properties).sort();
             const expectedProps = [
@@ -539,6 +797,16 @@ describe("Admin Products and Categories API (HU-T06 / CIU-6)", () => {
 
             const adminCategoryProps = Object.keys(doc.components.schemas.AdminCategory.properties).sort();
             expect(adminCategoryProps).toEqual(["id", "name", "order"]);
+
+            const createProductProps = Object.keys(doc.components.schemas.CreateProductRequest.properties).sort();
+            expect(createProductProps).toEqual([
+                "available",
+                "categoryId",
+                "description",
+                "imageUrl",
+                "name",
+                "price"
+            ]);
         });
     });
 });

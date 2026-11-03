@@ -1,6 +1,7 @@
 import {
     listAdminProducts as listAdminProductsService,
     getAdminProduct as getAdminProductService,
+    createProduct as createProductService,
     listAdminCategories as listAdminCategoriesService
 } from "../services/admin-product.service.js";
 
@@ -44,6 +45,19 @@ export async function getAdminProductById(req, res) {
 
         console.error("Admin product detail error:", error);
         return res.status(500).json({ message: "Could not retrieve product." });
+    }
+}
+
+// POST /api/admin/products
+export async function createAdminProduct(req, res) {
+    try {
+        const product = await createProductService(req.body);
+        return res.status(201).json(product);
+    } catch (error) {
+        if (sendKnownError(res, error)) return;
+
+        console.error("Admin product creation error:", error);
+        return res.status(500).json({ message: "Could not create product." });
     }
 }
 
