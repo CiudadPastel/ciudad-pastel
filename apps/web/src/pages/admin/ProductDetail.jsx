@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft, ImageOff, Package, Pencil, Trash2 } from "lucide-react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 
+import Notice from "../../components/ui/Notice";
 import StateMessage, { RetryButton } from "../../components/ui/StateMessage";
 import { getAdminProductById } from "../../services/products.service";
 import { formatDateTime, formatPrice } from "../../utils/format";
@@ -15,8 +16,10 @@ const PRODUCT_STATUS_LABELS = {
 
 function ProductDetail() {
     const { id } = useParams();
+    const location = useLocation();
     const [state, setState] = useState({ id: null, status: "loading", product: null, error: null });
     const [reloadKey, setReloadKey] = useState(0);
+    const [notice, setNotice] = useState(location.state?.flash ?? "");
 
     useEffect(() => {
         let active = true;
@@ -50,6 +53,12 @@ function ProductDetail() {
                 <ArrowLeft size={18} aria-hidden="true" />
                 Volver a productos
             </Link>
+
+            {notice && (
+                <Notice variant="success" onClose={() => setNotice("")}>
+                    {notice}
+                </Notice>
+            )}
 
             {status === "loading" && (
                 <div className={styles.loadingDetail} role="status">

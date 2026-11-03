@@ -37,6 +37,9 @@ import EnrollmentRequests
 import ProductDetail
     from "./pages/admin/ProductDetail";
 
+import ProductCreate
+    from "./pages/admin/ProductCreate";
+
 import ProductsList
     from "./pages/admin/ProductsList";
 
@@ -143,6 +146,11 @@ function App() {
                     <Route
                         path="productos"
                         element={<ProductsList />}
+                    />
+
+                    <Route
+                        path="productos/nuevo"
+                        element={<ProductCreate />}
                     />
 
                     <Route

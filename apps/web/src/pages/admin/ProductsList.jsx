@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { ImageOff } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { ImageOff, Plus } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 
 import StateMessage, { RetryButton } from "../../components/ui/StateMessage";
 import { getAdminProducts } from "../../services/products.service";
@@ -78,6 +78,10 @@ function ProductsList() {
                         Productos registrados, publicados o retirados.
                     </p>
                 </div>
+                <Link to="/admin/productos/nuevo" className="btn btn-primary">
+                    <Plus size={18} aria-hidden="true" />
+                    Nuevo producto
+                </Link>
             </header>
 
             {state.status === "loading" && (
