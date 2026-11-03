@@ -3,6 +3,7 @@ import {
     getAdminProduct as getAdminProductService,
     createProduct as createProductService,
     updateProduct as updateProductService,
+    removeProduct as removeProductService,
     listAdminCategories as listAdminCategoriesService
 } from "../services/admin-product.service.js";
 
@@ -72,6 +73,19 @@ export async function updateAdminProduct(req, res) {
 
         console.error("Admin product update error:", error);
         return res.status(500).json({ message: "Could not update product." });
+    }
+}
+
+// DELETE /api/admin/products/:id
+export async function removeAdminProduct(req, res) {
+    try {
+        await removeProductService(req.params.id);
+        return res.status(204).send();
+    } catch (error) {
+        if (sendKnownError(res, error)) return;
+
+        console.error("Admin product removal error:", error);
+        return res.status(500).json({ message: "Could not remove product." });
     }
 }
 

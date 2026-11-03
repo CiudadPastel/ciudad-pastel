@@ -8,6 +8,7 @@ import {
     getAdminProductById,
     createAdminProduct,
     updateAdminProduct,
+    removeAdminProduct,
     getAdminCategories
 } from "../controllers/admin-product.controller.js";
 
@@ -17,6 +18,7 @@ adminProductRoutes.get("/", getAdminProducts);
 adminProductRoutes.get("/:id", getAdminProductById);
 adminProductRoutes.post("/", createAdminProduct);
 adminProductRoutes.put("/:id", updateAdminProduct);
+adminProductRoutes.delete("/:id", removeAdminProduct);
 
 export const adminCategoryRoutes = Router();
 adminCategoryRoutes.use(authenticateUser, requireAdmin);

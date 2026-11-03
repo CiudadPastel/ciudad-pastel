@@ -126,6 +126,29 @@ export async function updateProduct(id, input) {
 }
 
 /**
+ * Soft-deletes a catalog product by setting its status to withdrawn.
+ * Idempotent: if the product is already withdrawn, returns without error.
+ * Returns 404 if the product does not exist.
+ */
+export async function removeProduct(id) {
+    const existing = await getProductById(id);
+    if (!existing) {
+        throw namedError("NotFoundError", "Product not found.");
+    }
+
+    if (existing.status === PRODUCT_STATUS.WITHDRAWN) {
+        return;
+    }
+
+    const updatedEntity = buildProduct({
+        ...existing,
+        status: PRODUCT_STATUS.WITHDRAWN
+    });
+
+    await upsertProduct(updatedEntity);
+}
+
+/**
  * Retrieves all categories formatted for administrative form selection.
  */
 export async function listAdminCategories() {
