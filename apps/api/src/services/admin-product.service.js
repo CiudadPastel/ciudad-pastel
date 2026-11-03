@@ -83,6 +83,49 @@ export async function createProduct(input) {
 }
 
 /**
+ * Updates an existing catalog product.
+ * Returns 404 when product does not exist, and 409 when the product is withdrawn.
+ * Preserves id, status and createdAt; replaces mutable fields; omits available to preserve current value.
+ */
+export async function updateProduct(id, input) {
+    const existing = await getProductById(id);
+    if (!existing) {
+        throw namedError("NotFoundError", "Product not found.");
+    }
+
+    if (existing.status === PRODUCT_STATUS.WITHDRAWN) {
+        throw namedError("ConflictError", "Removed products cannot be updated.");
+    }
+
+    const validation = validateProductInput(input);
+    if (!validation.valid) {
+        throw namedError("ValidationError", "Validation failed.", validation.errors);
+    }
+
+    const category = await getCategoryById(validation.data.categoryId);
+    if (!category) {
+        throw namedError("ValidationError", "Validation failed.", ["categoryId must reference an existing category."]);
+    }
+
+    const updatedEntity = buildProduct({
+        id: existing.id,
+        name: validation.data.name,
+        brand: validation.data.brand ?? null,
+        description: validation.data.description ?? null,
+        weight: validation.data.weight ?? null,
+        size: validation.data.size ?? null,
+        price: validation.data.price,
+        categoryId: category.id,
+        imageUrl: validation.data.imageUrl ?? null,
+        available: validation.data.available !== undefined ? validation.data.available : existing.available,
+        status: existing.status
+    });
+
+    const saved = await upsertProduct(updatedEntity);
+    return toAdminProduct(saved, category);
+}
+
+/**
  * Retrieves all categories formatted for administrative form selection.
  */
 export async function listAdminCategories() {
