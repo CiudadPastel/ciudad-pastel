@@ -57,3 +57,28 @@ export function toPublicProductDetail(product, category = null) {
         category: base.category
     };
 }
+
+// Converts a stored product entity into its administrative representation (HU-T06).
+export function toAdminProduct(product, category = null) {
+    if (!product) return null;
+
+    const formatIso = (val) => {
+        if (!val) return new Date().toISOString();
+        if (val instanceof Date) return val.toISOString();
+        if (typeof val?.toDate === "function") return val.toDate().toISOString();
+        return String(val);
+    };
+
+    return {
+        id: product.id,
+        name: product.name,
+        description: product.description ?? null,
+        price: product.price,
+        imageUrl: sanitizeImageUrl(product.imageUrl),
+        available: Boolean(product.available),
+        status: product.status ?? PRODUCT_STATUS.PUBLISHED,
+        category: category ? { id: category.id, name: category.name } : null,
+        createdAt: formatIso(product.createdAt),
+        updatedAt: formatIso(product.updatedAt)
+    };
+}
