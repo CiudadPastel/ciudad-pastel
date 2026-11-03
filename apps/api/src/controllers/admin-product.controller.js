@@ -2,6 +2,7 @@ import {
     listAdminProducts as listAdminProductsService,
     getAdminProduct as getAdminProductService,
     createProduct as createProductService,
+    updateProduct as updateProductService,
     listAdminCategories as listAdminCategoriesService
 } from "../services/admin-product.service.js";
 
@@ -58,6 +59,19 @@ export async function createAdminProduct(req, res) {
 
         console.error("Admin product creation error:", error);
         return res.status(500).json({ message: "Could not create product." });
+    }
+}
+
+// PUT /api/admin/products/:id
+export async function updateAdminProduct(req, res) {
+    try {
+        const product = await updateProductService(req.params.id, req.body);
+        return res.status(200).json(product);
+    } catch (error) {
+        if (sendKnownError(res, error)) return;
+
+        console.error("Admin product update error:", error);
+        return res.status(500).json({ message: "Could not update product." });
     }
 }
 

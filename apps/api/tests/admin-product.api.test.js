@@ -686,6 +686,213 @@ describe("Admin Products and Categories API (HU-T06 / CIU-6)", () => {
         });
     });
 
+    describe("PUT /api/admin/products/:id", () => {
+        const initialProduct = {
+            id: "prod-update-1",
+            name: "Queque Seco",
+            description: "Queque tradicional de vainilla",
+            price: 5000,
+            categoryId: "cat-1",
+            imageUrl: "https://example.com/queque.jpg",
+            available: true,
+            status: "published",
+            createdAt: "2026-01-01T10:00:00.000Z",
+            updatedAt: "2026-01-01T10:00:00.000Z"
+        };
+
+        const updatePayload = {
+            name: "Queque Navideño Especial",
+            description: "Con frutas confitadas y nueces",
+            price: 8500,
+            categoryId: "cat-2",
+            imageUrl: "https://example.com/navideno.jpg",
+            available: false
+        };
+
+        beforeEach(() => {
+            fake.setCategoriesList([
+                { id: "cat-1", name: "Tradicionales", order: 1 },
+                { id: "cat-2", name: "Especiales", order: 2 }
+            ]);
+            fake.setProductsList([
+                { ...initialProduct }
+            ]);
+        });
+
+        it("requires authentication (returns 401 without token)", async () => {
+            const res = await request(app)
+                .put(`/api/admin/products/${initialProduct.id}`)
+                .send(updatePayload);
+
+            expect(res.status).toBe(401);
+            expect(res.body).toEqual({ message: "Authentication required" });
+            expect(fake.productRepository.upsertProduct).not.toHaveBeenCalled();
+        });
+
+        it("requires administrator privileges (returns 403 for non-admin)", async () => {
+            const res = await request(app)
+                .put(`/api/admin/products/${initialProduct.id}`)
+                .set(USER_AUTH_HEADER)
+                .send(updatePayload);
+
+            expect(res.status).toBe(403);
+            expect(res.body).toEqual({ message: "Administrator privileges required" });
+            expect(fake.productRepository.upsertProduct).not.toHaveBeenCalled();
+        });
+
+        it("updates name, description, price, category and availability, returning 200 with AdminProduct", async () => {
+            const res = await request(app)
+                .put(`/api/admin/products/${initialProduct.id}`)
+                .set(ADMIN_AUTH_HEADER)
+                .send(updatePayload);
+
+            expect(res.status).toBe(200);
+            expect(res.body.id).toBe(initialProduct.id);
+            expect(res.body.name).toBe("Queque Navideño Especial");
+            expect(res.body.description).toBe("Con frutas confitadas y nueces");
+            expect(res.body.price).toBe(8500);
+            expect(res.body.category).toEqual({ id: "cat-2", name: "Especiales" });
+            expect(res.body.imageUrl).toBe("https://example.com/navideno.jpg");
+            expect(res.body.available).toBe(false);
+            expect(res.body.status).toBe("published");
+            expect(res.body.createdAt).toBe(initialProduct.createdAt);
+            expect(new Date(res.body.updatedAt).getTime()).toBeGreaterThan(
+                new Date(initialProduct.updatedAt).getTime()
+            );
+        });
+
+        it("preserves current availability when available is omitted in the update payload", async () => {
+            const { available, ...payloadWithoutAvailable } = updatePayload;
+
+            const res = await request(app)
+                .put(`/api/admin/products/${initialProduct.id}`)
+                .set(ADMIN_AUTH_HEADER)
+                .send(payloadWithoutAvailable);
+
+            expect(res.status).toBe(200);
+            expect(res.body.available).toBe(true); // preserved from initialProduct.available
+        });
+
+        it("sets description and imageUrl to null when omitted or blank in update payload", async () => {
+            const payloadWithoutDescAndImage = {
+                name: "Queque Básico",
+                price: 4000,
+                categoryId: "cat-1"
+            };
+
+            const res = await request(app)
+                .put(`/api/admin/products/${initialProduct.id}`)
+                .set(ADMIN_AUTH_HEADER)
+                .send(payloadWithoutDescAndImage);
+
+            expect(res.status).toBe(200);
+            expect(res.body.description).toBeNull();
+            expect(res.body.imageUrl).toBeNull();
+        });
+
+        it("preserves id, status and createdAt and does not allow client to overwrite them", async () => {
+            const maliciousPayload = {
+                ...updatePayload,
+                id: "hacked-id",
+                status: "withdrawn",
+                createdAt: "2019-01-01T00:00:00.000Z"
+            };
+
+            const res = await request(app)
+                .put(`/api/admin/products/${initialProduct.id}`)
+                .set(ADMIN_AUTH_HEADER)
+                .send(maliciousPayload);
+
+            expect(res.status).toBe(200);
+            expect(res.body.id).toBe(initialProduct.id);
+            expect(res.body.status).toBe("published");
+            expect(res.body.createdAt).toBe(initialProduct.createdAt);
+        });
+
+        it("returns 404 when product does not exist", async () => {
+            const res = await request(app)
+                .put("/api/admin/products/nonexistent-product-id")
+                .set(ADMIN_AUTH_HEADER)
+                .send(updatePayload);
+
+            expect(res.status).toBe(404);
+            expect(res.body).toEqual({ message: "Product not found." });
+        });
+
+        it("returns 409 Conflict when attempting to update a withdrawn product", async () => {
+            fake.setProductsList([
+                {
+                    ...initialProduct,
+                    id: "prod-withdrawn-1",
+                    status: "withdrawn"
+                }
+            ]);
+
+            const res = await request(app)
+                .put("/api/admin/products/prod-withdrawn-1")
+                .set(ADMIN_AUTH_HEADER)
+                .send(updatePayload);
+
+            expect(res.status).toBe(409);
+            expect(res.body).toEqual({ message: "Removed products cannot be updated." });
+        });
+
+        it("returns 400 when categoryId does not reference an existing category", async () => {
+            const res = await request(app)
+                .put(`/api/admin/products/${initialProduct.id}`)
+                .set(ADMIN_AUTH_HEADER)
+                .send({ ...updatePayload, categoryId: "cat-ghost" });
+
+            expect(res.status).toBe(400);
+            expect(res.body.errors).toContain("categoryId must reference an existing category.");
+        });
+
+        it("returns 400 when validation rules fail (e.g. invalid price or name)", async () => {
+            const res = await request(app)
+                .put(`/api/admin/products/${initialProduct.id}`)
+                .set(ADMIN_AUTH_HEADER)
+                .send({ ...updatePayload, price: -50, name: "X" });
+
+            expect(res.status).toBe(400);
+            expect(res.body.errors).toContain("name must contain at least 3 characters.");
+            expect(res.body.errors).toContain("price must be an integer between 1 and 10000000.");
+        });
+
+        it("reflects the update when subsequently fetching GET /api/admin/products/:id", async () => {
+            const updateRes = await request(app)
+                .put(`/api/admin/products/${initialProduct.id}`)
+                .set(ADMIN_AUTH_HEADER)
+                .send(updatePayload);
+
+            expect(updateRes.status).toBe(200);
+
+            const detailRes = await request(app)
+                .get(`/api/admin/products/${initialProduct.id}`)
+                .set(ADMIN_AUTH_HEADER);
+
+            expect(detailRes.status).toBe(200);
+            expect(detailRes.body.name).toBe("Queque Navideño Especial");
+            expect(detailRes.body.price).toBe(8500);
+            expect(detailRes.body.available).toBe(false);
+            expect(detailRes.body.category).toEqual({ id: "cat-2", name: "Especiales" });
+        });
+
+        it("returns clean 500 when product update repository fails", async () => {
+            fake.productRepository.upsertProduct.mockRejectedValueOnce(
+                new Error("Firestore database write lock failure")
+            );
+
+            const res = await request(app)
+                .put(`/api/admin/products/${initialProduct.id}`)
+                .set(ADMIN_AUTH_HEADER)
+                .send(updatePayload);
+
+            expect(res.status).toBe(500);
+            expect(res.body).toEqual({ message: "Could not update product." });
+            expect(JSON.stringify(res.body)).not.toContain("database write lock");
+        });
+    });
+
     describe("GET /api/admin/categories", () => {
         it("requires authentication (returns 401 without token)", async () => {
             const res = await request(app).get("/api/admin/categories");
@@ -775,6 +982,8 @@ describe("Admin Products and Categories API (HU-T06 / CIU-6)", () => {
 
             expect(doc.paths["/admin/products/{id}"]).toBeDefined();
             expect(doc.paths["/admin/products/{id}"].get.tags).toContain("Admin Products");
+            expect(doc.paths["/admin/products/{id}"].put).toBeDefined();
+            expect(doc.paths["/admin/products/{id}"].put.tags).toContain("Admin Products");
 
             expect(doc.components.schemas.AdminProduct).toBeDefined();
             expect(doc.components.schemas.AdminCategory).toBeDefined();

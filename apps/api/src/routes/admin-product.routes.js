@@ -7,6 +7,7 @@ import {
     getAdminProducts,
     getAdminProductById,
     createAdminProduct,
+    updateAdminProduct,
     getAdminCategories
 } from "../controllers/admin-product.controller.js";
 
@@ -15,6 +16,7 @@ adminProductRoutes.use(authenticateUser, requireAdmin);
 adminProductRoutes.get("/", getAdminProducts);
 adminProductRoutes.get("/:id", getAdminProductById);
 adminProductRoutes.post("/", createAdminProduct);
+adminProductRoutes.put("/:id", updateAdminProduct);
 
 export const adminCategoryRoutes = Router();
 adminCategoryRoutes.use(authenticateUser, requireAdmin);

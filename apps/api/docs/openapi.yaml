@@ -1395,6 +1395,46 @@ paths:
         "500":
           description: Internal server error.
 
+    put:
+      tags:
+        - Admin Products
+      summary: Update a catalog product
+      description: Replaces mutable fields of an active catalog product. Products with status withdrawn cannot be updated and return 409. Requires administrative privileges.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Identifier of the product to update.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductRequest"
+      responses:
+        "200":
+          description: Product updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminProduct"
+        "400":
+          description: Invalid product input or category does not exist.
+        "401":
+          description: Authentication required or invalid token.
+        "403":
+          description: Administrator privileges required.
+        "404":
+          description: Product not found.
+        "409":
+          description: Removed products cannot be updated.
+        "500":
+          description: Internal server error.
+
 components:
   securitySchemes:
     studentAccessBearer:
