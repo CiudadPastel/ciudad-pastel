@@ -57,6 +57,19 @@ describe("product.validator", () => {
                 );
             });
 
+            it("accepts name on the minimum boundary (3 characters)", () => {
+                const result = validateProductInput({ ...validProduct, name: "ABC" });
+                expect(result.valid).toBe(true);
+                expect(result.data.name).toBe("ABC");
+            });
+
+            it("accepts name on the maximum boundary (120 characters)", () => {
+                const maxName = "A".repeat(120);
+                const result = validateProductInput({ ...validProduct, name: maxName });
+                expect(result.valid).toBe(true);
+                expect(result.data.name).toBe(maxName);
+            });
+
             it("rejects name exceeding 120 characters", () => {
                 const longName = "A".repeat(121);
                 const result = validateProductInput({ ...validProduct, name: longName });
@@ -121,6 +134,13 @@ describe("product.validator", () => {
                 expect(resultNullDesc.data.description).toBeNull();
             });
 
+            it("accepts description on the maximum boundary (1000 characters)", () => {
+                const maxDesc = "D".repeat(1000);
+                const result = validateProductInput({ ...validProduct, description: maxDesc });
+                expect(result.valid).toBe(true);
+                expect(result.data.description).toBe(maxDesc);
+            });
+
             it("rejects description exceeding 1000 characters", () => {
                 const longDesc = "D".repeat(1001);
                 const result = validateProductInput({ ...validProduct, description: longDesc });
@@ -162,8 +182,18 @@ describe("product.validator", () => {
                 expect(ftpResult.errors).toContain("imageUrl must be a valid http or https URL.");
             });
 
+            it("accepts URL on the maximum boundary (500 characters)", () => {
+                const prefix = "https://example.com/";
+                const boundaryUrl = prefix + "a".repeat(500 - prefix.length);
+                expect(boundaryUrl.length).toBe(500);
+                const result = validateProductInput({ ...validProduct, imageUrl: boundaryUrl });
+                expect(result.valid).toBe(true);
+                expect(result.data.imageUrl).toBe(boundaryUrl);
+            });
+
             it("rejects URL exceeding 500 characters", () => {
-                const longUrl = "https://example.com/" + "a".repeat(490);
+                const prefix = "https://example.com/";
+                const longUrl = prefix + "a".repeat(501 - prefix.length);
                 const result = validateProductInput({ ...validProduct, imageUrl: longUrl });
                 expect(result.valid).toBe(false);
                 expect(result.errors).toContain("imageUrl must not exceed 500 characters.");
@@ -177,6 +207,48 @@ describe("product.validator", () => {
                 const emptyResult = validateProductInput({ ...validProduct, imageUrl: "   " });
                 expect(emptyResult.valid).toBe(true);
                 expect(emptyResult.data.imageUrl).toBeNull();
+            });
+        });
+
+        describe("available validation", () => {
+            it("returns undefined when available is omitted or explicitly undefined", () => {
+                const { available, ...withoutAvailable } = validProduct;
+                const resultWithout = validateProductInput(withoutAvailable);
+                expect(resultWithout.valid).toBe(true);
+                expect(resultWithout.data.available).toBeUndefined();
+
+                const resultExplicitUndefined = validateProductInput({
+                    ...validProduct,
+                    available: undefined
+                });
+                expect(resultExplicitUndefined.valid).toBe(true);
+                expect(resultExplicitUndefined.data.available).toBeUndefined();
+            });
+
+            it("accepts boolean true and preserves it", () => {
+                const result = validateProductInput({ ...validProduct, available: true });
+                expect(result.valid).toBe(true);
+                expect(result.data.available).toBe(true);
+            });
+
+            it("accepts boolean false and preserves it", () => {
+                const result = validateProductInput({ ...validProduct, available: false });
+                expect(result.valid).toBe(true);
+                expect(result.data.available).toBe(false);
+            });
+
+            it("rejects non-boolean available values such as text strings, numbers or null", () => {
+                const textResult = validateProductInput({ ...validProduct, available: "true" });
+                expect(textResult.valid).toBe(false);
+                expect(textResult.errors).toContain("available must be a boolean.");
+
+                const numberResult = validateProductInput({ ...validProduct, available: 1 });
+                expect(numberResult.valid).toBe(false);
+                expect(numberResult.errors).toContain("available must be a boolean.");
+
+                const nullResult = validateProductInput({ ...validProduct, available: null });
+                expect(nullResult.valid).toBe(false);
+                expect(nullResult.errors).toContain("available must be a boolean.");
             });
         });
 
@@ -271,33 +343,56 @@ describe("product.validator", () => {
             expect(validateCategoryInput("category").valid).toBe(false);
         });
 
-        it("rejects category name shorter than 2 characters", () => {
-            const result = validateCategoryInput({ ...validCategory, name: "A" });
-            expect(result.valid).toBe(false);
-            expect(result.errors).toContain(
-                `name must contain at least ${PRODUCT_LIMITS.category.name.min} characters.`
-            );
+        describe("name boundary tests", () => {
+            it("rejects category name shorter than 2 characters", () => {
+                const result = validateCategoryInput({ ...validCategory, name: "A" });
+                expect(result.valid).toBe(false);
+                expect(result.errors).toContain(
+                    `name must contain at least ${PRODUCT_LIMITS.category.name.min} characters.`
+                );
+            });
+
+            it("accepts category name on the minimum boundary (2 characters)", () => {
+                const result = validateCategoryInput({ ...validCategory, name: "AB" });
+                expect(result.valid).toBe(true);
+                expect(result.data.name).toBe("AB");
+            });
+
+            it("accepts category name on the maximum boundary (60 characters)", () => {
+                const maxName = "C".repeat(60);
+                const result = validateCategoryInput({ ...validCategory, name: maxName });
+                expect(result.valid).toBe(true);
+                expect(result.data.name).toBe(maxName);
+            });
+
+            it("rejects category name longer than 60 characters", () => {
+                const longName = "C".repeat(61);
+                const result = validateCategoryInput({ ...validCategory, name: longName });
+                expect(result.valid).toBe(false);
+                expect(result.errors).toContain(
+                    `name must not exceed ${PRODUCT_LIMITS.category.name.max} characters.`
+                );
+            });
         });
 
-        it("rejects category name longer than 60 characters", () => {
-            const longName = "C".repeat(61);
-            const result = validateCategoryInput({ ...validCategory, name: longName });
-            expect(result.valid).toBe(false);
-            expect(result.errors).toContain(
-                `name must not exceed ${PRODUCT_LIMITS.category.name.max} characters.`
-            );
-        });
+        describe("order boundary tests", () => {
+            it("accepts non-negative order on the 0 boundary", () => {
+                const result = validateCategoryInput({ ...validCategory, order: 0 });
+                expect(result.valid).toBe(true);
+                expect(result.data.order).toBe(0);
+            });
 
-        it("rejects negative order", () => {
-            const result = validateCategoryInput({ ...validCategory, order: -1 });
-            expect(result.valid).toBe(false);
-            expect(result.errors).toContain("order must be a non-negative integer.");
-        });
+            it("rejects negative order (-1)", () => {
+                const result = validateCategoryInput({ ...validCategory, order: -1 });
+                expect(result.valid).toBe(false);
+                expect(result.errors).toContain("order must be a non-negative integer.");
+            });
 
-        it("defaults order to 0 when omitted", () => {
-            const result = validateCategoryInput({ name: "Decoración" });
-            expect(result.valid).toBe(true);
-            expect(result.data.order).toBe(0);
+            it("defaults order to 0 when omitted", () => {
+                const result = validateCategoryInput({ name: "Decoración" });
+                expect(result.valid).toBe(true);
+                expect(result.data.order).toBe(0);
+            });
         });
     });
 
@@ -338,4 +433,3 @@ describe("product.validator", () => {
         });
     });
 });
-
