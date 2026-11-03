@@ -439,6 +439,54 @@ describe("Admin Products and Categories API (HU-T06 / CIU-6)", () => {
         });
     });
 
+    describe("GET /api/admin/products/:id/edit", () => {
+        it("returns editable fields without changing the existing AdminProduct response", async () => {
+            fake.setProductsList([
+                {
+                    id: "prod-edit-1",
+                    name: "Harina de trigo",
+                    brand: "Dos Pinos",
+                    description: "Harina para repostería",
+                    weight: "1 kg",
+                    size: null,
+                    price: 2500,
+                    categoryId: "cat-1",
+                    imageUrl: "https://example.com/harina.jpg",
+                    available: false,
+                    status: "published"
+                }
+            ]);
+
+            const response = await request(app)
+                .get("/api/admin/products/prod-edit-1/edit")
+                .set(ADMIN_AUTH_HEADER);
+
+            expect(response.status).toBe(200);
+            expect(response.body).toEqual({
+                id: "prod-edit-1",
+                name: "Harina de trigo",
+                brand: "Dos Pinos",
+                description: "Harina para repostería",
+                weight: "1 kg",
+                size: null,
+                price: 2500,
+                categoryId: "cat-1",
+                imageUrl: "https://example.com/harina.jpg",
+                available: false,
+                status: "published"
+            });
+        });
+
+        it("returns 404 when the product to edit does not exist", async () => {
+            const response = await request(app)
+                .get("/api/admin/products/nonexistent-id/edit")
+                .set(ADMIN_AUTH_HEADER);
+
+            expect(response.status).toBe(404);
+            expect(response.body).toEqual({ message: "Product not found." });
+        });
+    });
+
     describe("POST /api/admin/products", () => {
         const validPayload = {
             name: "Torta Chilena",

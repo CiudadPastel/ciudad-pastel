@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ImageOff, Plus } from "lucide-react";
+import { ImageOff, Pencil, Plus } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
 import StateMessage, { RetryButton } from "../../components/ui/StateMessage";
@@ -119,6 +119,7 @@ function ProductsList() {
                                 <th scope="col">Precio</th>
                                 <th scope="col">Disponibilidad</th>
                                 <th scope="col">Estado</th>
+                                <th scope="col"><span className="sr-only">Acciones</span></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -131,7 +132,7 @@ function ProductsList() {
                                     aria-label={`Ver detalle de ${product.name}`}
                                     onClick={() => navigate(`/admin/productos/${encodeURIComponent(product.id)}`)}
                                     onKeyDown={(event) => {
-                                        if (event.key === "Enter") {
+                                        if (event.target === event.currentTarget && event.key === "Enter") {
                                             event.preventDefault();
                                             navigate(`/admin/productos/${encodeURIComponent(product.id)}`);
                                         }
@@ -163,6 +164,18 @@ function ProductsList() {
                                     </td>
                                     <td data-label="Estado">
                                         <ProductStatus status={product.status} />
+                                    </td>
+                                    <td data-label="Acciones" className={styles.rowActions}>
+                                        <Link
+                                            to={`/admin/productos/${encodeURIComponent(product.id)}/editar`}
+                                            className={styles.editLink}
+                                            aria-label={`Editar ${product.name}`}
+                                            onClick={(event) => event.stopPropagation()}
+                                            onKeyDown={(event) => event.stopPropagation()}
+                                        >
+                                            <Pencil size={16} aria-hidden="true" />
+                                            Editar
+                                        </Link>
                                     </td>
                                 </tr>
                             ))}

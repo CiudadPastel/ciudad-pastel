@@ -295,6 +295,38 @@
   gap: 0.4rem;
 }
 
+.actionButtons a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  text-decoration: none;
+}
+
+.rowActions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.editLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.65rem;
+  color: var(--cp-navy);
+  background: var(--cp-surface);
+  border: 1px solid var(--cp-border);
+  border-radius: 7px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.editLink:hover {
+  background: var(--cp-mint-50);
+  border-color: var(--cp-mint-600);
+}
+
 .actionButtons button:disabled {
   cursor: not-allowed;
   opacity: 0.6;
@@ -400,6 +432,10 @@
 
   .productCell {
     min-width: 0;
+  }
+
+  .rowActions {
+    justify-content: flex-end;
   }
 
   .detailCard {

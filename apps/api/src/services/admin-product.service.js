@@ -52,6 +52,30 @@ export async function getAdminProduct(id) {
 }
 
 /**
+ * Retrieves the editable product fields for the administrative edit form.
+ */
+export async function getAdminProductForEdit(id) {
+    const product = await getProductById(id);
+    if (!product) {
+        throw namedError("NotFoundError", "Product not found.");
+    }
+
+    return {
+        id: product.id,
+        name: product.name,
+        brand: product.brand ?? null,
+        description: product.description ?? null,
+        weight: product.weight ?? null,
+        size: product.size ?? null,
+        price: product.price,
+        categoryId: product.categoryId,
+        imageUrl: product.imageUrl ?? null,
+        available: Boolean(product.available),
+        status: product.status ?? PRODUCT_STATUS.PUBLISHED
+    };
+}
+
+/**
  * Creates a new catalog product with published status and defaults available to true if omitted.
  * Invalidates the public catalog cache immediately upon success.
  */

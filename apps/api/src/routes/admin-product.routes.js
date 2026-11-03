@@ -6,6 +6,7 @@ import {
 import {
     getAdminProducts,
     getAdminProductById,
+    getAdminProductForEdit,
     createAdminProduct,
     updateAdminProduct,
     removeAdminProduct,
@@ -15,6 +16,7 @@ import {
 export const adminProductRoutes = Router();
 adminProductRoutes.use(authenticateUser, requireAdmin);
 adminProductRoutes.get("/", getAdminProducts);
+adminProductRoutes.get("/:id/edit", getAdminProductForEdit);
 adminProductRoutes.get("/:id", getAdminProductById);
 adminProductRoutes.post("/", createAdminProduct);
 adminProductRoutes.put("/:id", updateAdminProduct);

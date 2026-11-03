@@ -152,13 +152,23 @@ function ProductDetail() {
                     <section className={styles.actions} aria-labelledby="product-actions-title">
                         <div>
                             <h2 id="product-actions-title">Acciones del producto</h2>
-                            <p>La edición y el retiro estarán disponibles próximamente.</p>
+                            <p>Edite la información del producto o retire el producto de la venta.</p>
                         </div>
                         <div className={styles.actionButtons}>
-                            <button type="button" className="btn btn-secondary" disabled>
-                                <Pencil size={16} aria-hidden="true" />
-                                Editar producto
-                            </button>
+                            {product.status === "withdrawn" ? (
+                                <button type="button" className="btn btn-secondary" disabled>
+                                    <Pencil size={16} aria-hidden="true" />
+                                    Producto retirado
+                                </button>
+                            ) : (
+                                <Link
+                                    to={`/admin/productos/${encodeURIComponent(product.id)}/editar`}
+                                    className="btn btn-secondary"
+                                >
+                                    <Pencil size={16} aria-hidden="true" />
+                                    Editar
+                                </Link>
+                            )}
                             <button type="button" className="btn btn-secondary" disabled>
                                 <Trash2 size={16} aria-hidden="true" />
                                 Retirar producto

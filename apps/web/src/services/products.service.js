@@ -10,6 +10,12 @@ export function getAdminProductById(id) {
     });
 }
 
+export function getAdminProductForEdit(id) {
+    return apiFetch(`/admin/products/${encodeURIComponent(id)}/edit`, {
+        requiresAuth: true
+    });
+}
+
 export function getAdminCategories() {
     return apiFetch("/admin/categories", { requiresAuth: true });
 }
@@ -17,6 +23,14 @@ export function getAdminCategories() {
 export function createAdminProduct(product) {
     return apiFetch("/admin/products", {
         method: "POST",
+        requiresAuth: true,
+        body: JSON.stringify(product)
+    });
+}
+
+export function updateAdminProduct(id, product) {
+    return apiFetch(`/admin/products/${encodeURIComponent(id)}`, {
+        method: "PUT",
         requiresAuth: true,
         body: JSON.stringify(product)
     });

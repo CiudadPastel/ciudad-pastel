@@ -3,7 +3,11 @@ import { ArrowLeft, ArrowRight, CircleAlert, LoaderCircle, Save, X } from "lucid
 import { Link, useNavigate } from "react-router-dom";
 
 import { RetryButton } from "../../components/ui/StateMessage";
-import { createAdminProduct, getAdminCategories } from "../../services/products.service";
+import {
+    createAdminProduct,
+    getAdminCategories,
+    updateAdminProduct
+} from "../../services/products.service";
 import { formatPrice } from "../../utils/format";
 
 import styles from "./ProductCreate.module.css";
@@ -18,11 +22,11 @@ const LIMITS = {
     imageUrl: { max: 500 }
 };
 
-const FIELD_ORDER = ["name", "brand", "description", "weight", "size", "price", "categoryId", "imageUrl"];
+const FIELD_ORDER = ["name", "brand", "description", "weight", "size", "price", "categoryId", "imageUrl", "available"];
 const STEPS = [
     { title: "Información básica", description: "Nombre y categoría", fields: ["name", "categoryId"] },
     { title: "Detalles", description: "Descripción e imagen", fields: ["brand", "description", "weight", "size", "imageUrl"] },
-    { title: "Precio y disponibilidad", description: "Precio de venta", fields: ["price"] }
+    { title: "Precio y disponibilidad", description: "Precio de venta", fields: ["price", "available"] }
 ];
 const INITIAL_VALUES = {
     name: "",
@@ -35,6 +39,22 @@ const INITIAL_VALUES = {
     imageUrl: "",
     available: true
 };
+
+function productToFormValues(product) {
+    if (!product) return { ...INITIAL_VALUES };
+
+    return {
+        name: product.name ?? "",
+        brand: product.brand ?? "",
+        description: product.description ?? "",
+        weight: product.weight ?? "",
+        size: product.size ?? "",
+        price: product.price == null ? "" : String(product.price),
+        categoryId: product.categoryId ?? "",
+        imageUrl: product.imageUrl ?? "",
+        available: Boolean(product.available)
+    };
+}
 
 function isValidImageUrl(value) {
     try {
@@ -120,12 +140,14 @@ function mapServerValidationErrors(details) {
     return errors;
 }
 
-function ProductCreate() {
+function ProductCreate({ product = null }) {
+    const isEditing = product !== null;
     const navigate = useNavigate();
     const formRef = useRef(null);
     const stepHeadingRef = useRef(null);
+    const initialValues = productToFormValues(product);
     const [currentStep, setCurrentStep] = useState(0);
-    const [values, setValues] = useState(INITIAL_VALUES);
+    const [values, setValues] = useState(initialValues);
     const [errors, setErrors] = useState({});
     const [touched, setTouched] = useState({});
     const [serverError, setServerError] = useState("");
@@ -136,6 +158,9 @@ function ProductCreate() {
         error: null
     });
     const [categoryReloadKey, setCategoryReloadKey] = useState(0);
+
+    const isDirty = JSON.stringify(values) !== JSON.stringify(initialValues);
+    const nothingToSave = isEditing && !isDirty;
 
     useEffect(() => {
         stepHeadingRef.current?.focus();
@@ -220,7 +245,7 @@ function ProductCreate() {
 
         setSubmitting(true);
         try {
-            const product = await createAdminProduct({
+            const payload = {
                 name: values.name.trim(),
                 brand: values.brand.trim() || null,
                 description: values.description.trim() || null,
@@ -230,11 +255,18 @@ function ProductCreate() {
                 categoryId: values.categoryId,
                 imageUrl: values.imageUrl.trim() || null,
                 available: values.available
-            });
+            };
+            const savedProduct = isEditing
+                ? await updateAdminProduct(product.id, payload)
+                : await createAdminProduct(payload);
 
-            navigate(`/admin/productos/${encodeURIComponent(product.id)}`, {
+            navigate(`/admin/productos/${encodeURIComponent(savedProduct.id)}`, {
                 replace: true,
-                state: { flash: `El producto «${product.name}» se creó correctamente.` }
+                state: {
+                    flash: isEditing
+                        ? `El producto «${savedProduct.name}» se actualizó correctamente.`
+                        : `El producto «${savedProduct.name}» se creó correctamente.`
+                }
             });
         } catch (error) {
             const serverFieldErrors = mapServerValidationErrors(error.details);
@@ -288,14 +320,21 @@ function ProductCreate() {
 
     return (
         <section className={styles.page}>
-            <Link to="/admin/productos" className={styles.back}>
+            <Link
+                to={isEditing ? `/admin/productos/${encodeURIComponent(product.id)}` : "/admin/productos"}
+                className={styles.back}
+            >
                 <ArrowLeft size={16} aria-hidden="true" />
-                Volver a productos
+                {isEditing ? "Volver al producto" : "Volver a productos"}
             </Link>
 
             <header>
-                <h1>Nuevo producto</h1>
-                <p className={styles.subtitle}>Complete el formulario paso a paso.</p>
+                <h1>{isEditing ? "Editar producto" : "Nuevo producto"}</h1>
+                <p className={styles.subtitle}>
+                    {isEditing
+                        ? "Actualice la información paso a paso."
+                        : "Complete el formulario paso a paso."}
+                </p>
             </header>
 
             <form ref={formRef} className={styles.form} onSubmit={handleSubmit} noValidate>
@@ -453,16 +492,25 @@ function ProductCreate() {
                                 </p>
                             </div>
 
-                            <label className={styles.checkbox}>
-                                <input
-                                    type="checkbox"
+                            <div className={styles.field}>
+                                <label htmlFor="product-available">Disponibilidad *</label>
+                                <select
+                                    id="product-available"
                                     name="available"
-                                    checked={values.available}
-                                    onChange={(event) => updateValue("available", event.target.checked)}
+                                    value={values.available ? "true" : "false"}
+                                    onChange={(event) => updateValue("available", event.target.value === "true")}
+                                    onBlur={handleBlur}
                                     disabled={submitting}
-                                />
-                                Disponible para la venta
-                            </label>
+                                    aria-invalid={touched.available && errors.available ? true : undefined}
+                                    aria-describedby={touched.available && errors.available
+                                        ? "product-available-error"
+                                        : undefined}
+                                >
+                                    <option value="true">Disponible</option>
+                                    <option value="false">Agotado</option>
+                                </select>
+                                {renderFieldError("available")}
+                            </div>
                         </>
                     )}
                 </fieldset>
@@ -478,7 +526,11 @@ function ProductCreate() {
                     <button
                         type="button"
                         className="btn btn-secondary"
-                        onClick={() => navigate("/admin/productos")}
+                        onClick={() => navigate(
+                            isEditing
+                                ? `/admin/productos/${encodeURIComponent(product.id)}`
+                                : "/admin/productos"
+                        )}
                         disabled={submitting}
                     >
                         <X size={18} aria-hidden="true" />
@@ -509,18 +561,27 @@ function ProductCreate() {
                             <button
                                 type="submit"
                                 className="btn btn-primary"
-                                disabled={submitting || !categoriesReady}
+                                disabled={submitting || !categoriesReady || nothingToSave}
                             >
                                 {submitting ? (
                                     <LoaderCircle size={18} className={styles.spin} aria-hidden="true" />
                                 ) : (
                                     <Save size={18} aria-hidden="true" />
                                 )}
-                                {submitting ? "Guardando…" : "Guardar producto"}
+                                {submitting
+                                    ? "Guardando…"
+                                    : isEditing
+                                        ? "Guardar cambios"
+                                        : "Guardar producto"}
                             </button>
                         )}
                     </div>
                 </div>
+                {nothingToSave && (
+                    <p className={styles.noChanges} role="status">
+                        No hay cambios para guardar.
+                    </p>
+                )}
             </form>
         </section>
     );

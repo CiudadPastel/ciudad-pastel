@@ -40,6 +40,9 @@ import ProductDetail
 import ProductCreate
     from "./pages/admin/ProductCreate";
 
+import ProductEdit
+    from "./pages/admin/ProductEdit";
+
 import ProductsList
     from "./pages/admin/ProductsList";
 
@@ -151,6 +154,11 @@ function App() {
                     <Route
                         path="productos/nuevo"
                         element={<ProductCreate />}
+                    />
+
+                    <Route
+                        path="productos/:id/editar"
+                        element={<ProductEdit />}
                     />
 
                     <Route
