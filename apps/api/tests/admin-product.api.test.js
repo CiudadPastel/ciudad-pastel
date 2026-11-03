@@ -46,6 +46,7 @@ vi.mock("../src/repositories/product.repository.js", () => fake.productRepositor
 vi.mock("../src/repositories/category.repository.js", () => fake.categoryRepository);
 
 import app from "../src/app.js";
+import { invalidateProductCatalogCache } from "../src/services/product.service.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -59,6 +60,10 @@ describe("Admin Products and Categories API (HU-T06 / CIU-6)", () => {
         vi.clearAllMocks();
         fake.setProductsList([]);
         fake.setCategoriesList([]);
+        invalidateProductCatalogCache();
+        fake.productRepository.getPublishedProducts.mockImplementation(() =>
+            Promise.resolve(fake.getProductsList().filter((p) => p.status === "published"))
+        );
 
         fake.verifyIdToken.mockImplementation(async (token) => {
             if (token === "valid-admin-token") {
@@ -1075,6 +1080,154 @@ describe("Admin Products and Categories API (HU-T06 / CIU-6)", () => {
             expect(res.status).toBe(500);
             expect(res.body).toEqual({ message: "Could not retrieve categories." });
             expect(JSON.stringify(res.body)).not.toContain("disk quota");
+        });
+    });
+
+    describe("Public Catalog Cache Invalidation on Administrative Changes (Rama 6 / CIU-6)", () => {
+        beforeEach(() => {
+            vi.useFakeTimers();
+            fake.setCategoriesList([
+                { id: "cat-1", name: "Pastelería", order: 1 }
+            ]);
+            fake.setProductsList([
+                {
+                    id: "prod-cached-1",
+                    name: "Pastel de Fresa",
+                    description: "Con fresas frescas",
+                    price: 12000,
+                    categoryId: "cat-1",
+                    imageUrl: "https://example.com/fresa.jpg",
+                    available: true,
+                    status: "published",
+                    createdAt: "2026-01-01T00:00:00.000Z",
+                    updatedAt: "2026-01-01T00:00:00.000Z"
+                }
+            ]);
+        });
+
+        it("populates the public cache on GET /api/products, and creating a product shows it immediately without waiting for cache TTL", async () => {
+            const initialPublic = await request(app).get("/api/products");
+            expect(initialPublic.status).toBe(200);
+            expect(initialPublic.body.items).toHaveLength(1);
+            expect(initialPublic.body.items[0].name).toBe("Pastel de Fresa");
+
+            vi.advanceTimersByTime(5_000);
+
+            const createRes = await request(app)
+                .post("/api/admin/products")
+                .set(ADMIN_AUTH_HEADER)
+                .send({
+                    name: "Pastel Selva Negra",
+                    price: 15000,
+                    categoryId: "cat-1"
+                });
+            expect(createRes.status).toBe(201);
+
+            const afterCreatePublic = await request(app).get("/api/products");
+            expect(afterCreatePublic.status).toBe(200);
+            expect(afterCreatePublic.body.items).toHaveLength(2);
+            const names = afterCreatePublic.body.items.map((i) => i.name);
+            expect(names).toContain("Pastel Selva Negra");
+        });
+
+        it("reflects updated price immediately in the public catalog", async () => {
+            const initialPublic = await request(app).get("/api/products");
+            expect(initialPublic.body.items[0].price).toBe(12000);
+
+            vi.advanceTimersByTime(10_000);
+
+            const updateRes = await request(app)
+                .put("/api/admin/products/prod-cached-1")
+                .set(ADMIN_AUTH_HEADER)
+                .send({
+                    name: "Pastel de Fresa",
+                    price: 14500,
+                    categoryId: "cat-1"
+                });
+            expect(updateRes.status).toBe(200);
+
+            const afterUpdatePublic = await request(app).get("/api/products");
+            expect(afterUpdatePublic.body.items[0].price).toBe(14500);
+        });
+
+        it("reflects updated availability immediately in the public catalog", async () => {
+            const initialPublic = await request(app).get("/api/products");
+            expect(initialPublic.body.items[0].available).toBe(true);
+
+            vi.advanceTimersByTime(10_000);
+
+            const updateRes = await request(app)
+                .put("/api/admin/products/prod-cached-1")
+                .set(ADMIN_AUTH_HEADER)
+                .send({
+                    name: "Pastel de Fresa",
+                    price: 12000,
+                    categoryId: "cat-1",
+                    available: false
+                });
+            expect(updateRes.status).toBe(200);
+
+            const afterUpdatePublic = await request(app).get("/api/products");
+            expect(afterUpdatePublic.body.items[0].available).toBe(false);
+        });
+
+        it("removes product immediately from public catalog while remaining visible in admin list", async () => {
+            const initialPublic = await request(app).get("/api/products");
+            expect(initialPublic.body.items).toHaveLength(1);
+
+            vi.advanceTimersByTime(10_000);
+
+            const deleteRes = await request(app)
+                .delete("/api/admin/products/prod-cached-1")
+                .set(ADMIN_AUTH_HEADER);
+            expect(deleteRes.status).toBe(204);
+
+            const afterDeletePublic = await request(app).get("/api/products");
+            expect(afterDeletePublic.body.items).toHaveLength(0);
+
+            const adminList = await request(app)
+                .get("/api/admin/products")
+                .set(ADMIN_AUTH_HEADER);
+            expect(adminList.status).toBe(200);
+            expect(adminList.body).toHaveLength(1);
+            expect(adminList.body[0].id).toBe("prod-cached-1");
+            expect(adminList.body[0].status).toBe("withdrawn");
+        });
+
+        it("ensures a withdrawn product does not reappear in public catalog after time advances", async () => {
+            await request(app)
+                .delete("/api/admin/products/prod-cached-1")
+                .set(ADMIN_AUTH_HEADER);
+
+            vi.advanceTimersByTime(120_000);
+
+            const publicRes = await request(app).get("/api/products");
+            expect(publicRes.body.items).toHaveLength(0);
+        });
+
+        it("does not invalidate cache when an administrative write fails", async () => {
+            const initialPublic = await request(app).get("/api/products");
+            expect(initialPublic.body.items).toHaveLength(1);
+
+            vi.advanceTimersByTime(10_000);
+
+            fake.productRepository.upsertProduct.mockRejectedValueOnce(
+                new Error("Firestore transient failure")
+            );
+
+            const updateRes = await request(app)
+                .put("/api/admin/products/prod-cached-1")
+                .set(ADMIN_AUTH_HEADER)
+                .send({
+                    name: "Nombre Modificado Que Falla",
+                    price: 99999,
+                    categoryId: "cat-1"
+                });
+            expect(updateRes.status).toBe(500);
+
+            const publicRes = await request(app).get("/api/products");
+            expect(publicRes.body.items[0].name).toBe("Pastel de Fresa");
+            expect(publicRes.body.items[0].price).toBe(12000);
         });
     });
 
