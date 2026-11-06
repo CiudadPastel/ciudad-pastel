@@ -137,7 +137,7 @@ export default function Cart() {
                 <button type="button" className="btn btn-secondary" disabled={checking} onClick={() => setConfirmClear(true)}>Vaciar carrito</button>
             </section>
             {contactStatus === "loading" ? <p role="status">Cargando contacto de WhatsApp…</p>
-                : !contact ? <div role="status"><p>No pudimos obtener el contacto de WhatsApp. Tu selección sigue guardada.</p>
+                : !contact ? <div role="status"><p>WhatsApp no está disponible o no está configurado. No se puede preparar la consulta. Tu selección sigue guardada.</p>
                     <button className="btn btn-secondary" type="button" onClick={retryContact}>Reintentar contacto</button></div> : null}
             {!ready && <button type="button" className="btn btn-primary" disabled={checking || !verified || !contact}
                 onClick={prepareInquiry}>{checking ? "Verificando selección…" : "Consultar disponibilidad por WhatsApp"}</button>}

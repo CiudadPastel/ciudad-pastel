@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ImagePlus, Save, ExternalLink, RotateCcw } from "lucide-react";
 import { Link } from "react-router-dom";
-import { DEFAULT_HOME_CONTENT, getAdminHomeContent, updateAdminHomeContent, uploadHomeImage } from "../../services/homeContent.service";
+import { DEFAULT_HOME_CONTENT, getAdminHomeContent, updateAdminHomeContent } from "../../services/homeContent.service";
 import styles from "./HomeContent.module.css";
 
 const FIELDS = [
@@ -10,12 +10,22 @@ const FIELDS = [
     { key: "aboutImageUrl", title: "Fotografía de Sobre nosotros", note: "Opcional. Aparece al lado de la historia del negocio." }
 ];
 
+function ImagePreview({ file, url, title }) {
+    const image = useRef(null);
+    useEffect(() => {
+        const local = file ? URL.createObjectURL(file) : null;
+        image.current.src = local || url || "";
+        return () => { if (local) URL.revokeObjectURL(local); };
+    }, [file, url]);
+    return <img ref={image} alt={`Vista previa: ${title}`} />;
+}
+
 export default function HomeContent() {
     const [content, setContent] = useState(DEFAULT_HOME_CONTENT);
     const [initial, setInitial] = useState(DEFAULT_HOME_CONTENT);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [uploading, setUploading] = useState(null);
+    const [files, setFiles] = useState({});
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
 
@@ -29,38 +39,34 @@ export default function HomeContent() {
     }, []);
 
     const getUrl = key => key === "aboutImageUrl" ? content.about.imageUrl || "" : content[key] || "";
-    const updateUrl = (key, value) => setContent(prev =>
-        key === "aboutImageUrl" ? { ...prev, about: { ...prev.about, imageUrl: value || null } }
+    const updateUrl = (key, value) => {
+        setFiles(prev => ({ ...prev, [key]: null }));
+        setContent(prev => key === "aboutImageUrl" ? { ...prev, about: { ...prev.about, imageUrl: value || null } }
             : { ...prev, [key]: value || null });
+    };
 
-    async function handleUpload(event, key) {
+    function handleUpload(event, key) {
         const file = event.target.files?.[0];
-        if (!file) return;
         event.target.value = "";
-        if (file.size > 5 * 1024 * 1024 || !["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+        if (!file) return;
+        if (file.size <= 0 || file.size > 5 * 1024 * 1024 || !["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
             setError("Solo JPG, PNG o WebP de hasta 5 MiB."); return;
         }
-        setError(""); setSuccess(""); setUploading(key);
-        try {
-            const uploaded = await uploadHomeImage(file);
-            updateUrl(key, uploaded.url);
-            setSuccess("Imagen subida. Pulsa «Guardar cambios» para publicarla.");
-        } catch {
-            setError("No fue posible subir la imagen a Cloudinary. Revisa la configuración de la API o utiliza una URL directa.");
-        } finally { setUploading(null); }
+        setError(""); setSuccess("");
+        setFiles(prev => ({ ...prev, [key]: file }));
     }
 
     async function handleSave(event) {
         event.preventDefault(); setSaving(true); setError(""); setSuccess("");
         try {
-            const saved = await updateAdminHomeContent(content);
-            setContent(saved); setInitial(saved);
+            const saved = await updateAdminHomeContent(content, files);
+            setContent(saved); setInitial(saved); setFiles({});
             setSuccess("Los cambios de la portada fueron publicados.");
         } catch (err) {
-            setError(err?.details?.join(" ") || "No se pudieron guardar los cambios. Revisa los datos.");
+            setError(err?.details?.join(" ") || (err?.status === 409 ? "La portada cambió o este guardado ya fue recibido. Recarga la página antes de volver a guardar." : "No se pudo confirmar la publicación. Recarga para comprobar el resultado antes de reintentar."));
         } finally { setSaving(false); }
     }
-    const busy = loading || saving || uploading !== null;
+    const busy = loading || saving;
     return <section className={styles.page}>
         <header className={styles.header}><div><p className={styles.eyebrow}>SITIO WEB</p><h1>Página de inicio</h1><p>Personaliza las fotografías y la historia de Ciudad Pastel, sin editar el código.</p></div><Link to="/" target="_blank" rel="noopener noreferrer" className="btn btn-secondary"><ExternalLink size={16}/> Ver portada</Link></header>
         {loading ? <p role="status">Cargando configuración…</p> :
@@ -69,15 +75,15 @@ export default function HomeContent() {
                 <legend>{title}</legend>
                 <p>{note}</p>
                 <div className={styles.imageRow}>
-                    {getUrl(key) ? <img src={getUrl(key)} alt={`Vista previa: ${title}`} onError={event => { event.currentTarget.style.display = "none"; }} />
+                    {files[key] || getUrl(key) ? <ImagePreview file={files[key]} url={getUrl(key)} title={title} />
                         : <div className={styles.emptyImage}><ImagePlus size={30}/><span>Sin imagen seleccionada</span></div>}
                     <div className={styles.imageControls}>
                         <label htmlFor={key}>URL HTTPS directa de la imagen</label>
                         <input id={key} type="url" placeholder="https://..." value={getUrl(key)} onChange={event => updateUrl(key, event.target.value)} />
-                        <label className={styles.uploadLabel} htmlFor={`upload-${key}`}><ImagePlus size={16}/> {uploading === key ? "Subiendo…" : "Subir imagen a Cloudinary"}</label>
+                        <label className={styles.uploadLabel} htmlFor={`upload-${key}`}><ImagePlus size={16}/> Seleccionar fotografía</label>
                         <input className={styles.hiddenFile} id={`upload-${key}`} type="file" accept="image/jpeg,image/png,image/webp" onChange={event => handleUpload(event, key)} />
                         <button type="button" className={styles.clearButton} onClick={() => updateUrl(key, null)}>Quitar imagen</button>
-                        <small>Se aceptan enlaces públicos directos. Los enlaces de vista previa de Drive pueden no funcionar.</small>
+                        <small>{files[key] ? `Seleccionada: ${files[key].name}. Se subirá y publicará al guardar. ` : ""}Se aceptan enlaces públicos directos. Los enlaces de vista previa de Drive pueden no funcionar.</small>
                     </div>
                 </div>
             </fieldset>)}
@@ -89,7 +95,7 @@ export default function HomeContent() {
             </fieldset>
             {error && <p className={styles.error} role="alert">{error}</p>}
             {success && <p className={styles.success} role="status">{success}</p>}
-            <div className={styles.actions}><button disabled={busy} type="button" className="btn btn-secondary" onClick={() => { setContent(initial); setError(""); setSuccess(""); }}><RotateCcw size={16}/> Descartar cambios</button><button disabled={busy} type="submit" className="btn btn-primary"><Save size={16}/> {saving ? "Guardando…" : "Guardar cambios"}</button></div>
+            <div className={styles.actions}><button disabled={busy} type="button" className="btn btn-secondary" onClick={() => { setContent(initial); setFiles({}); setError(""); setSuccess(""); }}><RotateCcw size={16}/> Descartar cambios</button><button disabled={busy} type="submit" className="btn btn-primary"><Save size={16}/> {saving ? "Guardando…" : "Guardar cambios"}</button></div>
         </form>}
     </section>;
 }

@@ -334,7 +334,7 @@ await test("removed product and offline verification preserve cart and allow rec
 await test("missing WhatsApp contact is understandable and retryable", async () => {
     seed([line()]); contactAvailable = false;
     await mount("/tienda/carrito");
-    assert(text().includes("No pudimos obtener el contacto"), "Unavailable contact explained");
+    assert(text().includes("WhatsApp no está disponible"), "Unavailable contact explained");
     assert(!container.querySelector('a[href^="https://wa.me/"]'), "No invalid WhatsApp link");
     contactAvailable = true;
     await button("Reintentar contacto");
