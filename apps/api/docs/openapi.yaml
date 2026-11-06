@@ -26,6 +26,8 @@ tags:
     description: Public product catalog operations (HU-T01)
   - name: Admin Products
     description: Product catalog administration operations (HU-T06)
+  - name: Payment Status
+    description: Enrollment payment status management and student lookup (HU-A07)
 
 paths:
   /contact/whatsapp:
@@ -1287,6 +1289,53 @@ paths:
                 $ref: "#/components/schemas/EnrollmentConflict"
 
 
+  /admin/enrollments/{id}/payment-status:
+    patch:
+      tags:
+        - Payment Status
+        - Enrollments
+      summary: Update enrollment payment status
+      description: Update the payment status of an enrollment by authorized staff (HU-A07).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Enrollment ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - paymentStatus
+              properties:
+                paymentStatus:
+                  type: string
+                  enum: [pending, deposit_paid, paid]
+                  example: deposit_paid
+      responses:
+        "200":
+          description: Payment status updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Enrollment"
+        "400":
+          description: Invalid payment status value.
+        "401":
+          description: Authentication required or invalid token.
+        "403":
+          description: Administrator privileges required.
+        "404":
+          description: Enrollment not found.
+        "500":
+          description: Internal server error.
+
   /admin/categories:
     get:
       tags:
@@ -2045,6 +2094,20 @@ components:
         updatedAt:
           type: string
           format: date-time
+        paymentStatus:
+          type: string
+          enum: [pending, deposit_paid, paid]
+          description: Enrollment payment lifecycle status (HU-A07).
+          example: deposit_paid
+        paymentUpdatedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp when the payment status was last changed.
+        paymentUpdatedBy:
+          type: string
+          nullable: true
+          description: Administrator UID who made the last payment update.
 
     EnrollmentConflict:
       type: object
