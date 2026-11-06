@@ -1,3 +1,7 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import YAML from "yaml";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 
@@ -60,6 +64,10 @@ vi.mock("../src/repositories/course.repository.js", () => fake.courseRepository)
 
 import app from "../src/app.js";
 import { paymentStatusLookupRateLimit } from "../src/middleware/rate-limit.middleware.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const openApiPath = path.resolve(__dirname, "../docs/openapi.yaml");
 
 const ADMIN_TOKEN = "valid-admin-token";
 const REGULAR_USER_TOKEN = "regular-user-token";
@@ -678,6 +686,185 @@ describe("Enrollment Payment Status API (HU-A07 / CIU-13 - Rama 2)", () => {
 
                 const directDeleteRes = await request(app).delete(`/api/enrollments/${SAMPLE_ENROLLMENT.id}`);
                 expect(directDeleteRes.status).toBe(404);
+            });
+        });
+    });
+
+    describe("Full Acceptance Criteria and OpenAPI Validation (HU-A07 - Rama 5)", () => {
+        it("Acceptance Criterion 1 & 2: allows student to query payment status and returns only valid statuses", async () => {
+            const validStatuses = ["pending", "deposit_paid", "paid"];
+            for (let i = 0; i < validStatuses.length; i++) {
+                const status = validStatuses[i];
+                const studentIdNumber = `10999088${i}`;
+                const studentPhone = `8888999${i}`;
+                const enr = {
+                    ...SAMPLE_ENROLLMENT,
+                    id: `enr-ac-${status}`,
+                    idNumber: studentIdNumber,
+                    phone: studentPhone,
+                    paymentStatus: status
+                };
+                fake.enrollments.set(enr.id, enr);
+
+                const res = await request(app)
+                    .post("/api/enrollments/payment-status")
+                    .send({
+                        nationalId: `1-0999-088${i}`,
+                        phone: `8888-999${i}`
+                    });
+
+                expect(res.status).toBe(200);
+                expect(res.body.enrollments).toHaveLength(1);
+                expect(validStatuses).toContain(res.body.enrollments[0].paymentStatus);
+                expect(res.body.enrollments[0].paymentStatus).toBe(status);
+            }
+        });
+
+        it("Acceptance Criterion 3 & 4: full lifecycle (seed pending -> lookup -> staff update deposit_paid -> lookup -> staff update paid -> lookup)", async () => {
+            const enr = {
+                ...SAMPLE_ENROLLMENT,
+                id: "enr-lifecycle-1",
+                idNumber: "207770666",
+                phone: "87776666",
+                paymentStatus: "pending",
+                paymentUpdatedAt: null
+            };
+            fake.enrollments.set(enr.id, enr);
+
+            // 1. Student consults initial status
+            const initialLookup = await request(app)
+                .post("/api/enrollments/payment-status")
+                .send({ nationalId: "207770666", phone: "87776666" });
+            expect(initialLookup.status).toBe(200);
+            expect(initialLookup.body.enrollments).toHaveLength(1);
+            expect(initialLookup.body.enrollments[0]).toEqual({
+                courseName: "Pastelería Básica",
+                paymentStatus: "pending",
+                paymentUpdatedAt: null
+            });
+
+            // 2. Staff updates to deposit_paid
+            const updateToDeposit = await request(app)
+                .patch(`/api/admin/enrollments/${enr.id}/payment-status`)
+                .set(ADMIN_AUTH_HEADER)
+                .send({ paymentStatus: "deposit_paid" });
+            expect(updateToDeposit.status).toBe(200);
+            expect(updateToDeposit.body.paymentStatus).toBe("deposit_paid");
+
+            // 3. Student consults immediately, reflects deposit_paid
+            const depositLookup = await request(app)
+                .post("/api/enrollments/payment-status")
+                .send({ nationalId: "2-0777-0666", phone: "+506 8777-6666" });
+            expect(depositLookup.status).toBe(200);
+            expect(depositLookup.body.enrollments[0].paymentStatus).toBe("deposit_paid");
+            expect(depositLookup.body.enrollments[0].paymentUpdatedAt).toBeDefined();
+
+            // 4. Staff updates to paid
+            const updateToPaid = await request(app)
+                .patch(`/api/admin/enrollments/${enr.id}/payment-status`)
+                .set(ADMIN_AUTH_HEADER)
+                .send({ paymentStatus: "paid" });
+            expect(updateToPaid.status).toBe(200);
+            expect(updateToPaid.body.paymentStatus).toBe("paid");
+
+            // 5. Student consults immediately, reflects paid
+            const paidLookup = await request(app)
+                .post("/api/enrollments/payment-status")
+                .send({ nationalId: "207770666", phone: "8777-6666" });
+            expect(paidLookup.status).toBe(200);
+            expect(paidLookup.body.enrollments[0].paymentStatus).toBe("paid");
+            expect(paidLookup.body.enrollments[0].paymentUpdatedAt).toBe(updateToPaid.body.paymentUpdatedAt);
+        });
+
+        it("Acceptance Criterion 5 (EX-01): verifies that no payment gateway, checkout, or billing endpoints exist", async () => {
+            const forbiddenEndpoints = [
+                { method: "post", path: "/api/payments" },
+                { method: "post", path: "/api/checkout" },
+                { method: "post", path: "/api/pay" },
+                { method: "post", path: `/api/enrollments/${SAMPLE_ENROLLMENT.id}/pay` },
+                { method: "post", path: `/api/enrollments/${SAMPLE_ENROLLMENT.id}/charge` },
+                { method: "post", path: "/api/admin/payments" }
+            ];
+
+            for (const { method, path: epPath } of forbiddenEndpoints) {
+                const res = await request(app)[method](epPath).send({});
+                expect(res.status).toBe(404);
+            }
+        });
+
+        it("OpenAPI schema conformity: public lookup response matches openapi.yaml specification exactly", async () => {
+            const rawYaml = fs.readFileSync(openApiPath, "utf8");
+            const spec = YAML.parse(rawYaml);
+            const lookupEndpointSpec = spec.paths?.["/enrollments/payment-status"]?.post;
+
+            expect(lookupEndpointSpec).toBeDefined();
+            const response200Spec = lookupEndpointSpec.responses?.["200"]?.content?.["application/json"]?.schema;
+            expect(response200Spec).toBeDefined();
+            expect(response200Spec.type).toBe("object");
+            expect(response200Spec.required).toContain("enrollments");
+
+            const itemSchema = response200Spec.properties?.enrollments?.items;
+            expect(itemSchema).toBeDefined();
+            expect(itemSchema.required).toEqual(expect.arrayContaining(["courseName", "paymentStatus", "paymentUpdatedAt"]));
+
+            const res = await request(app)
+                .post("/api/enrollments/payment-status")
+                .send({
+                    nationalId: SAMPLE_ENROLLMENT.idNumber,
+                    phone: SAMPLE_ENROLLMENT.phone
+                });
+
+            expect(res.status).toBe(200);
+
+            // Compare top-level keys
+            const actualTopKeys = Object.keys(res.body).sort();
+            const expectedTopKeys = Object.keys(response200Spec.properties).sort();
+            expect(actualTopKeys).toEqual(expectedTopKeys);
+
+            // Compare item keys
+            expect(res.body.enrollments.length).toBeGreaterThan(0);
+            const item = res.body.enrollments[0];
+            const actualItemKeys = Object.keys(item).sort();
+            const expectedItemKeys = Object.keys(itemSchema.properties).sort();
+            expect(actualItemKeys).toEqual(expectedItemKeys);
+
+            // Compare enum constraint
+            expect(itemSchema.properties.paymentStatus.enum).toContain(item.paymentStatus);
+        });
+
+        describe("Unexpected repository failure handling (500)", () => {
+            it("returns 500 with sanitized message and without internal leak on student lookup failure", async () => {
+                fake.enrollmentRepository.lookupEnrollmentsByStudent.mockRejectedValueOnce(
+                    new Error("FIRESTORE_CLUSTER_UNREACHABLE_SOCKET_TIMEOUT")
+                );
+
+                const res = await request(app)
+                    .post("/api/enrollments/payment-status")
+                    .send({
+                        nationalId: SAMPLE_ENROLLMENT.idNumber,
+                        phone: SAMPLE_ENROLLMENT.phone
+                    });
+
+                expect(res.status).toBe(500);
+                expect(res.body).toEqual({ message: "Could not lookup payment status." });
+                expect(JSON.stringify(res.body)).not.toContain("FIRESTORE_CLUSTER_UNREACHABLE_SOCKET_TIMEOUT");
+                expect(res.body.stack).toBeUndefined();
+            });
+
+            it("returns 500 with sanitized message and without internal leak on admin update failure", async () => {
+                fake.enrollmentRepository.updateEnrollmentPaymentStatus.mockRejectedValueOnce(
+                    new Error("TRANSACTION_WRITE_FAILED_CORRUPT_BUFFER")
+                );
+
+                const res = await request(app)
+                    .patch(`/api/admin/enrollments/${SAMPLE_ENROLLMENT.id}/payment-status`)
+                    .set(ADMIN_AUTH_HEADER)
+                    .send({ paymentStatus: "paid" });
+
+                expect(res.status).toBe(500);
+                expect(res.body).toEqual({ message: "Could not update payment status." });
+                expect(JSON.stringify(res.body)).not.toContain("TRANSACTION_WRITE_FAILED_CORRUPT_BUFFER");
+                expect(res.body.stack).toBeUndefined();
             });
         });
     });
