@@ -12,8 +12,10 @@ export function filterCourses(courses, type) {
     return courses.filter((course) => type === "sin-tipo" ? !course.courseType : course.courseType === type);
 }
 
-export function paginateItems(items, requestedPage, pageSize) {
-    const pages = Math.max(1, Math.ceil(items.length / pageSize));
-    const page = Math.min(pages, Math.max(1, Number.parseInt(requestedPage, 10) || 1));
-    return { page, pages, items: items.slice((page - 1) * pageSize, page * pageSize) };
+export function incrementalItems(items, requestedBlocks, blockSize) {
+    const maxBlocks = Math.max(1, Math.ceil(items.length / blockSize));
+    const parsed = Number(requestedBlocks);
+    const blocks = Number.isInteger(parsed) && parsed > 0 ? Math.min(parsed, maxBlocks) : 1;
+    const visible = items.slice(0, blocks * blockSize);
+    return { blocks, items: visible, hasMore: visible.length < items.length };
 }

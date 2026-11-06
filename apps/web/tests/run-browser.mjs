@@ -14,7 +14,10 @@ const browser = process.env.UX_TEST_BROWSER || [
 if (!browser) throw new Error("Set UX_TEST_BROWSER to an installed Chromium browser executable.");
 const root = fileURLToPath(new URL("../", import.meta.url));
 const server = await createServer({ root, server: { host: "127.0.0.1", port: 0 },
-    define: { "import.meta.env.VITE_FIREBASE_API_KEY": JSON.stringify("test-api-key") } });
+    resolve: { alias: [{
+        find: /^(?:\.\.\/config\/firebase|\.\.\/src\/config\/firebase)(?:\.js)?$/,
+        replacement: path.join(root, "tests/fixtures/firebase.js")
+    }] } });
 await server.listen();
 const port = server.httpServer.address().port;
 const profile = mkdtempSync(path.join(tmpdir(), "ciudad-pastel-ux-"));

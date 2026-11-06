@@ -12,6 +12,7 @@ import {
     X
 } from "lucide-react";
 
+import CourseReview from "./CourseReview";
 import ListEditor from "../ui/ListEditor";
 import { COURSE_TYPES, getCourseType } from "../../constants/course";
 import {
@@ -769,16 +770,7 @@ function CourseForm({
             </fieldset>
 
             {currentStep === COURSE_STEPS.length - 1 && (
-                <section className={styles.section} aria-label="Revisión del curso">
-                    <h3>{values.name}</h3>
-                    <p>{values.summary}</p>
-                    <p>{values.description}</p>
-                    <p>Tipo: {courseType?.label || "Sin definir"}</p>
-                    <p>Precio: {pricePreview || "Sin definir"} · Cupo: {values.capacity || "Sin definir"}</p>
-                    <p>Lugar: {values.location || "Sin definir"}</p>
-                    <p>{schedulePreview ? formatScheduleSummary(schedulePreview) : "Horario sin definir"}</p>
-                    <p>Revise los pasos anteriores antes de guardar.</p>
-                </section>
+                <CourseReview payload={toCoursePayload(values)} onEdit={setCurrentStep} disabled={submitting} />
             )}
             {isNew && (
                 <p className={styles.note}>

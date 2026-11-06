@@ -3,7 +3,7 @@ import { ImageOff, LayoutGrid } from "lucide-react";
 import { Link } from "react-router-dom";
 import styles from "../../pages/public/ProductsList.module.css";
 
-function CategoryCard({ category, to }) {
+function CategoryCard({ category, to, icon: Icon }) {
     const [imageFailed, setImageFailed] = useState(false);
     return (
         <li className={styles.cardShell}>
@@ -13,7 +13,7 @@ function CategoryCard({ category, to }) {
                         onError={() => setImageFailed(true)} />
                 ) : (
                     <div className={styles.imageEmpty} aria-hidden="true">
-                        {category.id ? <ImageOff size={28} /> : <LayoutGrid size={28} />}
+                        <Icon size={28} />
                     </div>
                 )}
                 <div className={styles.cardBody}><h2>{category.name}</h2></div>
@@ -22,11 +22,12 @@ function CategoryCard({ category, to }) {
     );
 }
 
-export default function CategoryGrid({ categories, categoryUrl, label = "Categorías" }) {
+export default function CategoryGrid({ categories, categoryUrl, label = "Categorías", categoryIcons }) {
     return (
         <ul className={styles.grid} aria-label={label}>
             {[{ id: null, name: "Ver todos" }, ...categories].map((category) => (
-                <CategoryCard key={category.id ?? "all"} category={category} to={categoryUrl(category.id)} />
+                <CategoryCard key={category.id ?? "all"} category={category} to={categoryUrl(category.id)}
+                    icon={categoryIcons?.[category.id] ?? (category.id ? ImageOff : LayoutGrid)} />
             ))}
         </ul>
     );

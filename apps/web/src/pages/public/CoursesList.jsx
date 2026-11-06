@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
-import { ArrowRight, ImageOff } from "lucide-react";
-import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ArrowRight, BookOpen, CalendarDays, ChefHat, Eye, GraduationCap, Hand, ImageOff } from "lucide-react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import CategoryGrid from "../../components/public/CategoryGrid";
 import ResultsCount from "../../components/ui/ResultsCount";
 import { COURSE_TYPES } from "../../constants/course";
-import { courseCategories, filterCourses, paginateItems } from "../../utils/catalog";
+import { courseCategories, filterCourses, incrementalItems } from "../../utils/catalog";
 import StateMessage, { RetryButton } from "../../components/ui/StateMessage";
 import { getPublicCourses } from "../../services/publicCourses.service";
 import { formatPrice } from "../../utils/format";
@@ -13,9 +13,25 @@ import { formatScheduleRange, formatScheduleSummary } from "../../utils/schedule
 
 import styles from "./CoursesList.module.css";
 
+const COURSE_TYPE_ICONS = {
+    basic: GraduationCap,
+    workshop: ChefHat,
+    demonstrative: Eye,
+    semi_demonstrative: Hand,
+    multi_week: CalendarDays,
+    other: BookOpen,
+    "sin-tipo": BookOpen
+};
+const BLOCK_SIZE = 12;
+
 function CoursesList() {
     const [searchParams, setSearchParams] = useSearchParams();
     const location = useLocation();
+    const navigate = useNavigate();
+    const headingRef = useRef(null);
+    const listRef = useRef(null);
+    const previousView = useRef(null);
+    const pendingAppend = useRef(null);
     const type = searchParams.get("tipo");
     const showCategories = !type && searchParams.get("vista") !== "todos" && !searchParams.has("pagina");
     const [reloadKey, setReloadKey] = useState(0);
@@ -38,16 +54,54 @@ function CoursesList() {
         };
     }, [reloadKey]);
 
-    const categories = courseCategories(state.courses, COURSE_TYPES);
-    const filtered = filterCourses(state.courses, type);
-    const { items: visibleCourses, page, pages } = paginateItems(filtered, searchParams.get("pagina"), 12);
+    const categories = useMemo(() => courseCategories(state.courses, COURSE_TYPES), [state.courses]);
+    const filtered = useMemo(() => filterCourses(state.courses, type), [state.courses, type]);
+    const requestedBlocks = searchParams.get("pagina");
+    const { items: visibleCourses, blocks, hasMore } = useMemo(
+        () => incrementalItems(filtered, requestedBlocks, BLOCK_SIZE), [filtered, requestedBlocks]
+    );
     const catalogUrl = location.pathname + location.search;
-    function changePage(value) {
-        const next = new URLSearchParams(searchParams);
-        next.set("pagina", value);
-        setSearchParams(next);
-    }
     const status = state.key === reloadKey ? state.status : "loading";
+    const selection = showCategories ? "categories" : `type:${type || "all"}`;
+    const focusCourseId = location.state?.focusCourseId;
+
+    useLayoutEffect(() => {
+        if (status !== "success") return;
+        const previous = previousView.current;
+        previousView.current = { selection, blocks, key: location.key };
+        const appended = pendingAppend.current;
+        pendingAppend.current = null;
+        const cards = [...(listRef.current?.querySelectorAll("[data-course-id]") || [])];
+        if (appended && previous?.selection === selection && blocks > previous.blocks) {
+            // New cards remain after the current ones. Keyboard users can continue
+            // from the first new card without moving the viewport on append.
+            cards[appended.count]?.focus({ preventScroll: true });
+            window.scrollTo({ top: appended.scrollY, behavior: "instant" });
+        } else if (focusCourseId && previous?.key !== location.key) {
+            const card = cards.find((element) => element.dataset.courseId === focusCourseId);
+            if (card) {
+                card.focus({ preventScroll: true });
+                card.scrollIntoView({ block: "center", behavior: "instant" });
+            } else {
+                headingRef.current?.focus();
+            }
+        } else if (!previous || previous.selection !== selection || previous.blocks !== blocks) {
+            headingRef.current?.focus({ preventScroll: true });
+            headingRef.current?.scrollIntoView({ block: "start", behavior: "instant" });
+        }
+    }, [status, selection, blocks, location.key, focusCourseId]);
+
+    function loadMore() {
+        if (!hasMore) return;
+        pendingAppend.current = { count: visibleCourses.length, scrollY: window.scrollY };
+        const next = new URLSearchParams(searchParams);
+        next.set("pagina", blocks + 1);
+        setSearchParams(next, { replace: true });
+    }
+
+    function rememberCourse(id) {
+        navigate(catalogUrl, { replace: true, state: { focusCourseId: id } });
+    }
 
     if (status === "loading") {
         return (
@@ -77,7 +131,11 @@ function CoursesList() {
             <header className={styles.heading}>
                 <div>
                     <p className={styles.eyebrow}>Ciudad Pastel · Academia</p>
-                    <h1>Cursos de repostería</h1>
+                    <h1 ref={headingRef} tabIndex={-1}>
+                        {showCategories ? "Cursos de repostería" : type
+                            ? `Cursos: ${categories.find((category) => category.id === type)?.name || "Tipo no disponible"}`
+                            : "Todos los cursos"}
+                    </h1>
                     <p className={styles.subtitle}>Encuentra el próximo curso para llevar tus ideas a la mesa.</p>
                 </div>
             </header>
@@ -85,7 +143,7 @@ function CoursesList() {
             {showCategories ? (
                 <>
                     {state.courses.length === 0 && <p role="status">No hay cursos disponibles por el momento.</p>}
-                    <CategoryGrid categories={categories} label="Tipos de curso"
+                    <CategoryGrid categories={categories} label="Tipos de curso" categoryIcons={COURSE_TYPE_ICONS}
                         categoryUrl={(id) => id ? '?tipo=' + encodeURIComponent(id) : '?vista=todos'} />
                 </>
             ) : <>
@@ -110,10 +168,12 @@ function CoursesList() {
                     description="Vuelve pronto para conocer las próximas fechas."
                 />
             ) : (
-                <ul className={styles.grid}>
+                <ul ref={listRef} className={styles.grid} aria-label="Cursos disponibles">
                     {visibleCourses.map((course) => (
                         <li key={course.id}>
-                            <Link to={`/cursos/${encodeURIComponent(course.id)}`} className={styles.card} state={{ from: catalogUrl }}>
+                            <Link to={`/cursos/${encodeURIComponent(course.id)}`} className={styles.card}
+                                data-course-id={course.id} onClick={() => rememberCourse(course.id)}
+                                state={{ from: catalogUrl, courseId: course.id }}>
                                 {course.imageUrl ? (
                                     <img
                                         src={course.imageUrl}
@@ -152,12 +212,12 @@ function CoursesList() {
                 </ul>
             )}
             <div className={styles.pagination}>
-                <ResultsCount shown={visibleCourses.length} total={filtered.length} noun="cursos" page={page} pageSize={12} />
-                {pages > 1 && <nav aria-label="Paginación de cursos" className={styles.navigation}>
-                    <button type="button" className="btn btn-secondary" disabled={page === 1} onClick={() => changePage(page - 1)}>Anterior</button>
-                    <span>Página {page} de {pages}</span>
-                    <button type="button" className="btn btn-secondary" disabled={page === pages} onClick={() => changePage(page + 1)}>Siguiente</button>
-                </nav>}
+                <ResultsCount shown={visibleCourses.length} total={filtered.length} noun="cursos" />
+                {hasMore ? (
+                    <button type="button" className="btn btn-secondary" onClick={loadMore}>Cargar más cursos</button>
+                ) : filtered.length > 0 && (
+                    <p className={styles.loading}>Llegaste al final de los cursos disponibles.</p>
+                )}
             </div>
             </>}
         </section>
