@@ -13,12 +13,13 @@ export function getAdminHomeContent() {
     return apiFetch("/admin/site/home", { requiresAuth: true, cache: "no-store" });
 }
 
-export function updateAdminHomeContent(content) {
-    return apiFetch("/admin/site/home", { requiresAuth: true, method: "PUT", body: JSON.stringify(content) });
-}
-
-export function uploadHomeImage(file) {
+export function updateAdminHomeContent(content, files = {}) {
+    const selected = Object.entries(files).filter(([, file]) => file);
+    if (!selected.length) {
+        return apiFetch("/admin/site/home", { requiresAuth: true, method: "PUT", body: JSON.stringify(content) });
+    }
     const form = new FormData();
-    form.append("file", file);
-    return apiFetch("/admin/site/home/image", { requiresAuth: true, method: "POST", body: form });
+    form.append("content", JSON.stringify(content));
+    for (const [field, file] of selected) form.append(field, file);
+    return apiFetch("/admin/site/home", { requiresAuth: true, method: "PUT", body: form });
 }

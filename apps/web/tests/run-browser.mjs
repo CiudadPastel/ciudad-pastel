@@ -23,7 +23,7 @@ const port = server.httpServer.address().port;
 const profile = mkdtempSync(path.join(tmpdir(), "ciudad-pastel-ux-"));
 try {
     for (const size of ["1280,900", "390,844"]) {
-      for (const page of ["ux", "cart", "cart-persistence.html?phase=save", "cart-persistence.html?phase=restore"]) {
+      for (const page of ["ux", "cart", "home-integration", "cart-persistence.html?phase=save", "cart-persistence.html?phase=restore"]) {
         const output = await new Promise((resolve, reject) => {
             const child = spawn(browser, ["--headless", "--disable-gpu", "--no-first-run",
                 `--user-data-dir=${profile}`, `--window-size=${size}`, "--dump-dom",

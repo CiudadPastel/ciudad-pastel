@@ -65,8 +65,8 @@ export function normalizeHomeContent(value) {
     const title = typeof about.title === "string" && about.title.trim() ? about.title.trim().slice(0, 100) : HOME_DEFAULTS.about.title;
     const description = typeof about.description === "string" ? about.description.trim().slice(0, 2500) : "";
     return {
-        heroImageUrl: cleanImageUrl(value.heroImageUrl, "heroImageUrl", errors),
-        storeImageUrl: cleanImageUrl(value.storeImageUrl, "storeImageUrl", errors),
+        heroImageUrl: cleanImageUrl(value.heroImageUrl === undefined ? HOME_DEFAULTS.heroImageUrl : value.heroImageUrl, "heroImageUrl", errors),
+        storeImageUrl: cleanImageUrl(value.storeImageUrl === undefined ? HOME_DEFAULTS.storeImageUrl : value.storeImageUrl, "storeImageUrl", errors),
         about: {
             visible: about.visible === true && Boolean(description),
             title,

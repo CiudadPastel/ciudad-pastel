@@ -13,6 +13,11 @@ describe("contenido administrable de portada", () => {
         expect(normalizeHomeContent(null)).toEqual(HOME_DEFAULTS);
     });
 
+    it("restores missing legacy fields without replacing intentionally cleared URLs", () => {
+        expect(normalizeHomeContent({ about: {} }).heroImageUrl).toBe(HOME_DEFAULTS.heroImageUrl);
+        expect(normalizeHomeContent({ heroImageUrl: null }).heroImageUrl).toBeNull();
+    });
+
     it("acepta contenido completo con enlaces HTTPS", () => {
         const result = validateHomeContent(valid());
         expect(result.valid).toBe(true);

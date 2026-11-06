@@ -14,10 +14,10 @@ function PublicLayout() {
         if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
         const inCatalog = location.pathname === "/tienda";
-        const visibleCard = inCatalog && [...document.querySelectorAll("[data-product-id]")].find((card) => {
+        const visibleCard = inCatalog ? [...document.querySelectorAll("[data-product-id]")].find((card) => {
             const bounds = card.getBoundingClientRect();
             return bounds.top >= 0 && bounds.top < window.innerHeight;
-        });
+        }) ?? null : null;
         let detailId = null;
         if (location.pathname.startsWith("/tienda/") && location.pathname !== "/tienda/carrito") {
             try { detailId = decodeURIComponent(location.pathname.slice("/tienda/".length)); }
@@ -25,7 +25,7 @@ function PublicLayout() {
         }
         navigate("/tienda/carrito", { state: { catalogFrom,
             catalogScrollY: inCatalog ? window.scrollY : null,
-            catalogFocusProductId: visibleCard?.dataset.productId || detailId } });
+            catalogFocusProductId: visibleCard?.dataset?.productId || detailId } });
     }
     return (
         <div className={styles.shell}>
