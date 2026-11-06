@@ -909,6 +909,7 @@ describe("public courses", () => {
       expect(fake.verifyIdToken).not.toHaveBeenCalled();
       expect(Object.keys(response.body).sort()).toEqual([
         "capacity",
+        "courseType",
         "description",
         "id",
         "imageUrl",

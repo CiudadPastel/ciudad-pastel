@@ -140,6 +140,7 @@ describe("Public Courses API Acceptance Criteria Suite [CIU-74 / CIU-80]", () =>
             const item = response.body[0];
             const expectedKeys = [
                 "capacity",
+                "courseType",
                 "description",
                 "id",
                 "imageUrl",
@@ -156,7 +157,7 @@ describe("Public Courses API Acceptance Criteria Suite [CIU-74 / CIU-80]", () =>
             expect(item).not.toHaveProperty("status");
             expect(item).not.toHaveProperty("createdAt");
             expect(item).not.toHaveProperty("updatedAt");
-            expect(item).not.toHaveProperty("courseType");
+            expect(item.courseType).toBe("workshop");
             expect(item).not.toHaveProperty("whatYouWillLearn");
             expect(item).not.toHaveProperty("location");
             expect(item).not.toHaveProperty("address");

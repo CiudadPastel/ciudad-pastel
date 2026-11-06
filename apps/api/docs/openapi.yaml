@@ -1852,6 +1852,11 @@ components:
         name:
           type: string
           example: Repostería Básica
+        courseType:
+          type: string
+          nullable: true
+          enum: [basic, workshop, demonstrative, semi_demonstrative, multi_week, other, null]
+          description: Existing course type used for public catalog navigation.
         summary:
           type: string
           example: Aprende técnicas básicas para preparar pasteles.
