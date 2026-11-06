@@ -26,6 +26,8 @@ let overrides;
 let contactAvailable;
 let writes;
 let delayed;
+let categories;
+let categoryResponse;
 
 function assert(condition, message) { if (!condition) throw new Error(message); }
 function text() { return container.innerText; }
@@ -39,7 +41,10 @@ window.fetch = async (input, options = {}) => {
     requests.push(url);
     if (options.method && options.method !== "GET") { writes++; throw new Error("Writes forbidden in public cart tests"); }
     if (url.pathname.endsWith("/contact/whatsapp")) return contactAvailable ? Response.json(contact) : Response.json({}, { status: 404 });
-    if (url.pathname.endsWith("/categories")) return Response.json([{ id: "harinas", name: "Harinas", productCount: 25 }]);
+    if (url.pathname.endsWith("/categories")) {
+        if (categoryResponse) await categoryResponse;
+        return Response.json(categories);
+    }
     if (url.pathname.endsWith("/products")) {
         const total = url.searchParams.get("q") === "vacio" ? 0 : 25;
         const page = Number(url.searchParams.get("page")) || 1;
@@ -77,6 +82,7 @@ async function test(name, fn) {
         window.localStorage.clear();
         requests = []; unavailable = new Set(); failed = new Set(); overrides = new Map();
         contactAvailable = true; writes = 0; delayed = null;
+        categories = [{ id: "harinas", name: "Harinas", productCount: 25 }]; categoryResponse = null;
         resetWhatsAppContactCache();
         await fn();
         assert(writes === 0, "Public flow must not write to an API/Firestore");
@@ -105,6 +111,27 @@ await test("catalog add, repeat, counter, filters, loaded blocks and scroll", as
     await link("Seguir explorando productos");
     assert(window.location.search.includes("categoria=harinas") && window.location.search.includes("pagina=2"), "Return preserves catalog context");
     assert(Math.abs(window.scrollY - scroll) <= 1, "Cart return restores actual catalog scroll");
+});
+
+await test("category landing restores real scroll after cart return without fetching product pages", async () => {
+    categories = Array.from({ length: 30 }, (_, index) => ({ id: `category-${index}`, name: `Categoría ${index}`, productCount: 1 }));
+    seed([line()]);
+    await mount("/tienda");
+    await settle(() => window.scrollTo(0, 500));
+    const scroll = window.scrollY;
+    assert(scroll > 0, "Category grid is actually scrolled");
+    await click(container.querySelector('a[href="/tienda/carrito"]'));
+    assert(window.location.pathname === "/tienda/carrito", "Cart opens from category landing");
+    let release;
+    categoryResponse = new Promise((resolve) => { release = resolve; });
+    await link("Seguir explorando productos");
+    assert(text().includes("Cargando categorías"), "Return waits for categories, not products");
+    release(); categoryResponse = null;
+    await settle();
+    assert(window.location.pathname === "/tienda" && !window.location.search, "Category landing URL restored");
+    assert(container.querySelectorAll('ul[aria-label="Categorías"] a').length === 31, "Category grid has finished rendering");
+    assert(Math.abs(window.scrollY - scroll) <= 1, "Category landing restores actual scroll");
+    assert(!requests.some((url) => url.pathname.endsWith("/products")), "No product pages downloaded for category landing");
 });
 
 await test("product detail add and back retain selection and catalog filters", async () => {
@@ -212,6 +239,57 @@ await test("modal add and direct individual inquiry leave unrelated cart items i
     await button("Agregar al carrito y seguir explorando");
     units(4);
     assert(window.location.pathname === "/tienda/p0" && saved().length === 2, "Modal add stays on detail");
+});
+
+await test("modal keeps rejection accessible at twenty products and closes only after successful retry", async () => {
+    const full = products.slice(0, 20).map((product) => line(product));
+    seed(full);
+    await mount("/tienda/p20");
+    await labeled("Consultar por WhatsApp sobre Producto 20");
+    const dialog = container.querySelector("dialog[open]");
+    const before = JSON.stringify(saved());
+    await button("Agregar al carrito y seguir explorando");
+    assert(dialog.open && dialog.contains(document.activeElement), "Rejected add keeps modal and focus inside");
+    assert(dialog.querySelector('[role="alert"]').textContent.includes("20 productos distintos"), "Limit reason announced inside modal");
+    assert(JSON.stringify(saved()) === before, "Rejected distinct product does not alter cart");
+    units(20);
+    await settle(() => window.dispatchEvent(new StorageEvent("storage", { key: CART_STORAGE_KEY, newValue: JSON.stringify(full.slice(0, 19)) })));
+    units(19);
+    await button("Agregar al carrito y seguir explorando");
+    assert(!dialog.open, "Successful retry closes the modal");
+    units(20);
+    assert(saved().length === 20 && saved().some((item) => item.id === "p20" && item.quantity === 1), "Retry uses current shared cart");
+});
+
+await test("modal rejects ninety-nine units without closing or incrementing and can retry", async () => {
+    seed([line(products[0], 99)]);
+    await mount("/tienda/p0");
+    await labeled(`Consultar por WhatsApp sobre ${products[0].name}`);
+    const dialog = container.querySelector("dialog[open]");
+    const before = JSON.stringify(saved());
+    await button("Agregar al carrito y seguir explorando");
+    assert(dialog.open && dialog.contains(document.activeElement), "Quantity rejection leaves modal open and focus contained");
+    assert(dialog.querySelector('[role="alert"]').textContent.includes("99 unidades"), "Quantity limit announced inside modal");
+    assert(JSON.stringify(saved()) === before && saved()[0].quantity === 99, "Rejected increment keeps cart intact");
+    units(99);
+    await settle(() => window.dispatchEvent(new StorageEvent("storage", { key: CART_STORAGE_KEY, newValue: JSON.stringify([line(products[0], 98)]) })));
+    units(98);
+    await button("Agregar al carrito y seguir explorando");
+    assert(!dialog.open && saved()[0].quantity === 99, "Retry succeeds with available quantity capacity");
+    units(99);
+});
+
+await test("single cart line prepares a singular inquiry with actual quantity", async () => {
+    for (const quantity of [1, 4]) {
+        seed([line(products[0], quantity)]);
+        await mount("/tienda/carrito");
+        await button("Consultar disponibilidad por WhatsApp");
+        const anchor = [...container.querySelectorAll("a")].find((element) => element.textContent === "Abrir WhatsApp con la consulta");
+        const message = new URL(anchor.href).searchParams.get("text");
+        assert(message.includes(`${products[0].name} (${quantity} ${quantity === 1 ? "unidad" : "unidades"})`), "Single product uses actual cart quantity");
+        assert(message.includes("si está disponible") && !message.includes("los siguientes productos"), "Single-product inquiry is natural");
+        assert(!/precio|cotiz|reservad|pedido/i.test(message), "Single-cart inquiry only asks availability");
+    }
 });
 
 await test("joint inquiry revalidates current data and never empties or sends automatically", async () => {

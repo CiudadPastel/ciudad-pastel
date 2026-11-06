@@ -19,12 +19,17 @@ export function CartProvider({ children }) {
 
     const update = useCallback((action) => {
         const result = applyCartAction(itemsRef.current, action);
+        if (result.success === false) {
+            setNotice(result.message);
+            return result;
+        }
         itemsRef.current = result.items;
         let storageError = "";
         try { window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(result.items)); }
         catch { storageError = "No se pudo guardar el carrito en este navegador. Su selección se conserva durante esta sesión."; }
         setState({ items: result.items, storageError });
         if (result.message) setNotice(result.message);
+        return result;
     }, []);
 
     useEffect(() => {

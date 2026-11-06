@@ -33,6 +33,23 @@ test("distinct product limit, explicit remove and clear", () => {
     assert.equal(items.length, MAX_CART_PRODUCTS - 1);
     assert.deepEqual(applyCartAction(items, { type: "clear" }).items, []);
 });
+test("add reports success or a limit rejection without replacing the cart", () => {
+    const full = Array.from({ length: MAX_CART_PRODUCTS }, (_, id) => ({ ...product, id: String(id), quantity: 1 }));
+    const rejectedProduct = applyCartAction(full, { type: "add", product });
+    assert.equal(rejectedProduct.success, false);
+    assert.equal(rejectedProduct.items, full);
+    assert.match(rejectedProduct.message, /20 productos distintos/);
+    const acceptedExisting = applyCartAction(full, { type: "add", product: { ...product, id: "0" } });
+    assert.equal(acceptedExisting.success, true);
+    assert.equal(acceptedExisting.items.length, MAX_CART_PRODUCTS);
+    assert.equal(acceptedExisting.items[0].quantity, 2);
+    const atMax = [{ ...product, quantity: MAX_CART_QUANTITY }];
+    const rejectedQuantity = applyCartAction(atMax, { type: "add", product });
+    assert.equal(rejectedQuantity.success, false);
+    assert.equal(rejectedQuantity.items, atMax);
+    assert.match(rejectedQuantity.message, /99 unidades/);
+    assert.equal(applyCartAction([], { type: "add", product: {} }).success, false);
+});
 test("storage roundtrip keeps only minimal snapshot fields", () => {
     const items = add([], { ...product, token: "never-store", phone: "never-store", description: "unnecessary" });
     assert.deepEqual(decodeCart(JSON.stringify(items)), { items, invalid: false });
@@ -69,13 +86,22 @@ test("refresh preserves quantities and does not resurrect removed products", () 
     assert.equal(updated[0].quantity, 2);
 });
 test("individual inquiry always asks availability for one unit", () => {
-    const message = buildIndividualAvailabilityMessage(product);
+    const message = buildIndividualAvailabilityMessage({ ...product, quantity: 8 });
     assert.ok(message.includes(`${product.name} (1 unidad)`));
     assert.ok(!/precio|cotiz|reservad|pedido/i.test(message));
+});
+test("single cart product uses a natural singular message with its actual quantity", () => {
+    for (const quantity of [1, 8]) {
+        const message = buildCartAvailabilityMessage([{ ...product, quantity }]);
+        assert.equal(message, `¡Hola, Ciudad Pastel! Me interesa el producto ${product.name} (${quantity} ${quantity === 1 ? "unidad" : "unidades"}). ¿Podrían confirmarme si está disponible? ¡Muchas gracias!`);
+        assert.ok(!/siguientes productos|cuáles|precio|cotiz|reservad|pedido/i.test(message));
+    }
 });
 test("joint inquiry contains exactly selected names and quantities", () => {
     const items = [{ ...product, quantity: 2 }, { ...product, id: "color", name: "Colorante rojo", quantity: 3 }];
     const message = buildCartAvailabilityMessage(items);
+    assert.ok(message.includes("los siguientes productos"));
+    assert.ok(message.includes("cuáles tienen disponibles"));
     assert.ok(message.includes(`- 2 × ${product.name}\n- 3 × Colorante rojo`));
     assert.equal(message.match(/Harina/g).length, 1);
     assert.ok(!/precio|cotiz|reservad|pedido/i.test(message));

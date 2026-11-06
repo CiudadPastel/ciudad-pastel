@@ -24,6 +24,10 @@ export function buildIndividualAvailabilityMessage(product) {
 
 export function buildCartAvailabilityMessage(items) {
     if (!items.length) return "";
+    if (items.length === 1) {
+        const { name, quantity } = items[0];
+        return `¡Hola, Ciudad Pastel! Me interesa el producto ${name.replace(/\s+/g, " ")} (${quantity} ${quantity === 1 ? "unidad" : "unidades"}). ¿Podrían confirmarme si está disponible? ¡Muchas gracias!`;
+    }
     const lines = items.map((item) => `- ${item.quantity} × ${item.name.replace(/\s+/g, " ")}`);
     return `¡Hola, Ciudad Pastel!\n\nMe gustaría consultar la disponibilidad de los siguientes productos:\n\n${lines.join("\n")}\n\n¿Podrían confirmarme cuáles tienen disponibles?\n\n¡Muchas gracias!`;
 }

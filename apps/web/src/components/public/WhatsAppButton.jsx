@@ -47,6 +47,7 @@ function WhatsAppButton({ contact, product, productName, variant = "detail", lab
 function ProductInquiry({ contact, product, variant, label }) {
     const { add } = useCart();
     const [open, setOpen] = useState(false);
+    const [addError, setAddError] = useState("");
     const dialogRef = useRef(null);
     const triggerRef = useRef(null);
     const cancelRef = useRef(null);
@@ -63,7 +64,7 @@ function ProductInquiry({ contact, product, variant, label }) {
     return (
         <>
             <button ref={triggerRef} type="button" className={styles.button + " " + (styles[variant] || "")}
-                onClick={() => setOpen(true)} aria-haspopup="dialog" aria-expanded={open} aria-label={label + " sobre " + product.name}>
+                onClick={() => { setAddError(""); setOpen(true); }} aria-haspopup="dialog" aria-expanded={open} aria-label={label + " sobre " + product.name}>
                 <WhatsAppIcon size={variant === "card" ? 16 : 20} /> {label}
             </button>
             <dialog ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId}
@@ -72,8 +73,13 @@ function ProductInquiry({ contact, product, variant, label }) {
                 <h2 id={titleId}>¿Necesitas algún otro producto?</h2>
                 <p><strong>{product.name}</strong>{!product.available && " · Aparece como agotado"}</p>
                 <p id={descriptionId}>Puedes agregar este producto a tu carrito y seguir explorando, o consultar directamente su disponibilidad por WhatsApp.</p>
+                {addError && <p role="alert">{addError}</p>}
                 <div className={dialogStyles.actions}>
-                    <button type="button" className="btn btn-secondary" onClick={() => { add(product); setOpen(false); }}>
+                    <button type="button" className="btn btn-secondary" onClick={() => {
+                        const result = add(product);
+                        if (result.success) { setAddError(""); setOpen(false); }
+                        else setAddError(result.message);
+                    }}>
                         Agregar al carrito y seguir explorando
                     </button>
                     <PreparedWhatsAppLink contact={contact} message={buildIndividualAvailabilityMessage(product)}

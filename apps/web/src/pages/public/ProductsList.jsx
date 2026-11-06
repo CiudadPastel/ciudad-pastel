@@ -283,9 +283,11 @@ function ProductsList() {
     const focusProductId = location.state?.focusProductId;
     const returnScrollY = location.state?.catalogScrollY;
     const listReady = state.key === requestKey && state.status === "success";
+    const categoriesStatus = categoriesState.key === categoriesReloadKey ? categoriesState.status : "loading";
+    const viewReady = showCategories ? categoriesStatus !== "loading" : listReady;
 
     useEffect(() => {
-        if (!listReady) return;
+        if (!viewReady) return;
         if (Number.isFinite(returnScrollY)) window.scrollTo({ top: returnScrollY, behavior: "instant" });
         if (!focusProductId) return;
         const card = [...document.querySelectorAll("[data-product-id]")]
@@ -293,10 +295,9 @@ function ProductsList() {
         if (!card) return;
         if (!Number.isFinite(returnScrollY)) card.scrollIntoView({ block: "center" });
         card.focus({ preventScroll: true });
-    }, [listReady, focusProductId, returnScrollY]);
+    }, [viewReady, showCategories, focusProductId, returnScrollY]);
 
     const status = state.key === requestKey ? state.status : "loading";
-    const categoriesStatus = categoriesState.key === categoriesReloadKey ? categoriesState.status : "loading";
     const categories = categoriesState.items;
     const selectedCategory = categoryId
         ? categories.find((category) => category.id === categoryId) ?? null

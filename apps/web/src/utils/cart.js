@@ -45,12 +45,13 @@ export function decodeCart(raw) {
 export function applyCartAction(items, action) {
     if (action.type === "add") {
         const product = productSnapshot(action.product);
-        if (!product) return { items, message: "No se pudo agregar este producto. Actualice el catálogo." };
+        if (!product) return { items, success: false, message: "No se pudo agregar este producto. Actualice el catálogo." };
         const previous = items.find((item) => item.id === product.id);
-        if (previous?.quantity === MAX_CART_QUANTITY) return { items, message: `El máximo es ${MAX_CART_QUANTITY} unidades por producto.` };
-        if (!previous && items.length === MAX_CART_PRODUCTS) return { items, message: `Puede seleccionar hasta ${MAX_CART_PRODUCTS} productos distintos. Elimine uno para agregar otro.` };
+        if (previous?.quantity === MAX_CART_QUANTITY) return { items, success: false, message: `El máximo es ${MAX_CART_QUANTITY} unidades por producto.` };
+        if (!previous && items.length === MAX_CART_PRODUCTS) return { items, success: false, message: `Puede seleccionar hasta ${MAX_CART_PRODUCTS} productos distintos. Elimine uno para agregar otro.` };
         const quantity = (previous?.quantity || 0) + 1;
         return {
+            success: true,
             items: previous ? items.map((item) => item.id === product.id ? { ...product, quantity } : item) : [...items, { ...product, quantity }],
             message: `${product.name}: ${quantity} ${quantity === 1 ? "unidad" : "unidades"} en el carrito.`
         };

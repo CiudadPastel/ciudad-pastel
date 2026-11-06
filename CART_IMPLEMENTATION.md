@@ -2,9 +2,18 @@
 
 ## Base y alcance
 
-Rama: `feat/ciu-carrito-consultas-whatsapp`, creada desde `main` limpio tras `git fetch origin main` y actualización mediante `--ff-only`. Base: `ff9833f` (merge del PR #49). No se mezclaron cambios locales anteriores. No se crearon commits, push ni PR.
+Rama: `feat/ciu-carrito-consultas-whatsapp`, creada desde `main` limpio tras `git fetch origin main` y actualización mediante `--ff-only`. Base: `ff9833f` (merge del PR #49). No se mezclaron cambios locales anteriores. La implementación principal está confirmada en el commit `73a254d` (`feat(web): add local cart for WhatsApp availability inquiries`), publicado en la rama remota, y tiene el [PR #50](https://github.com/JusMH/ciudad-pastel/pull/50) abierto hacia `main`. Se verificó que el head del PR coincide con ese commit. Las correcciones de revisión descritas a continuación permanecen como cambios locales: no se realizaron nuevos commits, push ni merge.
 
 La funcionalidad vive en `apps/web`. No hay endpoints, colecciones, reglas de Firestore, pedidos, reservas, pagos ni autenticación nuevos. Los contratos públicos y el funcionamiento de cursos/matrículas se conservan.
+
+## Correcciones de revisión del PR #50
+
+1. **Scroll de categorías:** la restauración espera la vista activa: categorías cuando se muestra la portada y productos cuando se muestra el listado. No se solicitan páginas de productos para restaurar categorías. La regresión de navegador desplaza una portada de treinta categorías, abre el carrito, retrasa la respuesta de categorías al volver y comprueba el scroll real después de renderizar la cuadrícula, con tolerancia de un píxel. Conserva la comprobación existente del listado filtrado.
+2. **Mensaje de una línea:** `buildCartAvailabilityMessage` usa «Me interesa el producto … (N unidad/unidades). ¿Podrían confirmarme si está disponible?» para un producto distinto, respetando su cantidad. Varias líneas mantienen el mensaje plural. `buildIndividualAvailabilityMessage` no cambia: sigue consultando una unidad, independientemente de la cantidad del carrito.
+3. **Adición rechazada desde el modal:** `applyCartAction` indica `success` y el motivo de la adición; el provider devuelve ese mismo resultado. Un rechazo no modifica el estado de la selección ni reescribe `localStorage`. El modal permanece abierto, conserva el foco dentro y anuncia el motivo con `role=alert` en su interior. Un éxito actualiza el contador y cierra normalmente. El mensaje local es solo presentación del error; la selección sigue perteneciendo únicamente al provider. Se prueban ambos límites y el reintento satisfactorio tras liberar espacio/cantidad en el estado compartido.
+4. **Documentación:** se corrigió el estado de publicación de la rama y se separaron las verificaciones actuales de la suite de API ejecutada durante la implementación original.
+
+Estos ajustes se limitan a `ProductsList.jsx`, `utils/whatsapp.js`, `utils/cart.js`, `CartProvider.jsx`, `WhatsAppButton.jsx`, las pruebas `cart.unit.test.mjs`/`cart.browser.jsx` y este documento. No hay cambios de API, Firestore, contratos públicos, autenticación, cursos, matrículas ni dependencias.
 
 ## Arquitectura y persistencia
 
@@ -73,13 +82,14 @@ La validación tiene un máximo de veinte GET por revisión, no un endpoint de l
 
 ## Verificaciones ejecutadas
 
-- `npm run test:unit -w web`: **12 pruebas aprobadas** con `node:test`, sin dependencias nuevas. Cubren adiciones, ID/duplicados, límites, enteros, eliminación/vaciado, snapshots, datos corruptos, actualización sin resurrección, mensajes, compatibilidad de plantilla, contacto, codificación y URL excesiva.
-- `npm run test:ux -w web`: **54 comprobaciones aprobadas**, en Edge sin interfaz a 1280×900 y 390×844: 12 escenarios anteriores + 13 del carrito + 2 fases de persistencia por tamaño. Las dos fases usan documentos/procesos nuevos de navegador y comparten únicamente el perfil temporal y su `localStorage`.
-- La cobertura nueva comprueba adición desde catálogo y detalle, repetición, contador, cantidades inválidas y controles, eliminación, vaciado/cancelación, almacenamiento corrupto/bloqueado, evento `storage`, modalidades del diálogo, foco del fondo bloqueado, restauración de foco, mensajes individuales/conjuntos, ausencia/reintento de contacto, agotados, 404, conexión fallida, actualización de precio tanto al entrar como antes de consultar, retiro posterior a la entrada, consultas largas sin truncamiento, vuelta con filtros/bloques/scroll y ancho responsive.
+- `npm run test:unit -w web`: **14 pruebas aprobadas** con `node:test`, sin dependencias nuevas. Cubren adiciones, ID/duplicados, límites, enteros, eliminación/vaciado, snapshots, datos corruptos, actualización sin resurrección, mensajes, compatibilidad de plantilla, contacto, codificación y URL excesiva.
+- `npm run test:ux -w web`: **62 comprobaciones aprobadas**, en Edge sin interfaz a 1280×900 y 390×844: 12 escenarios anteriores + 17 del carrito + 2 fases de persistencia por tamaño. Las dos fases usan documentos/procesos nuevos de navegador y comparten únicamente el perfil temporal y su `localStorage`.
+- Las regresiones añadidas en la revisión comprueban scroll real de categorías sin páginas de productos, mensaje singular de una línea para 1 y varias unidades, plural de varias líneas y rechazo accesible del modal para 20 productos y 99 unidades, sin escrituras/reemplazo de la selección y con reintento satisfactorio.
+- La cobertura del carrito comprueba adición desde catálogo y detalle, repetición, contador, cantidades inválidas y controles, eliminación, vaciado/cancelación, almacenamiento corrupto/bloqueado, evento `storage`, modalidades del diálogo, foco del fondo bloqueado, restauración de foco, mensajes individuales/conjuntos, ausencia/reintento de contacto, agotados, 404, conexión fallida, actualización de precio tanto al entrar como antes de consultar, retiro posterior a la entrada, consultas largas sin truncamiento, vuelta con filtros/bloques/scroll y ancho responsive.
 - Las peticiones de las pruebas públicas están simuladas y rechazan métodos distintos de GET. El fixture existente aísla Firebase. Los enlaces externos se inspeccionan y se evita su navegación real al probar clics; no se envían mensajes ni se escriben datos en Firestore.
 - `npm run lint -w web`: aprobado.
 - `npm run build -w web`: aprobado; permanece la advertencia de Vite por bundle JS superior a 500 kB.
-- `npm run test -w api -- --reporter=dot --maxWorkers=1`: **18 suites / 861 pruebas aprobadas**, con repositorios simulados. No se cambió código de API.
+- **Verificación histórica de la implementación original:** `npm run test -w api -- --reporter=dot --maxWorkers=1`: 18 suites / 861 pruebas aprobadas, con repositorios simulados. No se volvió a ejecutar la suite de API en estas cuatro correcciones: no se modificó código ni contrato de API. Las verificaciones actuales son unitarias, navegador, lint, build y `git diff --check`.
 - `git diff --check`: aprobado.
 
 En este entorno Windows se utilizó `node_modules/.cache/ux-temp` como temporal y se habilitaron conexiones localhost para Vite/Supertest. El runner existente utiliza un perfil de navegador aislado que elimina al terminar.
