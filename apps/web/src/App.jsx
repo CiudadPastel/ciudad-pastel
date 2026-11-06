@@ -63,6 +63,7 @@ import PublicProductDetail
 
 import Home
     from "./pages/Home";
+import HomeContent from "./pages/admin/HomeContent";
 
 import Cart from "./pages/public/Cart";
 
@@ -168,6 +169,8 @@ function App() {
                         path="productos/:id"
                         element={<ProductDetail />}
                     />
+
+                    <Route path="pagina-inicio" element={<HomeContent />} />
 
                     <Route
                         path="solicitudes"

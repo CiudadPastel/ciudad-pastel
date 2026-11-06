@@ -1,4 +1,4 @@
-import { BookOpen, ClipboardList, LayoutDashboard, LogOut, Package } from "lucide-react";
+import { BookOpen, ClipboardList, LayoutDashboard, LogOut, Package, Image } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../../auth/authContext";
@@ -11,6 +11,7 @@ import styles from "./AdminLayout.module.css";
  */
 const NAV_ITEMS = [
     { to: "/admin", label: "Inicio", icon: LayoutDashboard, end: true },
+    { to: "/admin/pagina-inicio", label: "Página de inicio", icon: Image },
     { to: "/admin/cursos", label: "Cursos", icon: BookOpen },
     { to: "/admin/productos", label: "Productos", icon: Package },
     { to: "/admin/solicitudes", label: "Solicitudes", icon: ClipboardList }
