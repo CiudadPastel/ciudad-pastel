@@ -20,6 +20,7 @@ const results = [];
 let root;
 let requests = [];
 let failProducts = false;
+let singleProductResult = false;
 let failCategories = false;
 let pendingProducts;
 let pendingCourses;
@@ -46,7 +47,7 @@ window.fetch = async (input, options = {}) => {
     if (url.pathname.endsWith("/products")) {
         if (pendingProducts) await pendingProducts;
         if (failProducts) throw new Error("offline");
-        const total = url.searchParams.get("q") ? 0 : url.searchParams.has("categoryId")
+        const total = singleProductResult ? 1 : url.searchParams.get("q") ? 0 : url.searchParams.has("categoryId")
             ? url.searchParams.get("categoryId") === "harinas" ? 13 : 0 : 25;
         const page = Number(url.searchParams.get("page"));
         const limit = Number(url.searchParams.get("limit"));
@@ -288,6 +289,39 @@ await test("product categories first, virtual all, filtered incremental totals a
     await button("Volver a categorías");
     await link("Ver todos");
     assert(text().includes("Mostrando 12 de 25 productos"), "All must remove category filter");
+});
+
+await test("responsive catalog cards keep the same width with one or many items", async () => {
+    // Regression: auto-fit + 1fr used to stretch a single course across the entire page.
+    await mount(courseRoutes, "/cursos?tipo=demonstrative");
+    const singleCourse = container.querySelector('ul[aria-label="Cursos disponibles"] li');
+    assert(singleCourse && container.querySelectorAll('ul[aria-label="Cursos disponibles"] li').length === 1, "Fixture must contain exactly one course");
+    const singleCourseWidth = singleCourse.getBoundingClientRect().width;
+    assert(singleCourseWidth > 0 && singleCourseWidth <= 372, "Single course respects a responsive maximum width");
+
+    await mount(courseRoutes, "/cursos?tipo=workshop");
+    const manyCourseWidth = container.querySelector('ul[aria-label="Cursos disponibles"] li').getBoundingClientRect().width;
+    assert(Math.abs(singleCourseWidth - manyCourseWidth) <= 2, "Course cards keep the same width regardless of item count");
+
+    await mount(<ProductsList />, "/tienda");
+    const category = container.querySelector('ul[aria-label="Categorías"] li');
+    assert(category && category.getBoundingClientRect().width <= 302, "Category tiles have a maximum width");
+
+    singleProductResult = true;
+    try {
+        await mount(<ProductsList />, "/tienda?vista=todos");
+        const singleProduct = container.querySelector('ul[aria-label="Productos"] li');
+        assert(singleProduct && container.querySelectorAll('ul[aria-label="Productos"] li').length === 1, "Fixture must contain one product");
+        const singleProductWidth = singleProduct.getBoundingClientRect().width;
+        assert(singleProductWidth > 0 && singleProductWidth <= 302, "Single product does not stretch");
+        singleProductResult = false;
+        await mount(<ProductsList />, "/tienda?vista=todos");
+        const manyProductWidth = container.querySelector('ul[aria-label="Productos"] li').getBoundingClientRect().width;
+        assert(Math.abs(singleProductWidth - manyProductWidth) <= 2, "Product card width does not depend on catalog size");
+        assert(document.documentElement.scrollWidth <= window.innerWidth, "Catalog has no horizontal overflow");
+    } finally {
+        singleProductResult = false;
+    }
 });
 
 await test("product errors, retries, loading and empty search", async () => {
