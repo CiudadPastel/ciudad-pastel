@@ -39,3 +39,24 @@ Estas preguntas deben realizarse a la clienta en lenguaje sencillo para validar 
 ## 3. Respuestas de Ciudad Pastel
 
 *(Sección vacía — pendiente de registrar las respuestas obtenidas por el equipo tras consultar a la clienta).*
+
+---
+
+## 4. Modelo de Datos de Estado de Pago (Enrollment Data Model)
+
+En el modelo de matrícula (`apps/api/src/models/enrollment.model.js`) y en su mapeo de repositorio (`apps/api/src/repositories/enrollment.repository.js`), se incorporan los siguientes atributos:
+
+- **`paymentStatus`**: Cadena que representa el estado del pago. Sus valores válidos son:
+  - `"pending"`: Estado inicial por defecto de toda matrícula al ser creada (`PAYMENT_STATUS.PENDING`).
+  - `"deposit_paid"`: Adelanto o abono recibido para apartar el cupo (`PAYMENT_STATUS.DEPOSIT_PAID`).
+  - `"paid"`: Pago total recibido y confirmado (`PAYMENT_STATUS.PAID`).
+- **`paymentUpdatedAt`**: Cadena en formato ISO 8601 UTC (o `null`) que registra la marca de tiempo de la última actualización del estado de pago.
+- **`paymentUpdatedBy`**: Cadena (o `null`) con el UID del usuario administrador que realizó el cambio de estado.
+
+### Compatibilidad y Estrategia sin Migraciones
+- **No hay migraciones masivas:** Los registros preexistentes en la colección `enrollments` de Firestore que fueron creados antes de esta funcionalidad y que no poseen el campo `paymentStatus` son interpretados en tiempo de lectura por el mapper del repositorio (`mapEnrollmentDocument`):
+  - `paymentStatus: data.paymentStatus ?? PAYMENT_STATUS.PENDING`
+  - `paymentUpdatedAt: toIso(data.paymentUpdatedAt)` (se resuelve a `null` si no está presente)
+  - `paymentUpdatedBy: data.paymentUpdatedBy ?? null`
+- Esto garantiza compatibilidad retrospectiva inmediata sin necesidad de scripts de migración ni interrupciones del servicio.
+

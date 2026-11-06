@@ -8,6 +8,19 @@ export const ENROLLMENT_STATUS = Object.freeze({
     CANCELLED: "cancelled"
 });
 
+// Enrollment payment lifecycle statuses (HU-A07).
+export const PAYMENT_STATUS = Object.freeze({
+    PENDING: "pending",
+    DEPOSIT_PAID: "deposit_paid",
+    PAID: "paid"
+});
+
+export const VALID_PAYMENT_STATUSES = Object.freeze(Object.values(PAYMENT_STATUS));
+
+export function isValidPaymentStatus(status) {
+    return typeof status === "string" && VALID_PAYMENT_STATUSES.includes(status);
+}
+
 // Error codes the frontend uses to show a specific message.
 export const ENROLLMENT_ERROR_CODE = Object.freeze({
     COURSE_FULL: "COURSE_FULL",
@@ -27,7 +40,10 @@ export function buildEnrollment({
     idNumber,
     phone,
     enrollmentRequestId = null,
-    note = null
+    note = null,
+    paymentStatus = PAYMENT_STATUS.PENDING,
+    paymentUpdatedAt = null,
+    paymentUpdatedBy = null
 }) {
     return {
         id,
@@ -39,7 +55,10 @@ export function buildEnrollment({
         phone,
         enrollmentRequestId,
         note,
-        status: ENROLLMENT_STATUS.ENROLLED
+        status: ENROLLMENT_STATUS.ENROLLED,
+        paymentStatus,
+        paymentUpdatedAt,
+        paymentUpdatedBy
     };
 }
 
