@@ -1,7 +1,7 @@
 // Contenido administrable de la portada. No se permite HTML ni URLs no HTTPS.
 export const HOME_DEFAULTS = Object.freeze({
-    heroImageUrl: null,
-    storeImageUrl: null,
+    heroImageUrl: "https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=1400&q=85",
+    storeImageUrl: "https://images.unsplash.com/photo-1499636136210-6f4ee915583e?w=1400&q=85",
     about: { visible: false, title: "Sobre nosotros", description: "", imageUrl: null }
 });
 
