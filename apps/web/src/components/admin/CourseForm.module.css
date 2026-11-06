@@ -422,3 +422,21 @@
 }
 
 .section[hidden] { display: none; }
+
+.reviewHeading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.reviewDetails {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.reviewDetails dt { font-weight: 700; }
+.reviewDetails dd { margin: 0.25rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.reviewDetails ul { margin: 0; padding-left: 1.25rem; }

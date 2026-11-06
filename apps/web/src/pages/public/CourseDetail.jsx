@@ -53,7 +53,7 @@ function CourseDetail() {
     if (status === "loading") {
         return (
             <section className={styles.page} aria-busy="true">
-                <Link to={backTo} className={styles.back}>
+                <Link to={backTo} state={{ focusCourseId: location.state?.courseId }} className={styles.back}>
                     <ArrowLeft size={16} aria-hidden="true" />
                     Volver a los cursos
                 </Link>
@@ -69,7 +69,7 @@ function CourseDetail() {
                     title="Curso no disponible"
                     description="Este curso no se encuentra o ya no está disponible."
                     action={(
-                        <Link to={backTo} className="btn btn-primary">
+                        <Link to={backTo} state={{ focusCourseId: location.state?.courseId }} className="btn btn-primary">
                             <ArrowLeft size={16} aria-hidden="true" />
                             Volver a los cursos
                         </Link>
@@ -82,7 +82,7 @@ function CourseDetail() {
     if (status === "error") {
         return (
             <section className={styles.page}>
-                <Link to={backTo} className={styles.back}>
+                <Link to={backTo} state={{ focusCourseId: location.state?.courseId }} className={styles.back}>
                     <ArrowLeft size={16} aria-hidden="true" />
                     Volver a los cursos
                 </Link>
@@ -102,7 +102,7 @@ function CourseDetail() {
 
     return (
         <article className={styles.page}>
-            <Link to={backTo} className={styles.back}>
+            <Link to={backTo} state={{ focusCourseId: location.state?.courseId }} className={styles.back}>
                 <ArrowLeft size={16} aria-hidden="true" />
                 Volver a los cursos
             </Link>
