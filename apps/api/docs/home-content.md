@@ -50,3 +50,6 @@ Reiniciar API después de configurar. El servidor utiliza Basic Authentication d
 - El contacto de la portada utiliza la configuración pública de WhatsApp existente.
 - No se requiere instalar el SDK Cloudinary (se utiliza `fetch`, `FormData` y `Blob` disponibles en Node 20+).
 - Validar con la clienta fotografías y copy antes de un despliegue público.
+
+## Imágenes iniciales de demostración
+Mientras la administradora no publique fotografías propias, se muestran dos fotografías externas del prototipo editorial como **referencias temporales**; antes del despliegue público deben reemplazarse por imágenes autorizadas del negocio. Se pueden quitar desde Administración → Página de inicio y guardar el cambio.
