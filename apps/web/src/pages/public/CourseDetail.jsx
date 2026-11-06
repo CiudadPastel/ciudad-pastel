@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft, ClipboardPen, ImageOff } from "lucide-react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 
 import EnrollmentRequest from "../../components/public/EnrollmentRequest";
 import StateMessage, { RetryButton } from "../../components/ui/StateMessage";
@@ -15,6 +15,9 @@ import {
 import styles from "./CourseDetail.module.css";
 
 function CourseDetail() {
+    const location = useLocation();
+    const from = location.state?.from;
+    const backTo = typeof from === "string" && (from === "/cursos" || from.startsWith("/cursos?")) ? from : "/cursos";
     const { id } = useParams();
     const [reloadKey, setReloadKey] = useState(0);
     const [state, setState] = useState({ id: null, key: null, status: "loading", course: null, error: null });
@@ -50,7 +53,7 @@ function CourseDetail() {
     if (status === "loading") {
         return (
             <section className={styles.page} aria-busy="true">
-                <Link to="/cursos" className={styles.back}>
+                <Link to={backTo} className={styles.back}>
                     <ArrowLeft size={16} aria-hidden="true" />
                     Volver a los cursos
                 </Link>
@@ -66,7 +69,7 @@ function CourseDetail() {
                     title="Curso no disponible"
                     description="Este curso no se encuentra o ya no está disponible."
                     action={(
-                        <Link to="/cursos" className="btn btn-primary">
+                        <Link to={backTo} className="btn btn-primary">
                             <ArrowLeft size={16} aria-hidden="true" />
                             Volver a los cursos
                         </Link>
@@ -79,7 +82,7 @@ function CourseDetail() {
     if (status === "error") {
         return (
             <section className={styles.page}>
-                <Link to="/cursos" className={styles.back}>
+                <Link to={backTo} className={styles.back}>
                     <ArrowLeft size={16} aria-hidden="true" />
                     Volver a los cursos
                 </Link>
@@ -99,7 +102,7 @@ function CourseDetail() {
 
     return (
         <article className={styles.page}>
-            <Link to="/cursos" className={styles.back}>
+            <Link to={backTo} className={styles.back}>
                 <ArrowLeft size={16} aria-hidden="true" />
                 Volver a los cursos
             </Link>

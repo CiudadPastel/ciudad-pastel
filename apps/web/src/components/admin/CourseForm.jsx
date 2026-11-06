@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
+    ArrowLeft,
+    ArrowRight,
     CalendarCheck,
     CalendarDays,
     CircleAlert,
@@ -36,6 +38,9 @@ import {
 } from "../../utils/schedule";
 
 import styles from "./CourseForm.module.css";
+import StepProgress from "../ui/StepProgress";
+import stepStyles from "../ui/StepProgress.module.css";
+import { COURSE_STEPS, courseStepForField } from "../../utils/courseSteps";
 
 // Orden de los campos con validación, para enfocar el primer error
 const FIELD_ORDER = [
@@ -44,6 +49,8 @@ const FIELD_ORDER = [
     "summary",
     "description",
     "imageUrl",
+    "learningOutcomes",
+    "requiredMaterials",
     "whatYouWillLearn",
     "materialsNote",
     "prerequisites",
@@ -116,6 +123,12 @@ function CourseForm({
     requireChanges = false,
     requirePrice = false
 }) {
+    const [currentStep, setCurrentStep] = useState(() =>
+        courseStepForField(window.location.hash.replace("#course-", ""))
+    );
+    const headingRef = useRef(null);
+    const pendingFocus = useRef(window.location.hash.slice(1));
+    const savingRef = useRef(false);
     const [values, setValues] = useState(initialValues);
     const [errors, setErrors] = useState({});
     const [touched, setTouched] = useState({});
@@ -130,20 +143,33 @@ function CourseForm({
     const nothingToSave = requireChanges && !isDirty;
     const validationOptions = { requirePrice };
 
-    /*
-     * Si se llega con un enlace como ".../editar#course-price" (desde el aviso
-     * "falta el precio"), se lleva a la persona directo a ese campo.
-     */
     useEffect(() => {
-        const id = window.location.hash.slice(1);
-        if (!id.startsWith("course-")) return;
+        const target = pendingFocus.current && document.getElementById(pendingFocus.current);
+        pendingFocus.current = "";
+        (target || headingRef.current)?.focus();
+    }, [currentStep]);
 
-        const element = document.getElementById(id);
-        if (element) {
-            element.scrollIntoView({ block: "center" });
-            element.focus({ preventScroll: true });
+    function focusField(field) {
+        const step = courseStepForField(field);
+        if (step !== currentStep) {
+            pendingFocus.current = `course-${field}`;
+            setCurrentStep(step);
+        } else {
+            const element = document.getElementById(`course-${field}`)
+                || formRef.current?.elements.namedItem(field);
+            (element instanceof RadioNodeList ? element[0] : element)?.focus();
         }
-    }, []);
+    }
+
+    function continueStep() {
+        const validationErrors = validateCourseForm(values, validationOptions);
+        const fields = COURSE_STEPS[currentStep].fields;
+        setErrors(validationErrors);
+        setTouched((previous) => ({ ...previous, ...Object.fromEntries(fields.map((field) => [field, true])) }));
+        const firstInvalid = fields.find((field) => validationErrors[field]);
+        if (firstInvalid) return focusField(firstInvalid);
+        setCurrentStep((step) => Math.min(step + 1, COURSE_STEPS.length - 1));
+    }
 
     function updateValue(name, value) {
         let nextValues = { ...values, [name]: value };
@@ -178,6 +204,11 @@ function CourseForm({
 
     async function handleSubmit(event) {
         event.preventDefault();
+        if (savingRef.current) return;
+        if (currentStep < COURSE_STEPS.length - 1) {
+            continueStep();
+            return;
+        }
         setServerError("");
         setServerDetails([]);
 
@@ -187,12 +218,11 @@ function CourseForm({
 
         const firstInvalid = FIELD_ORDER.find((f) => validationErrors[f]);
         if (firstInvalid) {
-            const element = formRef.current?.elements.namedItem(firstInvalid);
-            // Los botones de opción vienen como lista: se enfoca el primero
-            (element instanceof RadioNodeList ? element[0] : element)?.focus();
+            focusField(firstInvalid);
             return;
         }
 
+        savingRef.current = true;
         setSubmitting(true);
 
         try {
@@ -207,8 +237,10 @@ function CourseForm({
                     ...Object.fromEntries(Object.keys(apiFieldErrors).map((f) => [f, true]))
                 }));
                 setServerDetails(Object.values(apiFieldErrors));
+                focusField(Object.keys(apiFieldErrors)[0]);
             }
             setServerError(error.message || "No se pudo guardar el curso.");
+            savingRef.current = false;
             setSubmitting(false);
         }
     }
@@ -290,6 +322,10 @@ function CourseForm({
 
     return (
         <form ref={formRef} onSubmit={handleSubmit} className={styles.form} noValidate>
+            <StepProgress steps={COURSE_STEPS} currentStep={currentStep} label="Pasos del curso" />
+            <h2 ref={headingRef} tabIndex={-1} className={stepStyles.stepHeading}>
+                Paso {currentStep + 1} de {COURSE_STEPS.length}: {COURSE_STEPS[currentStep].title}
+            </h2>
             {serverError && (
                 <div role="alert" className={styles.serverError}>
                     <CircleAlert size={18} aria-hidden="true" />
@@ -311,7 +347,7 @@ function CourseForm({
                 Los campos marcados con <span aria-hidden="true">*</span> son obligatorios.
             </p>
 
-            <fieldset className={styles.section}>
+            <fieldset className={styles.section} hidden={currentStep !== 0} disabled={submitting || currentStep !== 0}>
                 <legend>Información general</legend>
 
                 <div className={styles.grid}>
@@ -372,7 +408,7 @@ function CourseForm({
                 </div>
             </fieldset>
 
-            <fieldset className={styles.section}>
+            <fieldset className={styles.section} hidden={currentStep !== 0} disabled={submitting || currentStep !== 0}>
                 <legend>Imagen</legend>
 
                 <div className={styles.imageRow}>
@@ -412,7 +448,7 @@ function CourseForm({
                 </div>
             </fieldset>
 
-            <fieldset className={styles.section}>
+            <fieldset className={styles.section} hidden={currentStep !== 1} disabled={submitting || currentStep !== 1}>
                 <legend>Contenido del curso</legend>
 
                 <ListEditor
@@ -428,6 +464,7 @@ function CourseForm({
                     emptyText="Todavía no hay aprendizajes agregados."
                 />
 
+                {renderMessages("learningOutcomes")}
                 <div className={styles.field}>
                     <label htmlFor="course-whatYouWillLearn">Más detalle de lo que aprenderá</label>
                     <textarea
@@ -452,6 +489,7 @@ function CourseForm({
                     emptyText="Todavía no hay materiales agregados."
                 />
 
+                {renderMessages("requiredMaterials")}
                 <div className={styles.field}>
                     <label htmlFor="course-materialsNote">Nota sobre los materiales</label>
                     <textarea
@@ -475,7 +513,7 @@ function CourseForm({
                 </div>
             </fieldset>
 
-            <fieldset className={styles.section}>
+            <fieldset className={styles.section} hidden={currentStep !== 2} disabled={submitting || currentStep !== 2}>
                 <legend>Lugar</legend>
 
                 <div className={styles.field}>
@@ -501,7 +539,7 @@ function CourseForm({
                 </div>
             </fieldset>
 
-            <fieldset className={styles.section}>
+            <fieldset className={styles.section} hidden={currentStep !== 2} disabled={submitting || currentStep !== 2}>
                 <legend>Planificación</legend>
 
                 <p className={styles.sectionHint}>
@@ -582,16 +620,17 @@ function CourseForm({
                     </div>
                 </div>
 
-                <h3 className={styles.subheading}>
-                    <CalendarDays size={18} aria-hidden="true" />
-                    Horario
-                </h3>
+            </fieldset>
+            <fieldset className={styles.section} hidden={currentStep !== 3} disabled={submitting || currentStep !== 3}>
+                <legend><CalendarDays size={18} aria-hidden="true" /> Horario</legend>
 
                 <div className={styles.field}>
                     <span id="course-scheduleType-label" className={styles.groupLabel}>
                         ¿Cómo son las clases?
                     </span>
                     <div
+                        id="course-scheduleType"
+                        tabIndex={-1}
                         role="radiogroup"
                         aria-labelledby="course-scheduleType-label"
                         className={styles.choices}
@@ -729,6 +768,18 @@ function CourseForm({
                 )}
             </fieldset>
 
+            {currentStep === COURSE_STEPS.length - 1 && (
+                <section className={styles.section} aria-label="Revisión del curso">
+                    <h3>{values.name}</h3>
+                    <p>{values.summary}</p>
+                    <p>{values.description}</p>
+                    <p>Tipo: {courseType?.label || "Sin definir"}</p>
+                    <p>Precio: {pricePreview || "Sin definir"} · Cupo: {values.capacity || "Sin definir"}</p>
+                    <p>Lugar: {values.location || "Sin definir"}</p>
+                    <p>{schedulePreview ? formatScheduleSummary(schedulePreview) : "Horario sin definir"}</p>
+                    <p>Revise los pasos anteriores antes de guardar.</p>
+                </section>
+            )}
             {isNew && (
                 <p className={styles.note}>
                     <EyeOff size={16} aria-hidden="true" />
@@ -756,21 +807,27 @@ function CourseForm({
                     Cancelar
                 </button>
 
+                {currentStep > 0 && (
+                    <button type="button" className="btn btn-secondary" disabled={submitting}
+                        onClick={() => setCurrentStep((step) => step - 1)}>
+                        <ArrowLeft size={18} aria-hidden="true" /> Anterior
+                    </button>
+                )}
                 <button
                     type="submit"
                     className="btn btn-primary"
                     // Evita que el campo pierda el foco antes del clic: al perderlo
                     // aparece su mensaje de error, el botón se mueve y el clic falla.
                     onMouseDown={(event) => event.preventDefault()}
-                    disabled={submitting || nothingToSave}
-                    title={nothingToSave ? "No hay cambios para guardar" : undefined}
+                    disabled={submitting || (currentStep === COURSE_STEPS.length - 1 && nothingToSave)}
+                    title={currentStep === COURSE_STEPS.length - 1 && nothingToSave ? "No hay cambios para guardar" : undefined}
                 >
                     {submitting ? (
                         <LoaderCircle size={18} className={styles.spin} aria-hidden="true" />
                     ) : (
-                        <Save size={18} aria-hidden="true" />
+                        currentStep < COURSE_STEPS.length - 1 ? <ArrowRight size={18} aria-hidden="true" /> : <Save size={18} aria-hidden="true" />
                     )}
-                    {submitting ? "Guardando…" : submitLabel}
+                    {submitting ? "Guardando…" : currentStep < COURSE_STEPS.length - 1 ? "Siguiente" : submitLabel}
                 </button>
             </div>
         </form>

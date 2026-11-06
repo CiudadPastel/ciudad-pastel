@@ -420,3 +420,5 @@
   color: var(--cp-text);
   font-size: 0.85rem;
 }
+
+.section[hidden] { display: none; }

@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react";
 import { ArrowRight, ImageOff } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 
+import CategoryGrid from "../../components/public/CategoryGrid";
+import ResultsCount from "../../components/ui/ResultsCount";
+import { COURSE_TYPES } from "../../constants/course";
+import { courseCategories, filterCourses, paginateItems } from "../../utils/catalog";
 import StateMessage, { RetryButton } from "../../components/ui/StateMessage";
 import { getPublicCourses } from "../../services/publicCourses.service";
 import { formatPrice } from "../../utils/format";
@@ -10,6 +14,10 @@ import { formatScheduleRange, formatScheduleSummary } from "../../utils/schedule
 import styles from "./CoursesList.module.css";
 
 function CoursesList() {
+    const [searchParams, setSearchParams] = useSearchParams();
+    const location = useLocation();
+    const type = searchParams.get("tipo");
+    const showCategories = !type && searchParams.get("vista") !== "todos" && !searchParams.has("pagina");
     const [reloadKey, setReloadKey] = useState(0);
     const [state, setState] = useState({ key: null, status: "loading", courses: [], error: null });
 
@@ -18,6 +26,7 @@ function CoursesList() {
 
         getPublicCourses()
             .then((courses) => {
+                if (!Array.isArray(courses)) throw new Error("La lista de cursos no es válida.");
                 if (active) setState({ key: reloadKey, status: "success", courses, error: null });
             })
             .catch((error) => {
@@ -29,6 +38,15 @@ function CoursesList() {
         };
     }, [reloadKey]);
 
+    const categories = courseCategories(state.courses, COURSE_TYPES);
+    const filtered = filterCourses(state.courses, type);
+    const { items: visibleCourses, page, pages } = paginateItems(filtered, searchParams.get("pagina"), 12);
+    const catalogUrl = location.pathname + location.search;
+    function changePage(value) {
+        const next = new URLSearchParams(searchParams);
+        next.set("pagina", value);
+        setSearchParams(next);
+    }
     const status = state.key === reloadKey ? state.status : "loading";
 
     if (status === "loading") {
@@ -64,16 +82,38 @@ function CoursesList() {
                 </div>
             </header>
 
-            {state.courses.length === 0 ? (
+            {showCategories ? (
+                <>
+                    {state.courses.length === 0 && <p role="status">No hay cursos disponibles por el momento.</p>}
+                    <CategoryGrid categories={categories} label="Tipos de curso"
+                        categoryUrl={(id) => id ? '?tipo=' + encodeURIComponent(id) : '?vista=todos'} />
+                </>
+            ) : <>
+                <nav aria-label="Explorar cursos" className={styles.navigation}>
+                    <button type="button" className="btn btn-secondary" onClick={() => setSearchParams({})}>Volver a categorías</button>
+                    <label>Tipo de curso <select value={type || ""} onChange={(event) => {
+                        const next = new URLSearchParams(searchParams);
+                        next.delete("pagina");
+                        next.set("vista", "todos");
+                        if (event.target.value) next.set("tipo", event.target.value);
+                        else next.delete("tipo");
+                        setSearchParams(next);
+                    }}>
+                        <option value="">Todos los cursos</option>
+                        {type && !categories.some((category) => category.id === type) && <option value={type}>Tipo no disponible</option>}
+                        {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                    </select></label>
+                </nav>
+            {filtered.length === 0 ? (
                 <StateMessage
-                    title="No hay cursos disponibles por el momento"
+                    title={type ? "No hay cursos disponibles de este tipo" : "No hay cursos disponibles por el momento"}
                     description="Vuelve pronto para conocer las próximas fechas."
                 />
             ) : (
                 <ul className={styles.grid}>
-                    {state.courses.map((course) => (
+                    {visibleCourses.map((course) => (
                         <li key={course.id}>
-                            <Link to={`/cursos/${encodeURIComponent(course.id)}`} className={styles.card}>
+                            <Link to={`/cursos/${encodeURIComponent(course.id)}`} className={styles.card} state={{ from: catalogUrl }}>
                                 {course.imageUrl ? (
                                     <img
                                         src={course.imageUrl}
@@ -111,6 +151,15 @@ function CoursesList() {
                     ))}
                 </ul>
             )}
+            <div className={styles.pagination}>
+                <ResultsCount shown={visibleCourses.length} total={filtered.length} noun="cursos" page={page} pageSize={12} />
+                {pages > 1 && <nav aria-label="Paginación de cursos" className={styles.navigation}>
+                    <button type="button" className="btn btn-secondary" disabled={page === 1} onClick={() => changePage(page - 1)}>Anterior</button>
+                    <span>Página {page} de {pages}</span>
+                    <button type="button" className="btn btn-secondary" disabled={page === pages} onClick={() => changePage(page + 1)}>Siguiente</button>
+                </nav>}
+            </div>
+            </>}
         </section>
     );
 }

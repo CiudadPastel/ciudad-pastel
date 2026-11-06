@@ -1,0 +1,74 @@
+.stepper {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.stepper li {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+  padding: 0.75rem;
+  color: var(--cp-muted);
+  background: var(--cp-surface);
+  border: 1px solid var(--cp-border);
+  border-radius: 10px;
+}
+
+.stepper .activeStep {
+  color: var(--cp-navy);
+  background: var(--cp-mint-50);
+  border-color: var(--cp-mint-600);
+}
+
+.stepNumber {
+  display: grid;
+  flex: 0 0 2rem;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  color: var(--cp-navy);
+  background: #f3f2ee;
+  border-radius: 50%;
+  font-weight: 700;
+}
+
+.activeStep .stepNumber {
+  color: #fff;
+  background: var(--cp-navy);
+}
+
+.stepText {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.stepText strong {
+  font-size: 0.88rem;
+}
+
+.stepText small {
+  font-size: 0.75rem;
+}
+
+.stepHeading {
+  outline: none;
+}
+
+.stepHeading:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid var(--cp-mint-600);
+  outline-offset: 3px;
+}
+
+
+@media (max-width: 700px) {
+ .stepper { grid-template-columns: 1fr; gap: 0.4rem; }
+ .stepper li:not(.activeStep) .stepText small { display: none; }
+}

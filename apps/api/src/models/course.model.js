@@ -76,6 +76,7 @@ export function toPublicCourse(course, activeEnrollments = 0) {
         id: course.id,
         name: course.name,
         summary: course.summary,
+        courseType: course.courseType ?? null,
         description: course.description,
         imageUrl: course.imageUrl ?? null,
         learningOutcomes: course.learningOutcomes ?? [],

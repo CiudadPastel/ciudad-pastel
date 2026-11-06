@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, CircleAlert, LoaderCircle, Save, X } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
+import StepProgress from "../../components/ui/StepProgress";
 import { RetryButton } from "../../components/ui/StateMessage";
 import {
     createAdminProduct,
@@ -337,21 +338,7 @@ function ProductCreate({ product = null }) {
             </header>
 
             <form ref={formRef} className={styles.form} onSubmit={handleSubmit} noValidate>
-                <ol className={styles.stepper} aria-label="Pasos para crear un producto">
-                    {STEPS.map((step, index) => (
-                        <li
-                            key={step.title}
-                            className={index === currentStep ? styles.activeStep : ""}
-                            aria-current={index === currentStep ? "step" : undefined}
-                        >
-                            <span className={styles.stepNumber}>{index + 1}</span>
-                            <span className={styles.stepText}>
-                                <strong>{step.title}</strong>
-                                <small>{step.description}</small>
-                            </span>
-                        </li>
-                    ))}
-                </ol>
+                <StepProgress steps={STEPS} currentStep={currentStep} label="Pasos del producto" />
 
                 <fieldset className={styles.section} disabled={submitting}>
                     <legend

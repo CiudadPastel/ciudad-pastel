@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ImageOff, LayoutGrid, SearchX, X } from "lucide-react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
+import CategoryGrid from "../../components/public/CategoryGrid";
+import ResultsCount from "../../components/ui/ResultsCount";
 import CategoryFilter from "../../components/public/CategoryFilter";
 import SearchBar from "../../components/public/SearchBar";
 import WhatsAppButton from "../../components/public/WhatsAppButton";
@@ -28,6 +30,8 @@ function validateProductsPage(response) {
         || !Array.isArray(response.items)
         || !Number.isInteger(response.page)
         || typeof response.hasMore !== "boolean"
+        || !Number.isInteger(response.total)
+        || response.total < 0
     ) {
         throw new Error("La respuesta del catálogo no es válida.");
     }
@@ -118,12 +122,18 @@ function ProductsList() {
     // Búsqueda (HU-T03) en la URL (?q=fondant); menos de 2 letras no se aplica
     const rawQuery = (searchParams.get("q") ?? "").trim();
     const searchQuery = rawQuery.length >= 2 ? rawQuery : "";
+    const showCategories = !categoryId && !searchQuery && !searchParams.has("pagina") && searchParams.get("vista") !== "todos";
+    const restoredPages = pagesFromUrl();
     const location = useLocation();
     const navigate = useNavigate();
     const catalogUrl = `${location.pathname}${location.search}`;
 
     const [reloadKey, setReloadKey] = useState(0);
-    const requestKey = `${categoryId ?? ""}|${searchQuery}|${reloadKey}`;
+    const filterKey = `${categoryId ?? ""}|${searchQuery}|${reloadKey}|${showCategories}`;
+    const pageParam = searchParams.get("pagina") || "1";
+    const requestKey = `${filterKey}|${pageParam}`;
+    const latestRequest = useRef(requestKey);
+    const loadedRequest = useRef(null);
     const [state, setState] = useState({ key: null, ...EMPTY_PRODUCTS });
 
     const [categoriesReloadKey, setCategoriesReloadKey] = useState(0);
@@ -152,9 +162,12 @@ function ProductsList() {
     useEffect(() => {
         let active = true;
 
+        latestRequest.current = requestKey;
+        if (showCategories || loadedRequest.current === requestKey) return;
+
         // Al volver del detalle se recargan las mismas páginas que el cliente
         // tenía abiertas (?pagina=3 -> páginas 1, 2 y 3), en paralelo.
-        const pages = Array.from({ length: pagesFromUrl() }, (_, index) => index + 1);
+        const pages = Array.from({ length: restoredPages }, (_, index) => index + 1);
 
         Promise.all(pages.map((page) =>
             getPublicProducts({ page, limit: PAGE_SIZE, categoryId: categoryId ?? undefined, q: searchQuery })
@@ -171,6 +184,7 @@ function ProductsList() {
                     .filter((product) => !seen.has(product.id) && seen.add(product.id));
                 const result = loaded[loaded.length - 1];
 
+                loadedRequest.current = requestKey;
                 setState({
                     ...EMPTY_PRODUCTS,
                     key: requestKey,
@@ -189,7 +203,7 @@ function ProductsList() {
         return () => {
             active = false;
         };
-    }, [categoryId, searchQuery, requestKey]);
+    }, [categoryId, searchQuery, requestKey, showCategories, restoredPages]);
 
     async function loadMore() {
         if (state.loadingMore || !state.hasMore) return;
@@ -208,26 +222,27 @@ function ProductsList() {
                 })
             );
 
+            if (latestRequest.current !== keyAtStart) return;
+            const nextKey = `${filterKey}|${result.page}`;
+            loadedRequest.current = nextKey;
             setState((current) => {
                 if (current.key !== keyAtStart) return current;
                 const knownIds = new Set(current.products.map((product) => product.id));
                 const newProducts = result.items.filter((product) => !knownIds.has(product.id));
-
-                // Se guarda en la URL (sin crear otra entrada en el historial) para
-                // que "Volver al catálogo" recupere los mismos productos.
-                const next = new URLSearchParams(window.location.search);
-                next.set("pagina", result.page);
-                setSearchParams(next, { replace: true });
-
                 return {
                     ...current,
+                    key: nextKey,
                     products: [...current.products, ...newProducts],
                     page: result.page,
+                    total: result.total,
                     hasMore: result.hasMore,
                     loadingMore: false,
                     loadMoreError: null
                 };
             });
+            const next = new URLSearchParams(searchParams);
+            next.set("pagina", result.page);
+            setSearchParams(next, { replace: true });
         } catch (error) {
             setState((current) => (current.key !== keyAtStart ? current : {
                 ...current,
@@ -238,11 +253,11 @@ function ProductsList() {
     }
 
     function selectCategory(id) {
-        if (id === categoryId) return;
         const next = new URLSearchParams(searchParams);
         if (id) next.set("categoria", id);
         else next.delete("categoria");
         next.delete("pagina");
+        next.set("vista", "todos");
         setSearchParams(next);
     }
 
@@ -251,6 +266,7 @@ function ProductsList() {
     const applySearch = useCallback((text) => {
         setSearchParams((current) => {
             const next = new URLSearchParams(current);
+            next.set("vista", "todos");
             if (text) next.set("q", text);
             else next.delete("q");
             next.delete("pagina");
@@ -298,7 +314,7 @@ function ProductsList() {
     );
 
     return (
-        <section className={styles.page} aria-busy={status === "loading" || state.loadingMore}>
+        <section className={styles.page} aria-busy={showCategories ? categoriesStatus === "loading" : status === "loading" || state.loadingMore}>
             <header className={styles.heading}>
                 <div>
                     <p className={styles.eyebrow}>Ciudad Pastel · Tienda</p>
@@ -314,16 +330,21 @@ function ProductsList() {
                     busy={Boolean(searchQuery) && status === "loading"}
                 />
 
-                <CategoryFilter
+                {!showCategories && <button type="button" className="btn btn-secondary" onClick={() => {
+                    const next = new URLSearchParams(searchParams);
+                    for (const key of ["categoria", "vista", "pagina", "q"]) next.delete(key);
+                    setSearchParams(next);
+                }}>Volver a categorías</button>}
+                {!showCategories && <CategoryFilter
                     categories={categories}
                     selectedId={categoryId}
                     totalCount={allTotal ?? undefined}
                     status={categoriesStatus}
                     onSelect={selectCategory}
                     onRetry={() => setCategoriesReloadKey((key) => key + 1)}
-                />
+                />}
 
-                <div className={styles.summary} aria-live="polite">
+                {!showCategories && <div className={styles.summary} aria-live="polite">
                     {status === "success" && state.products.length > 0 && Number.isInteger(state.total) && (
                         <p>
                             <strong>
@@ -339,10 +360,19 @@ function ProductsList() {
                             Quitar filtro
                         </button>
                     )}
-                </div>
+                </div>}
             </div>
 
-            {status === "loading" ? (
+            {showCategories ? (
+                <>
+                    {categoriesStatus === "loading" && <p role="status">Cargando categorías…</p>}
+                    {categoriesStatus === "error" && <StateMessage variant="error" title="No se pudieron cargar las categorías"
+                        action={<RetryButton onClick={() => setCategoriesReloadKey((key) => key + 1)} />} />}
+                    {categoriesStatus === "success" && categories.length === 0 && <p role="status">No hay categorías con productos publicados.</p>}
+                    {categoriesStatus !== "loading" && <CategoryGrid categories={categoriesStatus === "success" ? categories : []}
+                        categoryUrl={(id) => id ? `?categoria=${encodeURIComponent(id)}` : "?vista=todos"} />}
+                </>
+            ) : status === "loading" ? (
                 <ul className={styles.grid} aria-label="Cargando productos" role="status">
                     {Array.from({ length: PAGE_SIZE }, (_, index) => (
                         <ProductSkeleton key={index} />
@@ -408,6 +438,8 @@ function ProductsList() {
                             </li>
                         ))}
                     </ul>
+                    <ResultsCount shown={state.products.length} total={state.total} />
+                    {state.loadingMore && <p role="status">Cargando más productos…</p>}
                     {state.loadMoreError ? (
                         <StateMessage
                             variant="error"
@@ -429,6 +461,7 @@ function ProductsList() {
                     ) : null}
                 </>
             )}
+            {!showCategories && status === "success" && state.products.length === 0 && <ResultsCount shown={0} total={state.total} />}
         </section>
     );
 }
