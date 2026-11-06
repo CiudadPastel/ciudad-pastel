@@ -25,6 +25,7 @@ import { courseEnrollmentRoutes, enrollmentRoutes, publicEnrollmentRoutes } from
 import publicProductRoutes from "./routes/public-product.routes.js";
 import publicCategoryRoutes from "./routes/public-category.routes.js";
 import publicContactRoutes from "./routes/public-contact.routes.js";
+import { adminHomeRoutes, publicHomeRoutes } from "./routes/home-content.routes.js";
 import adminProductRoutes, { adminCategoryRoutes } from "./routes/admin-product.routes.js";
 
 
@@ -121,6 +122,10 @@ app.use("/api/enrollments", publicEnrollmentRoutes);
 // Public product catalog (HU-T01).
 app.use("/api/products", publicProductRoutes);
 app.use("/api/categories", publicCategoryRoutes);
+
+// CMS for the editorial home page (authenticated writes, public reads).
+app.use("/api/site", publicHomeRoutes);
+app.use("/api/admin/site", adminHomeRoutes);
 
 // Public environment-driven business contact configuration (CIU-154).
 app.use("/api/contact", publicContactRoutes);
