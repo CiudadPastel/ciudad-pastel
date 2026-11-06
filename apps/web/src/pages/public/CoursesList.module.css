@@ -27,8 +27,8 @@
 
 .grid {
   display: grid;
-  /* auto-fill preserves empty tracks: one course never fills the entire row. */
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr));
+  /* Fixed tracks prevent an isolated course from growing with the grid. */
+  grid-template-columns: repeat(auto-fill, 340px);
   gap: 1.25rem;
   margin: 0;
   padding: 0;
@@ -38,7 +38,7 @@
 .grid > li {
   min-width: 0;
   width: 100%;
-  max-width: 370px;
+  max-width: 340px;
 }
 
 .card {
@@ -116,6 +116,13 @@
   gap: 0.35rem;
   color: var(--cp-mint-700);
   font-weight: 700;
+}
+
+@media (max-width: 600px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

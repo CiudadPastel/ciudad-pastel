@@ -301,7 +301,7 @@ await test("responsive catalog cards keep the same width with one or many items"
 
     await mount(courseRoutes, "/cursos?tipo=workshop");
     const manyCourseWidth = container.querySelector('ul[aria-label="Cursos disponibles"] li').getBoundingClientRect().width;
-    assert(Math.abs(singleCourseWidth - manyCourseWidth) <= 2, "Course cards keep the same width regardless of item count");
+    assert(Math.abs(singleCourseWidth - manyCourseWidth) <= 2, `Course width stable: one=${singleCourseWidth.toFixed(1)}px, many=${manyCourseWidth.toFixed(1)}px`);
 
     await mount(<ProductsList />, "/tienda");
     const category = container.querySelector('ul[aria-label="Categorías"] li');
@@ -317,7 +317,7 @@ await test("responsive catalog cards keep the same width with one or many items"
         singleProductResult = false;
         await mount(<ProductsList />, "/tienda?vista=todos");
         const manyProductWidth = container.querySelector('ul[aria-label="Productos"] li').getBoundingClientRect().width;
-        assert(Math.abs(singleProductWidth - manyProductWidth) <= 2, "Product card width does not depend on catalog size");
+        assert(Math.abs(singleProductWidth - manyProductWidth) <= 2, `Product width stable: one=${singleProductWidth.toFixed(1)}px, many=${manyProductWidth.toFixed(1)}px`);
         assert(document.documentElement.scrollWidth <= window.innerWidth, "Catalog has no horizontal overflow");
     } finally {
         singleProductResult = false;

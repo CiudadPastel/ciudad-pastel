@@ -72,8 +72,8 @@
 
 .grid {
   display: grid;
-  /* Keep reserved columns even with a single product/category. */
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+  /* On wide screens each track is genuinely fixed: 1 or 20 results look alike. */
+  grid-template-columns: repeat(auto-fill, 280px);
   gap: 1.25rem;
   margin: 0;
   padding: 0;
@@ -83,7 +83,7 @@
 .grid > li {
   min-width: 0;
   width: 100%;
-  max-width: 300px;
+  max-width: 280px;
 }
 
 .skeletonCard {
@@ -132,9 +132,10 @@
   border-radius: 4px;
 }
 
-/* Give a lone card balanced margins on compact screens. */
-@media (max-width: 480px) {
+/* Compact screens use one fluid track; the card remains capped and centered. */
+@media (max-width: 600px) {
   .grid {
+    grid-template-columns: minmax(0, 1fr);
     justify-items: center;
   }
 }
