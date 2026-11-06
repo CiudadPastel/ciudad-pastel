@@ -4,10 +4,12 @@ import {
     authenticateUser,
     requireAdmin
 } from "../middleware/auth.middleware.js";
+import { paymentStatusLookupRateLimit } from "../middleware/rate-limit.middleware.js";
 
 import {
     getCourseEnrollments,
     getEnrollment,
+    lookupPaymentStatus,
     registerEnrollment,
     updateEnrollment,
     updatePaymentStatus
@@ -32,3 +34,8 @@ enrollmentRoutes.use(authenticateUser, requireAdmin);
 enrollmentRoutes.get("/:id", getEnrollment);
 enrollmentRoutes.patch("/:id", updateEnrollment);
 enrollmentRoutes.patch("/:id/payment-status", updatePaymentStatus);
+
+// Public student enrollment payment status lookup (HU-A07). Mounted at /api/enrollments.
+export const publicEnrollmentRoutes = Router();
+
+publicEnrollmentRoutes.post("/payment-status", paymentStatusLookupRateLimit, lookupPaymentStatus);

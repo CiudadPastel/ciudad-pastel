@@ -1289,6 +1289,68 @@ paths:
                 $ref: "#/components/schemas/EnrollmentConflict"
 
 
+  /enrollments/payment-status:
+    post:
+      tags:
+        - Payment Status
+      summary: Consult enrollment payment status
+      description: Public student lookup for confirmed enrollment payment statuses using national ID and phone number (HU-A07). Does not require authentication and enforces rate limiting (10 attempts per 10 minutes per IP).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - nationalId
+                - phone
+              properties:
+                nationalId:
+                  type: string
+                  description: Costa Rican national ID (9 digits) or DIMEX residence ID (11-12 digits). Spaces and hyphens are ignored.
+                  example: "1-0234-0567"
+                phone:
+                  type: string
+                  description: Contact phone number (8 to 15 digits). Spaces, hyphens, parentheses, and leading plus are ignored.
+                  example: "+506 8888-7777"
+      responses:
+        "200":
+          description: Enrollment payment statuses retrieved successfully. Returns an empty array if no matching enrollments exist.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - enrollments
+                properties:
+                  enrollments:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - courseName
+                        - paymentStatus
+                        - paymentUpdatedAt
+                      properties:
+                        courseName:
+                          type: string
+                          example: Pastelería Básica
+                        paymentStatus:
+                          type: string
+                          enum: [pending, deposit_paid, paid]
+                          example: deposit_paid
+                        paymentUpdatedAt:
+                          type: string
+                          format: date-time
+                          nullable: true
+                          example: "2026-03-01T15:00:00.000Z"
+        "400":
+          description: Invalid input format for nationalId or phone.
+        "429":
+          description: Too many attempts from this IP address.
+        "500":
+          description: Internal server error.
+
   /admin/enrollments/{id}/payment-status:
     patch:
       tags:

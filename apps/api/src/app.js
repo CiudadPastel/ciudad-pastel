@@ -21,7 +21,7 @@ import publicCourseRoutes from "./routes/public-course.routes.js";
 import recipeBookRoutes from "./routes/recipe-book.routes.js";
 import enrollmentRequestRoutes from "./routes/enrollment-request.routes.js";
 import studentAccessRoutes from "./routes/student-access.routes.js";
-import { courseEnrollmentRoutes, enrollmentRoutes } from "./routes/enrollment.routes.js";
+import { courseEnrollmentRoutes, enrollmentRoutes, publicEnrollmentRoutes } from "./routes/enrollment.routes.js";
 import publicProductRoutes from "./routes/public-product.routes.js";
 import publicCategoryRoutes from "./routes/public-category.routes.js";
 import publicContactRoutes from "./routes/public-contact.routes.js";
@@ -114,6 +114,9 @@ app.use("/api/admin/categories", adminCategoryRoutes);
 
 // Public published-course listing.
 app.use("/api/courses", publicCourseRoutes);
+
+// Public student enrollment payment status lookup (HU-A07).
+app.use("/api/enrollments", publicEnrollmentRoutes);
 
 // Public product catalog (HU-T01).
 app.use("/api/products", publicProductRoutes);

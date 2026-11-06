@@ -43,3 +43,10 @@ export const studentVerificationRateLimit = createRateLimiter({
     max: 5,
     message: "Too many verification attempts. Please try again later."
 });
+
+// At most 10 payment status lookups every 10 minutes per IP (HU-A07).
+export const paymentStatusLookupRateLimit = createRateLimiter({
+    windowMs: 10 * 60 * 1000,
+    max: 10,
+    message: "Too many attempts. Try again later."
+});

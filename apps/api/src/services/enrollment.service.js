@@ -19,6 +19,7 @@ import {
     validateEnrollmentUpdateInput
 } from "../validators/enrollment.validator.js";
 import { normalizeDigits } from "../validators/enrollment-request.validator.js";
+import { validatePaymentStatusLookupInput } from "../validators/identity.validator.js";
 import { getCourseById as getCourseByIdRepository } from "../repositories/course.repository.js";
 import { getEnrollmentRequestById as getEnrollmentRequestByIdRepository } from "../repositories/enrollment-request.repository.js";
 import {
@@ -27,7 +28,8 @@ import {
     getEnrollmentById as getEnrollmentByIdRepository,
     getEnrollmentsByCourse as getEnrollmentsByCourseRepository,
     updateEnrollment as updateEnrollmentRepository,
-    updateEnrollmentPaymentStatus as updateEnrollmentPaymentStatusRepository
+    updateEnrollmentPaymentStatus as updateEnrollmentPaymentStatusRepository,
+    lookupEnrollmentsByStudent as lookupEnrollmentsByStudentRepository
 } from "../repositories/enrollment.repository.js";
 
 function namedError(name, message, { details, code } = {}) {
@@ -274,4 +276,31 @@ export async function findActiveEnrollments({ idNumber, phone, courseId } = {}) 
 // True when the person (ID number + phone) is actively enrolled in the course.
 export async function isStudentEnrolled(courseId, idNumber, phone) {
     return (await findActiveEnrollments({ idNumber, phone, courseId })).length > 0;
+}
+
+/**
+ * Looks up student enrollment payment statuses (HU-A07).
+ * Validates and normalizes nationalId and phone.
+ * Returns only { enrollments: [{ courseName, paymentStatus, paymentUpdatedAt }] }.
+ * Does not disclose personal data (fullName, nationalId, phone, id).
+ * Returns { enrollments: [] } if no enrollments match.
+ */
+export async function lookupPaymentStatus(input) {
+    const validation = validatePaymentStatusLookupInput(input);
+    if (!validation.valid) {
+        throw namedError("ValidationError", "Payment status lookup validation failed.", {
+            details: validation.errors
+        });
+    }
+
+    const { nationalId, phone } = validation.data;
+    const enrollments = await lookupEnrollmentsByStudentRepository({ nationalId, phone });
+
+    return {
+        enrollments: enrollments.map((enrollment) => ({
+            courseName: enrollment.courseName,
+            paymentStatus: enrollment.paymentStatus,
+            paymentUpdatedAt: enrollment.paymentUpdatedAt
+        }))
+    };
 }
