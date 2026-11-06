@@ -27,11 +27,18 @@
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr));
+  /* auto-fill preserves empty tracks: one course never fills the entire row. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr));
   gap: 1.25rem;
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.grid > li {
+  min-width: 0;
+  width: 100%;
+  max-width: 370px;
 }
 
 .card {
