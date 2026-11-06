@@ -1,7 +1,7 @@
 import { apiFetch } from "./api";
 export const DEFAULT_HOME_CONTENT = {
-    heroImageUrl: null,
-    storeImageUrl: null,
+    heroImageUrl: "https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=1400&q=85",
+    storeImageUrl: "https://images.unsplash.com/photo-1499636136210-6f4ee915583e?w=1400&q=85",
     about: { visible: false, title: "Sobre nosotros", description: "", imageUrl: null }
 };
 
