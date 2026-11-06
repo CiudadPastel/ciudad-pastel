@@ -2,6 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { db } from "../config/firebase.js";
 
 import { ENROLLMENT_STATUS, PAYMENT_STATUS } from "../models/enrollment.model.js";
+import { normalizeNationalId, normalizePhone } from "../validators/identity.validator.js";
 
 const COLLECTION = "enrollments";
 const COURSES = "courses";
@@ -190,4 +191,28 @@ export async function updateEnrollmentPaymentStatus(id, { paymentStatus, payment
     });
 
     return found ? getEnrollmentById(id) : null;
+}
+
+/**
+ * Looks up enrollments for student payment status consultation (HU-A07).
+ * Queries Firestore using two equality filters (idNumber and phone).
+ */
+export async function lookupEnrollmentsByStudent({ nationalId, phone }) {
+    const id = normalizeNationalId(nationalId);
+    const tel = normalizePhone(phone);
+    if (!id || !tel) return [];
+
+    let snapshot = await db.collection(COLLECTION)
+        .where("idNumber", "==", id)
+        .where("phone", "==", tel)
+        .get();
+
+    if (snapshot.empty && tel.startsWith("506") && tel.length === 11) {
+        snapshot = await db.collection(COLLECTION)
+            .where("idNumber", "==", id)
+            .where("phone", "==", tel.slice(3))
+            .get();
+    }
+
+    return snapshot.docs.map(mapEnrollmentDocument);
 }

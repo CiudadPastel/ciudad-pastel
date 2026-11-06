@@ -110,6 +110,11 @@ const fake = vi.hoisted(() => {
                 enrollments.set(id, updated);
                 return clone(updated);
             }),
+            lookupEnrollmentsByStudent: vi.fn(async ({ nationalId, phone }) => {
+                const id = String(nationalId).replace(/\D/g, "");
+                const tel = String(phone).replace(/\D/g, "");
+                return [...enrollments.values()].filter((e) => e.idNumber === id && e.phone === tel).map(clone);
+            }),
             countActiveEnrollmentsByCourse: vi.fn(async () => {
                 const counts = new Map();
                 for (const e of enrollments.values()) {

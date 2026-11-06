@@ -2,6 +2,7 @@ import {
     confirmEnrollmentRequest as confirmEnrollmentRequestService,
     getCourseEnrollments as getCourseEnrollmentsService,
     getEnrollment as getEnrollmentService,
+    lookupPaymentStatus as lookupPaymentStatusService,
     registerEnrollment as registerEnrollmentService,
     updateEnrollment as updateEnrollmentService,
     updatePaymentStatus as updatePaymentStatusService
@@ -76,3 +77,16 @@ export const updatePaymentStatus = handle(updatePaymentStatusService, {
     errorMessage: "Could not update payment status",
     getArgs: (req) => [req.params.id, req.body?.paymentStatus, req.user]
 });
+
+// POST /api/enrollments/payment-status
+export const lookupPaymentStatus = async (req, res) => {
+    try {
+        const result = await lookupPaymentStatusService(req.body);
+        return res.status(200).json(result);
+    } catch (error) {
+        if (sendKnownError(res, error)) return;
+
+        console.error("Could not lookup payment status:", error.message);
+        return res.status(500).json({ message: "Could not lookup payment status." });
+    }
+};
