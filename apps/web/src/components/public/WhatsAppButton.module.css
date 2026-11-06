@@ -69,3 +69,8 @@
     transition: none;
   }
 }
+
+.button { font-family: inherit; cursor: pointer; border: 1px solid transparent; }
+.card, .inline { border-color: #b7e1c8; }
+
+.inquiryDialog { overflow-wrap: anywhere; overflow: auto; max-height: calc(100dvh - 2rem); }

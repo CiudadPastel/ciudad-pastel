@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, CircleCheck, CircleX, PackageSearch } from "lucide-react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
+import AddToCartButton from "../../components/public/AddToCartButton";
 import WhatsAppButton from "../../components/public/WhatsAppButton";
 import StateMessage, { RetryButton } from "../../components/ui/StateMessage";
 import { useWhatsAppContact } from "../../hooks/useWhatsAppContact";
@@ -56,6 +57,8 @@ function ProductDetail() {
     const cameFromCatalog = typeof location.state?.from === "string";
     const backTo = cameFromCatalog ? location.state.from : "/tienda";
 
+    const backLabel = backTo === "/tienda/carrito" ? "Volver al carrito" : "Volver al catálogo";
+
     function handleBack(event) {
         if (!cameFromCatalog) return;
         event.preventDefault();
@@ -65,7 +68,7 @@ function ProductDetail() {
     const backLink = (
         <Link to={backTo} onClick={handleBack} className={styles.back}>
             <ArrowLeft size={16} aria-hidden="true" />
-            Volver al catálogo
+            {backLabel}
         </Link>
     );
 
@@ -96,7 +99,7 @@ function ProductDetail() {
                     action={(
                         <Link to={backTo} onClick={handleBack} className="btn btn-primary">
                             <ArrowLeft size={16} aria-hidden="true" />
-                            Volver al catálogo
+                            {backLabel}
                         </Link>
                     )}
                 />
@@ -168,13 +171,14 @@ function ProductDetail() {
                         </p>
                     )}
 
-                    {/* HU-T05: abre WhatsApp con un mensaje que ya trae el nombre del producto */}
+                    <AddToCartButton product={product} />
+                    {/* La consulta concreta ofrece agregar al carrito o consultar una unidad. */}
                     {whatsappContact && (
                         <div className={styles.contact}>
-                            <WhatsAppButton contact={whatsappContact} productName={product.name} variant="detail" />
+                            <WhatsAppButton contact={whatsappContact} product={product} variant="detail" />
                             <p className={styles.contactNote}>
                                 {product.available
-                                    ? "Escríbenos para pedirlo o hacer consultas. Te respondemos por WhatsApp."
+                                    ? "Consúltanos su disponibilidad. Te respondemos por WhatsApp."
                                     : "Pregúntanos cuándo vuelve a estar disponible."}
                             </p>
                         </div>

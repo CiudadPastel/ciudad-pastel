@@ -1,4 +1,5 @@
 /* Browser regression tests. All API responses are fixtures; no Firebase writes. */
+import { CartProvider } from "../src/cart/CartProvider";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
@@ -76,7 +77,7 @@ async function mount(component, url) {
     if (root) await settle(() => root.unmount());
     window.history.replaceState({}, "", url);
     root = createRoot(container);
-    await settle(() => root.render(<BrowserRouter>{component}</BrowserRouter>));
+    await settle(() => root.render(<CartProvider><BrowserRouter>{component}</BrowserRouter></CartProvider>));
 }
 async function button(label) {
     const element = [...container.querySelectorAll("button")].find((item) => item.textContent.trim() === label);

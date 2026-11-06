@@ -23,10 +23,11 @@ const port = server.httpServer.address().port;
 const profile = mkdtempSync(path.join(tmpdir(), "ciudad-pastel-ux-"));
 try {
     for (const size of ["1280,900", "390,844"]) {
+      for (const page of ["ux", "cart", "cart-persistence.html?phase=save", "cart-persistence.html?phase=restore"]) {
         const output = await new Promise((resolve, reject) => {
             const child = spawn(browser, ["--headless", "--disable-gpu", "--no-first-run",
                 `--user-data-dir=${profile}`, `--window-size=${size}`, "--dump-dom",
-                "--virtual-time-budget=20000", `http://127.0.0.1:${port}/tests/ux.html`], { windowsHide: true });
+                "--virtual-time-budget=20000", `http://127.0.0.1:${port}/tests/${page.includes(".html") ? page : page + ".html"}`], { windowsHide: true });
             let stdout = "";
             let stderr = "";
             const timeout = setTimeout(() => { child.kill(); reject(new Error("Browser tests timed out. " + stderr.slice(-1000))); }, 45000);
@@ -36,8 +37,9 @@ try {
             child.on("close", () => { clearTimeout(timeout); resolve(stdout); });
         });
         const report = output.match(/<pre id="results">([\s\S]*?)<\/pre>/)?.[1];
-        console.log(`${size}\n${report || output.slice(-2000)}`);
+        console.log(`${page} ${size}\n${report || output.slice(-2000)}`);
         if (!output.includes('data-test-status="passed"')) process.exitCode = 1;
+      }
     }
 } finally {
     await server.close();

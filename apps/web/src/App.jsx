@@ -64,6 +64,8 @@ import PublicProductDetail
 import Home
     from "./pages/Home";
 
+import Cart from "./pages/public/Cart";
+
 function App() {
     return (
         <Routes>
@@ -95,6 +97,7 @@ function App() {
                     index
                     element={<PublicProductsList />}
                 />
+                <Route path="carrito" element={<Cart />} />
                 <Route
                     path=":id"
                     element={<PublicProductDetail />}
