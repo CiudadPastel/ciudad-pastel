@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test:ux": "node tests/run-browser.mjs"
+    "test:ux": "node tests/run-browser.mjs",
+    "test:unit": "node --test tests/cart.unit.test.mjs"
   },
   "dependencies": {
     "firebase": "^12.19.0",

@@ -1,3 +1,8 @@
+import { useEffect, useId, useRef, useState } from "react";
+import { useCart } from "../../cart/useCart";
+import PreparedWhatsAppLink from "./PreparedWhatsAppLink";
+import { buildIndividualAvailabilityMessage, isValidContact } from "../../utils/whatsapp";
+import dialogStyles from "../ui/ConfirmDialog.module.css";
 import { buildWhatsAppProductLink } from "../../services/contact.service";
 
 import styles from "./WhatsAppButton.module.css";
@@ -20,8 +25,10 @@ function WhatsAppIcon({ size = 18 }) {
  * en una pestaña nueva. Si no hay número configurado (contact = null) no se muestra.
  *   variant: "card" (tarjeta del catálogo), "detail" (página de detalle), "inline"
  */
-function WhatsAppButton({ contact, productName, variant = "detail", label = "Consultar por WhatsApp" }) {
-    if (!contact || !productName) return null;
+function WhatsAppButton({ contact, product, productName, variant = "detail", label = "Consultar por WhatsApp" }) {
+    if (!isValidContact(contact)) return null;
+    if (product) return <ProductInquiry contact={contact} product={product} variant={variant} label={label} />;
+    if (!productName || !buildWhatsAppProductLink(contact, productName)) return null;
 
     return (
         <a
@@ -34,6 +41,53 @@ function WhatsAppButton({ contact, productName, variant = "detail", label = "Con
             <WhatsAppIcon size={variant === "card" ? 16 : 20} />
             <span>{label}</span>
         </a>
+    );
+}
+
+function ProductInquiry({ contact, product, variant, label }) {
+    const { add } = useCart();
+    const [open, setOpen] = useState(false);
+    const [addError, setAddError] = useState("");
+    const dialogRef = useRef(null);
+    const triggerRef = useRef(null);
+    const cancelRef = useRef(null);
+    const titleId = useId();
+    const descriptionId = useId();
+    useEffect(() => {
+        if (!open) return;
+        const dialog = dialogRef.current;
+        const trigger = triggerRef.current;
+        dialog.showModal();
+        cancelRef.current?.focus();
+        return () => { dialog.close(); trigger?.focus({ preventScroll: true }); };
+    }, [open]);
+    return (
+        <>
+            <button ref={triggerRef} type="button" className={styles.button + " " + (styles[variant] || "")}
+                onClick={() => { setAddError(""); setOpen(true); }} aria-haspopup="dialog" aria-expanded={open} aria-label={label + " sobre " + product.name}>
+                <WhatsAppIcon size={variant === "card" ? 16 : 20} /> {label}
+            </button>
+            <dialog ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId}
+                aria-describedby={descriptionId} className={dialogStyles.dialog + " " + styles.inquiryDialog}
+                onCancel={(event) => { event.preventDefault(); setOpen(false); }}>
+                <h2 id={titleId}>¿Necesitas algún otro producto?</h2>
+                <p><strong>{product.name}</strong>{!product.available && " · Aparece como agotado"}</p>
+                <p id={descriptionId}>Puedes agregar este producto a tu carrito y seguir explorando, o consultar directamente su disponibilidad por WhatsApp.</p>
+                {addError && <p role="alert">{addError}</p>}
+                <div className={dialogStyles.actions}>
+                    <button type="button" className="btn btn-secondary" onClick={() => {
+                        const result = add(product);
+                        if (result.success) { setAddError(""); setOpen(false); }
+                        else setAddError(result.message);
+                    }}>
+                        Agregar al carrito y seguir explorando
+                    </button>
+                    <PreparedWhatsAppLink contact={contact} message={buildIndividualAvailabilityMessage(product)}
+                        label="Consultar solo este producto" onOpen={() => setOpen(false)} />
+                    <button ref={cancelRef} type="button" className="btn btn-secondary" onClick={() => setOpen(false)}>Cancelar</button>
+                </div>
+            </dialog>
+        </>
     );
 }
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ImageOff, LayoutGrid, SearchX, X } from "lucide-react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
+import AddToCartButton from "../../components/public/AddToCartButton";
 import CategoryGrid from "../../components/public/CategoryGrid";
 import ResultsCount from "../../components/ui/ResultsCount";
 import CategoryFilter from "../../components/public/CategoryFilter";
@@ -74,11 +75,10 @@ function ProductCard({ product, backTo, onOpen, contact }) {
                     </div>
                 </div>
             </Link>
-            {contact && (
-                <div className={styles.cardActions}>
-                    <WhatsAppButton contact={contact} productName={product.name} variant="card" />
-                </div>
-            )}
+            <div className={styles.cardActions}>
+                    <AddToCartButton product={product} />
+                    <WhatsAppButton contact={contact} product={product} variant="card" />
+            </div>
         </article>
     );
 }
@@ -281,19 +281,23 @@ function ProductsList() {
     }
 
     const focusProductId = location.state?.focusProductId;
+    const returnScrollY = location.state?.catalogScrollY;
     const listReady = state.key === requestKey && state.status === "success";
+    const categoriesStatus = categoriesState.key === categoriesReloadKey ? categoriesState.status : "loading";
+    const viewReady = showCategories ? categoriesStatus !== "loading" : listReady;
 
     useEffect(() => {
-        if (!listReady || !focusProductId) return;
+        if (!viewReady) return;
+        if (Number.isFinite(returnScrollY)) window.scrollTo({ top: returnScrollY, behavior: "instant" });
+        if (!focusProductId) return;
         const card = [...document.querySelectorAll("[data-product-id]")]
             .find((element) => element.dataset.productId === focusProductId);
         if (!card) return;
-        card.scrollIntoView({ block: "center" });
+        if (!Number.isFinite(returnScrollY)) card.scrollIntoView({ block: "center" });
         card.focus({ preventScroll: true });
-    }, [listReady, focusProductId]);
+    }, [viewReady, showCategories, focusProductId, returnScrollY]);
 
     const status = state.key === requestKey ? state.status : "loading";
-    const categoriesStatus = categoriesState.key === categoriesReloadKey ? categoriesState.status : "loading";
     const categories = categoriesState.items;
     const selectedCategory = categoryId
         ? categories.find((category) => category.id === categoryId) ?? null

@@ -7,18 +7,20 @@ import { getWhatsAppContact } from "../services/contact.service";
  * Devuelve null mientras carga o si no hay número configurado: en ese caso los
  * botones de WhatsApp no se muestran.
  */
-export function useWhatsAppContact() {
-    const [contact, setContact] = useState(null);
-
+export function useWhatsAppContactState() {
+    const [reload, setReload] = useState(0);
+    const [state, setState] = useState({ key: null, contact: null, status: "loading" });
     useEffect(() => {
         let active = true;
-        getWhatsAppContact().then((result) => {
-            if (active) setContact(result);
+        getWhatsAppContact({ refresh: reload > 0 }).then((contact) => {
+            if (active) setState({ key: reload, contact, status: contact ? "success" : "unavailable" });
         });
-        return () => {
-            active = false;
-        };
-    }, []);
+        return () => { active = false; };
+    }, [reload]);
+    return { contact: state.key === reload ? state.contact : null,
+        status: state.key === reload ? state.status : "loading", retry: () => setReload((key) => key + 1) };
+}
 
-    return contact;
+export function useWhatsAppContact() {
+    return useWhatsAppContactState().contact;
 }
