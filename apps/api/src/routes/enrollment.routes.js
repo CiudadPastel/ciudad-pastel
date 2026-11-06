@@ -7,8 +7,10 @@ import {
 
 import {
     getCourseEnrollments,
+    getEnrollment,
     registerEnrollment,
-    updateEnrollment
+    updateEnrollment,
+    updatePaymentStatus
 } from "../controllers/enrollment.controller.js";
 
 /*
@@ -27,4 +29,6 @@ courseEnrollmentRoutes.post("/", registerEnrollment);
 export const enrollmentRoutes = Router();
 
 enrollmentRoutes.use(authenticateUser, requireAdmin);
+enrollmentRoutes.get("/:id", getEnrollment);
 enrollmentRoutes.patch("/:id", updateEnrollment);
+enrollmentRoutes.patch("/:id/payment-status", updatePaymentStatus);

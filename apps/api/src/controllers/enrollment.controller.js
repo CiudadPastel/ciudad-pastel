@@ -1,8 +1,10 @@
 import {
     confirmEnrollmentRequest as confirmEnrollmentRequestService,
     getCourseEnrollments as getCourseEnrollmentsService,
+    getEnrollment as getEnrollmentService,
     registerEnrollment as registerEnrollmentService,
-    updateEnrollment as updateEnrollmentService
+    updateEnrollment as updateEnrollmentService,
+    updatePaymentStatus as updatePaymentStatusService
 } from "../services/enrollment.service.js";
 
 // Translates known service errors into HTTP responses. 409 includes a code
@@ -57,8 +59,20 @@ export const getCourseEnrollments = handle(getCourseEnrollmentsService, {
     getArgs: (req) => [req.params.courseId, req.query]
 });
 
+// GET /api/admin/enrollments/:id
+export const getEnrollment = handle(getEnrollmentService, {
+    errorMessage: "Could not retrieve enrollment",
+    getArgs: (req) => [req.params.id]
+});
+
 // PATCH /api/admin/enrollments/:id
 export const updateEnrollment = handle(updateEnrollmentService, {
     errorMessage: "Could not update enrollment",
     getArgs: (req) => [req.params.id, req.body]
+});
+
+// PATCH /api/admin/enrollments/:id/payment-status
+export const updatePaymentStatus = handle(updatePaymentStatusService, {
+    errorMessage: "Could not update payment status",
+    getArgs: (req) => [req.params.id, req.body?.paymentStatus, req.user]
 });

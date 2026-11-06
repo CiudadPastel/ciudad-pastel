@@ -96,6 +96,20 @@ const fake = vi.hoisted(() => {
                 enrollments.set(id, updated);
                 return clone(updated);
             }),
+            updateEnrollmentPaymentStatus: vi.fn(async (id, { paymentStatus, paymentUpdatedBy }) => {
+                const current = enrollments.get(id);
+                if (!current) return null;
+                const now = tick();
+                const updated = {
+                    ...current,
+                    paymentStatus,
+                    paymentUpdatedBy: paymentUpdatedBy ?? null,
+                    paymentUpdatedAt: now,
+                    updatedAt: now
+                };
+                enrollments.set(id, updated);
+                return clone(updated);
+            }),
             countActiveEnrollmentsByCourse: vi.fn(async () => {
                 const counts = new Map();
                 for (const e of enrollments.values()) {

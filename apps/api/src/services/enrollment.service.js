@@ -8,7 +8,9 @@ import {
 import {
     ENROLLMENT_ERROR_CODE,
     ENROLLMENT_STATUS,
-    buildEnrollment
+    VALID_PAYMENT_STATUSES,
+    buildEnrollment,
+    isValidPaymentStatus
 } from "../models/enrollment.model.js";
 import {
     validateConfirmRequestInput,
@@ -22,8 +24,10 @@ import { getEnrollmentRequestById as getEnrollmentRequestByIdRepository } from "
 import {
     createEnrollment as createEnrollmentRepository,
     getActiveEnrollmentsByIdNumber,
+    getEnrollmentById as getEnrollmentByIdRepository,
     getEnrollmentsByCourse as getEnrollmentsByCourseRepository,
-    updateEnrollment as updateEnrollmentRepository
+    updateEnrollment as updateEnrollmentRepository,
+    updateEnrollmentPaymentStatus as updateEnrollmentPaymentStatusRepository
 } from "../repositories/enrollment.repository.js";
 
 function namedError(name, message, { details, code } = {}) {
@@ -207,6 +211,43 @@ export async function updateEnrollment(id, input) {
         }
 
         return changes;
+    });
+
+    if (!updated) {
+        throw namedError("NotFoundError", "Enrollment not found.");
+    }
+
+    return updated;
+}
+
+/**
+ * Retrieves a single enrollment by ID (HU-A09 / HU-A07).
+ */
+export async function getEnrollment(id) {
+    const enrollment = await getEnrollmentByIdRepository(id);
+    if (!enrollment) {
+        throw namedError("NotFoundError", "Enrollment not found.");
+    }
+    return enrollment;
+}
+
+/**
+ * Updates the payment status of an enrollment by authorized staff (HU-A07).
+ * Validates paymentStatus, updates paymentUpdatedAt and paymentUpdatedBy,
+ * and returns the updated enrollment.
+ */
+export async function updatePaymentStatus(enrollmentId, paymentStatus, user) {
+    if (!paymentStatus || typeof paymentStatus !== "string" || !isValidPaymentStatus(paymentStatus)) {
+        throw namedError(
+            "ValidationError",
+            `paymentStatus must be one of: ${VALID_PAYMENT_STATUSES.join(", ")}.`,
+            { details: [`paymentStatus must be one of: ${VALID_PAYMENT_STATUSES.join(", ")}.`] }
+        );
+    }
+
+    const updated = await updateEnrollmentPaymentStatusRepository(enrollmentId, {
+        paymentStatus,
+        paymentUpdatedBy: user?.uid ?? null
     });
 
     if (!updated) {

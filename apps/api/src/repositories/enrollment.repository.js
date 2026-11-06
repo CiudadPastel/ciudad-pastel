@@ -165,3 +165,29 @@ export async function getActiveEnrollmentsByIdNumber(idNumber) {
         .map(mapEnrollmentDocument)
         .filter((enrollment) => enrollment.status === ENROLLMENT_STATUS.ENROLLED);
 }
+
+/**
+ * Updates the payment status of an enrollment (HU-A07).
+ * Saves paymentStatus, paymentUpdatedAt (serverTimestamp) and paymentUpdatedBy.
+ */
+export async function updateEnrollmentPaymentStatus(id, { paymentStatus, paymentUpdatedBy }) {
+    const enrollmentRef = db.collection(COLLECTION).doc(id);
+    let found = true;
+
+    await db.runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(enrollmentRef);
+        if (!snapshot.exists) {
+            found = false;
+            return;
+        }
+
+        transaction.update(enrollmentRef, {
+            paymentStatus,
+            paymentUpdatedBy: paymentUpdatedBy ?? null,
+            paymentUpdatedAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp()
+        });
+    });
+
+    return found ? getEnrollmentById(id) : null;
+}
