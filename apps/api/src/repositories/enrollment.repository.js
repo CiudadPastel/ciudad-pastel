@@ -1,7 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "../config/firebase.js";
 
-import { ENROLLMENT_STATUS } from "../models/enrollment.model.js";
+import { ENROLLMENT_STATUS, PAYMENT_STATUS } from "../models/enrollment.model.js";
 
 const COLLECTION = "enrollments";
 const COURSES = "courses";
@@ -26,6 +26,9 @@ export function mapEnrollmentDocument(documentSnapshot) {
         enrollmentRequestId: data.enrollmentRequestId ?? null,
         note: data.note ?? null,
         status: data.status,
+        paymentStatus: data.paymentStatus ?? PAYMENT_STATUS.PENDING,
+        paymentUpdatedAt: toIso(data.paymentUpdatedAt),
+        paymentUpdatedBy: data.paymentUpdatedBy ?? null,
         confirmedAt: toIso(data.confirmedAt),
         cancelledAt: toIso(data.cancelledAt),
         createdAt: toIso(data.createdAt),
@@ -69,6 +72,9 @@ export async function createEnrollment(enrollment, { validate, enrollmentRequest
         transaction.set(enrollmentRef, {
             ...data,
             enrollmentRequestId: requestToConfirm?.id ?? data.enrollmentRequestId ?? null,
+            paymentStatus: data.paymentStatus ?? PAYMENT_STATUS.PENDING,
+            paymentUpdatedAt: data.paymentUpdatedAt ?? null,
+            paymentUpdatedBy: data.paymentUpdatedBy ?? null,
             confirmedAt: FieldValue.serverTimestamp(),
             cancelledAt: null,
             createdAt: FieldValue.serverTimestamp(),
