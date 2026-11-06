@@ -535,4 +535,150 @@ describe("Enrollment Payment Status API (HU-A07 / CIU-13 - Rama 2)", () => {
             expect(JSON.stringify(res.body)).not.toContain("FATAL_FIRESTORE_REPLICA_DISCONNECT");
         });
     });
+
+    describe("Security, Authorization and Privacy Matrix (HU-A07 - Rama 4)", () => {
+        describe("Admin endpoint authorization (PATCH /api/admin/enrollments/:id/payment-status)", () => {
+            it("rejects unauthenticated requests with 401 without touching the repository", async () => {
+                const res = await request(app)
+                    .patch(`/api/admin/enrollments/${SAMPLE_ENROLLMENT.id}/payment-status`)
+                    .send({ paymentStatus: "paid" });
+
+                expect(res.status).toBe(401);
+                expect(res.body).toEqual({ message: "Authentication required" });
+                expect(fake.enrollmentRepository.updateEnrollmentPaymentStatus).not.toHaveBeenCalled();
+            });
+
+            it("rejects invalid or expired token with 401 without touching the repository", async () => {
+                const res = await request(app)
+                    .patch(`/api/admin/enrollments/${SAMPLE_ENROLLMENT.id}/payment-status`)
+                    .set({ Authorization: "Bearer bad-token-xyz" })
+                    .send({ paymentStatus: "paid" });
+
+                expect(res.status).toBe(401);
+                expect(res.body).toEqual({ message: "Invalid or expired authentication token" });
+                expect(fake.enrollmentRepository.updateEnrollmentPaymentStatus).not.toHaveBeenCalled();
+            });
+
+            it("rejects authenticated non-admin user with 403 without touching the repository", async () => {
+                const res = await request(app)
+                    .patch(`/api/admin/enrollments/${SAMPLE_ENROLLMENT.id}/payment-status`)
+                    .set(USER_AUTH_HEADER)
+                    .send({ paymentStatus: "paid" });
+
+                expect(res.status).toBe(403);
+                expect(res.body).toEqual({ message: "Administrator privileges required" });
+                expect(fake.enrollmentRepository.updateEnrollmentPaymentStatus).not.toHaveBeenCalled();
+            });
+
+            it("allows authenticated admin to update payment status successfully", async () => {
+                const res = await request(app)
+                    .patch(`/api/admin/enrollments/${SAMPLE_ENROLLMENT.id}/payment-status`)
+                    .set(ADMIN_AUTH_HEADER)
+                    .send({ paymentStatus: "paid" });
+
+                expect(res.status).toBe(200);
+                expect(res.body.paymentStatus).toBe("paid");
+                expect(fake.enrollmentRepository.updateEnrollmentPaymentStatus).toHaveBeenCalledTimes(1);
+            });
+        });
+
+        describe("Public endpoint security and strict privacy (POST /api/enrollments/payment-status)", () => {
+            it("functions without any authentication token and never invokes verifyIdToken", async () => {
+                const res = await request(app)
+                    .post("/api/enrollments/payment-status")
+                    .send({
+                        nationalId: SAMPLE_ENROLLMENT.idNumber,
+                        phone: SAMPLE_ENROLLMENT.phone
+                    });
+
+                expect(res.status).toBe(200);
+                expect(fake.verifyIdToken).not.toHaveBeenCalled();
+            });
+
+            it("enforces student isolation: two students never see each other's enrollments", async () => {
+                const studentAEnrollment = {
+                    ...SAMPLE_ENROLLMENT,
+                    id: "enr-student-A",
+                    courseName: "Curso de Galletas Decoradas",
+                    idNumber: "301110222",
+                    phone: "81112222"
+                };
+                const studentBEnrollment = {
+                    ...SAMPLE_ENROLLMENT,
+                    id: "enr-student-B",
+                    courseName: "Curso de Masas Hojaldradas",
+                    fullName: "Andrés Rojas Monge",
+                    idNumber: "402220333",
+                    phone: "83334444"
+                };
+
+                fake.enrollments.set(studentAEnrollment.id, studentAEnrollment);
+                fake.enrollments.set(studentBEnrollment.id, studentBEnrollment);
+
+                const resA = await request(app)
+                    .post("/api/enrollments/payment-status")
+                    .send({
+                        nationalId: studentAEnrollment.idNumber,
+                        phone: studentAEnrollment.phone
+                    });
+
+                expect(resA.status).toBe(200);
+                expect(resA.body.enrollments).toHaveLength(1);
+                expect(resA.body.enrollments[0].courseName).toBe("Curso de Galletas Decoradas");
+                expect(JSON.stringify(resA.body)).not.toContain("Masas Hojaldradas");
+
+                const resB = await request(app)
+                    .post("/api/enrollments/payment-status")
+                    .send({
+                        nationalId: studentBEnrollment.idNumber,
+                        phone: studentBEnrollment.phone
+                    });
+
+                expect(resB.status).toBe(200);
+                expect(resB.body.enrollments).toHaveLength(1);
+                expect(resB.body.enrollments[0].courseName).toBe("Curso de Masas Hojaldradas");
+                expect(JSON.stringify(resB.body)).not.toContain("Galletas Decoradas");
+
+                const resMixed = await request(app)
+                    .post("/api/enrollments/payment-status")
+                    .send({
+                        nationalId: studentAEnrollment.idNumber,
+                        phone: studentBEnrollment.phone
+                    });
+
+                expect(resMixed.status).toBe(200);
+                expect(resMixed.body.enrollments).toEqual([]);
+            });
+
+            it("verifies no unroutable HTTP methods are exposed publicly on /api/enrollments/payment-status", async () => {
+                const getRes = await request(app).get("/api/enrollments/payment-status");
+                expect(getRes.status).toBe(404);
+
+                const patchRes = await request(app).patch("/api/enrollments/payment-status");
+                expect(patchRes.status).toBe(404);
+
+                const putRes = await request(app).put("/api/enrollments/payment-status");
+                expect(putRes.status).toBe(404);
+
+                const deleteRes = await request(app).delete("/api/enrollments/payment-status");
+                expect(deleteRes.status).toBe(404);
+            });
+
+            it("verifies public router does not expose administrative enrollment listing or modification", async () => {
+                const rootListRes = await request(app).get("/api/enrollments");
+                expect(rootListRes.status).toBe(404);
+
+                const directDetailRes = await request(app).get(`/api/enrollments/${SAMPLE_ENROLLMENT.id}`);
+                expect(directDetailRes.status).toBe(404);
+
+                const directPatchRes = await request(app)
+                    .patch(`/api/enrollments/${SAMPLE_ENROLLMENT.id}`)
+                    .send({ paymentStatus: "paid" });
+                expect(directPatchRes.status).toBe(404);
+
+                const directDeleteRes = await request(app).delete(`/api/enrollments/${SAMPLE_ENROLLMENT.id}`);
+                expect(directDeleteRes.status).toBe(404);
+            });
+        });
+    });
 });
