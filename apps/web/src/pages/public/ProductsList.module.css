@@ -72,11 +72,18 @@
 
 .grid {
   display: grid;
-  grid-template-columns: 1fr;
+  /* Keep reserved columns even with a single product/category. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
   gap: 1.25rem;
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.grid > li {
+  min-width: 0;
+  width: 100%;
+  max-width: 300px;
 }
 
 .skeletonCard {
@@ -125,9 +132,10 @@
   border-radius: 4px;
 }
 
-@media (min-width: 601px) {
+/* Give a lone card balanced margins on compact screens. */
+@media (max-width: 480px) {
   .grid {
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+    justify-items: center;
   }
 }
 
