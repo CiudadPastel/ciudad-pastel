@@ -12,8 +12,11 @@ import { formatPrice } from "../utils/format";
 import styles from "./Home.module.css";
 
 function HomePicture({ src, alt, className = "" }) {
+    return <HomePictureContent key={src ?? "sin-imagen"} src={src} alt={alt} className={className} />;
+}
+
+function HomePictureContent({ src, alt, className }) {
     const [failed, setFailed] = useState(false);
-    useEffect(() => { setFailed(false); }, [src]);
     if (!src || failed) {
         return <div className={`${styles.imagePlaceholder} ${className}`} aria-label="Fotografía pendiente de publicación">
             <ImageOff size={42} aria-hidden="true" />
