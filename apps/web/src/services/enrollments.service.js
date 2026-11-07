@@ -6,6 +6,7 @@ import { apiFetch } from "./api";
  *   POST  /api/admin/courses/:courseId/enrollments       -> matrícula manual
  *   POST  /api/admin/enrollment-requests/:id/confirm     -> desde una solicitud
  *   PATCH /api/admin/enrollments/:id                     -> corregir o cancelar
+ *   POST  /api/enrollments/payment-status                -> consulta pública de pago
  */
 
 export function getCourseEnrollments(courseId) {
@@ -41,6 +42,13 @@ export function updateEnrollmentPaymentStatus(id, paymentStatus) {
         method: "PATCH",
         requiresAuth: true,
         body: JSON.stringify({ paymentStatus })
+    });
+}
+
+export function lookupPaymentStatus(data) {
+    return apiFetch("/enrollments/payment-status", {
+        method: "POST",
+        body: JSON.stringify(data)
     });
 }
 

@@ -52,6 +52,9 @@ import PublicCoursesList
 import MyRecipeBooks
     from "./pages/public/MyRecipeBooks";
 
+import PaymentStatus
+    from "./pages/public/PaymentStatus";
+
 import PublicCourseDetail
     from "./pages/public/CourseDetail";
 
@@ -109,6 +112,10 @@ function App() {
                 <Route
                     path="/mis-libros-de-recetas"
                     element={<MyRecipeBooks />}
+                />
+                <Route
+                    path="/estado-de-pago"
+                    element={<PaymentStatus />}
                 />
             </Route>
 
