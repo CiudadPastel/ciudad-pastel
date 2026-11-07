@@ -23,6 +23,18 @@ export const STUDENT_STATUS = {
     CANCELLED: "cancelled"
 };
 
+export const PAYMENT_STATUS = Object.freeze({
+    PENDING: "pending",
+    DEPOSIT_PAID: "deposit_paid",
+    PAID: "paid"
+});
+
+export const PAYMENT_STATUS_LABELS = Object.freeze({
+    [PAYMENT_STATUS.PENDING]: "Pendiente",
+    [PAYMENT_STATUS.DEPOSIT_PAID]: "Adelanto pagado",
+    [PAYMENT_STATUS.PAID]: "Pagado"
+});
+
 export const ID_TYPE = {
     NATIONAL: "national",
     DIMEX: "dimex"

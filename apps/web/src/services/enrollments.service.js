@@ -36,6 +36,14 @@ export function updateEnrollment(id, changes) {
     });
 }
 
+export function updateEnrollmentPaymentStatus(id, paymentStatus) {
+    return apiFetch(`/admin/enrollments/${encodeURIComponent(id)}/payment-status`, {
+        method: "PATCH",
+        requiresAuth: true,
+        body: JSON.stringify({ paymentStatus })
+    });
+}
+
 /** Mensaje en español para los errores de matrícula (409 con código). */
 export function enrollmentErrorMessage(error) {
     const messages = {
@@ -49,4 +57,16 @@ export function enrollmentErrorMessage(error) {
     if (error?.code && messages[error.code]) return messages[error.code];
     if (error?.status === 400) return "Revise los datos marcados e intente de nuevo.";
     return error?.message || "No se pudo guardar la matrícula.";
+}
+
+export function paymentStatusErrorMessage(error) {
+    const messages = {
+        0: "No se pudo conectar con el servidor. Revise su conexión.",
+        400: "El estado de pago no es válido. Seleccione una opción e intente de nuevo.",
+        401: "Su sesión expiró. Inicie sesión de nuevo.",
+        403: "No tiene permisos para actualizar el estado de pago.",
+        404: "No se encontró la matrícula que desea actualizar."
+    };
+
+    return messages[error?.status] ?? "No se pudo actualizar el estado de pago. Intente de nuevo.";
 }

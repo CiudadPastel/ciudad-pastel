@@ -16,6 +16,7 @@ import { RetryButton } from "../ui/StateMessage";
 import EnrollmentFormDialog from "./EnrollmentFormDialog";
 import { COURSE_STATUS } from "../../constants/course";
 import {
+    PAYMENT_STATUS_LABELS,
     STUDENT_STATUS,
     formatPhone,
     idTypeShortLabel,
@@ -24,8 +25,10 @@ import {
 import {
     enrollmentErrorMessage,
     getCourseEnrollments,
+    paymentStatusErrorMessage,
     registerEnrollment,
-    updateEnrollment
+    updateEnrollment,
+    updateEnrollmentPaymentStatus
 } from "../../services/enrollments.service";
 import { formatDateTime } from "../../utils/format";
 
@@ -43,6 +46,8 @@ function CourseStudents({ course }) {
     const [dialog, setDialog] = useState(null);
     const [cancelling, setCancelling] = useState(null);
     const [busyId, setBusyId] = useState(null);
+    const [paymentConfirmation, setPaymentConfirmation] = useState(null);
+    const [paymentBusyId, setPaymentBusyId] = useState(null);
 
     useEffect(() => {
         let active = true;
@@ -116,6 +121,29 @@ function CourseStudents({ course }) {
         } finally {
             setBusyId(null);
             setCancelling(null);
+        }
+    }
+
+    function requestPaymentStatusChange(enrollment, paymentStatus) {
+        if (paymentStatus === enrollment.paymentStatus || paymentBusyId !== null) return;
+        setPaymentConfirmation({ enrollment, paymentStatus });
+    }
+
+    async function changePaymentStatus(enrollment, paymentStatus) {
+        if (paymentStatus === enrollment.paymentStatus || paymentBusyId !== null) return;
+
+        setPaymentBusyId(enrollment.id);
+        setNotice(null);
+
+        try {
+            const updated = await updateEnrollmentPaymentStatus(enrollment.id, paymentStatus);
+            replace(updated);
+            setNotice({ variant: "success", text: "Estado de pago actualizado correctamente" });
+        } catch (error) {
+            setNotice({ variant: "error", text: paymentStatusErrorMessage(error) });
+        } finally {
+            setPaymentBusyId(null);
+            setPaymentConfirmation(null);
         }
     }
 
@@ -208,6 +236,9 @@ function CourseStudents({ course }) {
                             enrollment={enrollment}
                             courseName={course.name}
                             busy={busyId === enrollment.id}
+                            paymentBusy={paymentBusyId === enrollment.id}
+                            paymentDisabled={paymentBusyId !== null || paymentConfirmation !== null}
+                            onPaymentStatusChange={requestPaymentStatusChange}
                             actions={(
                                 <>
                                     <button
@@ -246,6 +277,9 @@ function CourseStudents({ course }) {
                                 enrollment={enrollment}
                                 courseName={course.name}
                                 busy={busyId === enrollment.id}
+                                paymentBusy={paymentBusyId === enrollment.id}
+                                paymentDisabled={paymentBusyId !== null || paymentConfirmation !== null}
+                                onPaymentStatusChange={requestPaymentStatusChange}
                                 dimmed
                                 actions={(
                                     <button
@@ -303,15 +337,61 @@ function CourseStudents({ course }) {
                     <p>Se liberará un cupo en el curso. Si fue un error, puede volver a matricular a esta persona después.</p>
                 </ConfirmDialog>
             )}
+
+            {paymentConfirmation && (
+                <ConfirmDialog
+                    open
+                    title="¿Actualizar el estado de pago?"
+                    confirmLabel={paymentBusyId === paymentConfirmation.enrollment.id ? "Guardando…" : "Actualizar estado"}
+                    cancelLabel="Cancelar"
+                    busy={paymentBusyId === paymentConfirmation.enrollment.id}
+                    onConfirm={() => changePaymentStatus(
+                        paymentConfirmation.enrollment,
+                        paymentConfirmation.paymentStatus
+                    )}
+                    onCancel={() => {
+                        if (paymentBusyId === null) setPaymentConfirmation(null);
+                    }}
+                >
+                    <p>
+                        De <strong>{PAYMENT_STATUS_LABELS[paymentConfirmation.enrollment.paymentStatus]}</strong>
+                        {" "}a <strong>{PAYMENT_STATUS_LABELS[paymentConfirmation.paymentStatus]}</strong>.
+                    </p>
+                    {paymentBusyId === paymentConfirmation.enrollment.id && (
+                        <p role="status">
+                            <LoaderCircle size={16} className={styles.spin} aria-hidden="true" />
+                            {" "}Guardando estado de pago…
+                        </p>
+                    )}
+                </ConfirmDialog>
+            )}
         </section>
     );
 }
 
-function StudentRow({ enrollment, courseName, actions, busy, dimmed = false }) {
+function StudentRow({
+    enrollment,
+    courseName,
+    actions,
+    busy,
+    paymentBusy,
+    paymentDisabled,
+    onPaymentStatusChange,
+    dimmed = false
+}) {
     const message = `Hola ${enrollment.fullName.split(" ")[0]}, le escribimos de Ciudad Pastel: su matrícula en "${courseName}" está confirmada. Le agregaremos al grupo de WhatsApp del curso.`;
+    const paymentStatusLabel = PAYMENT_STATUS_LABELS[enrollment.paymentStatus] ?? enrollment.paymentStatus;
+    const paymentBadgeClass = {
+        pending: styles.paymentBadgePending,
+        deposit_paid: styles.paymentBadgeDepositPaid,
+        paid: styles.paymentBadgePaid
+    }[enrollment.paymentStatus] ?? "";
 
     return (
-        <li className={`${styles.row} ${dimmed ? styles.dimmed : ""}`} aria-busy={busy || undefined}>
+        <li
+            className={`${styles.row} ${dimmed ? styles.dimmed : ""}`}
+            aria-busy={busy || paymentBusy || undefined}
+        >
             <div className={styles.person}>
                 <span className={styles.name}>{enrollment.fullName}</span>
                 <span className={styles.secondary}>
@@ -344,6 +424,39 @@ function StudentRow({ enrollment, courseName, actions, busy, dimmed = false }) {
                 <span>Confirmada: {formatDateTime(enrollment.confirmedAt)}</span>
                 {enrollment.cancelledAt && <span>Cancelada: {formatDateTime(enrollment.cancelledAt)}</span>}
                 {enrollment.enrollmentRequestId && <span className={styles.fromRequest}>Desde una solicitud</span>}
+            </div>
+
+            <div className={styles.payment}>
+                <div className={styles.paymentStatus}>
+                    <span className={styles.paymentLabel}>Estado de pago</span>
+                    <span className={`${styles.paymentBadge} ${paymentBadgeClass}`}>
+                        {paymentStatusLabel}
+                    </span>
+                </div>
+                {enrollment.paymentUpdatedAt && (
+                    <span className={styles.paymentUpdated}>
+                        Actualizado el {formatDateTime(enrollment.paymentUpdatedAt)}
+                    </span>
+                )}
+                <label className={styles.paymentControl}>
+                    <span className="sr-only">Cambiar estado de pago de {enrollment.fullName}</span>
+                    <select
+                        value={enrollment.paymentStatus}
+                        onChange={(event) => onPaymentStatusChange(enrollment, event.target.value)}
+                        disabled={paymentDisabled}
+                        aria-label={`Cambiar estado de pago de ${enrollment.fullName}`}
+                    >
+                        {Object.entries(PAYMENT_STATUS_LABELS).map(([value, label]) => (
+                            <option key={value} value={value}>{label}</option>
+                        ))}
+                    </select>
+                </label>
+                {paymentBusy && (
+                    <span className={styles.paymentUpdated} role="status">
+                        <LoaderCircle size={15} className={styles.spin} aria-hidden="true" />
+                        {" "}Guardando…
+                    </span>
+                )}
             </div>
 
             <div className={styles.actions}>{actions}</div>
