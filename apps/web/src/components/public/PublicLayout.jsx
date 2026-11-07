@@ -1,4 +1,4 @@
-import { BookMarked, BookOpen, ShoppingBag, ShoppingCart } from "lucide-react";
+import { BookMarked, BookOpen, CircleDollarSign, ShoppingBag, ShoppingCart } from "lucide-react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { useCart } from "../../cart/useCart";
@@ -50,6 +50,10 @@ function PublicLayout() {
                         <Link to="/mis-libros-de-recetas" className="btn btn-secondary">
                             <BookMarked size={17} aria-hidden="true" />
                             Mis libros de recetas
+                        </Link>
+                        <Link to="/estado-de-pago" className="btn btn-secondary">
+                            <CircleDollarSign size={17} aria-hidden="true" />
+                            Estado de pago
                         </Link>
                     </nav>
                 </div>

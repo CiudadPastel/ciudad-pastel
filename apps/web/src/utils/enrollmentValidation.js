@@ -47,18 +47,9 @@ const TEXTS = {
     }
 };
 
-export function validateEnrollmentForm(values, { formal = false } = {}) {
+export function validateEnrollmentIdentityAndPhone(values, { formal = false } = {}) {
     const t = formal ? TEXTS.admin : TEXTS.public;
     const errors = {};
-
-    const fullName = values.fullName.trim().replace(/\s+/g, " ");
-    if (!fullName) {
-        errors.fullName = t.name;
-    } else if (fullName.length < ENROLLMENT_LIMITS.fullName.min) {
-        errors.fullName = t.nameShort;
-    } else if (fullName.length > ENROLLMENT_LIMITS.fullName.max) {
-        errors.fullName = `El nombre puede tener como máximo ${ENROLLMENT_LIMITS.fullName.max} caracteres.`;
-    }
 
     const idNumber = onlyDigits(values.idNumber);
     if (!idNumber) {
@@ -78,6 +69,22 @@ export function validateEnrollmentForm(values, { formal = false } = {}) {
         errors.phone = t.phone;
     } else if (phone.length !== 8) {
         errors.phone = `El teléfono tiene 8 dígitos (${t.typed} ${phone.length}).`;
+    }
+
+    return errors;
+}
+
+export function validateEnrollmentForm(values, { formal = false } = {}) {
+    const t = formal ? TEXTS.admin : TEXTS.public;
+    const errors = validateEnrollmentIdentityAndPhone(values, { formal });
+
+    const fullName = values.fullName.trim().replace(/\s+/g, " ");
+    if (!fullName) {
+        errors.fullName = t.name;
+    } else if (fullName.length < ENROLLMENT_LIMITS.fullName.min) {
+        errors.fullName = t.nameShort;
+    } else if (fullName.length > ENROLLMENT_LIMITS.fullName.max) {
+        errors.fullName = `El nombre puede tener como máximo ${ENROLLMENT_LIMITS.fullName.max} caracteres.`;
     }
 
     if (values.note !== undefined && values.note.trim().length > NOTE_MAX) {
