@@ -151,6 +151,7 @@ describe("Public Courses API Acceptance Criteria Suite [CIU-74 / CIU-80]", () =>
                 "remainingSpots",
                 "requiredMaterials",
                 "schedule",
+                "seasonName",
                 "summary"
             ];
             expect(Object.keys(item).sort()).toEqual(expectedKeys);

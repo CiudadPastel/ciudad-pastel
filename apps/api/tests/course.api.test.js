@@ -921,6 +921,7 @@ describe("public courses", () => {
         "remainingSpots",
         "requiredMaterials",
         "schedule",
+        "seasonName",
         "summary"
       ]);
     });
