@@ -58,6 +58,7 @@ export function buildCourse(data) {
         prerequisites: data.prerequisites ?? null,
         reservationAmount: data.reservationAmount ?? null,
         priceNote: data.priceNote ?? null,
+        seasonName: data.seasonName ?? null,
         capacity: data.capacity ?? null,
         price: data.price ?? null,
         instructor: data.instructor ?? null,
