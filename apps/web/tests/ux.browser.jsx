@@ -4,6 +4,9 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import CourseForm from "../src/components/admin/CourseForm";
+import AdminCoursesList from "../src/pages/admin/CoursesList";
+import AdminCourseDetail from "../src/pages/admin/CourseDetail";
+import AdminCourseEdit from "../src/pages/admin/CourseEdit";
 import ProductsList from "../src/pages/public/ProductsList";
 import CoursesList from "../src/pages/public/CoursesList";
 import PublicLayout from "../src/components/public/PublicLayout";
@@ -30,7 +33,39 @@ let seasonalCourses = [];
 let includeSeasonalInCatalog = false;
 let pendingSeasonalCourses;
 let failSeasonalCourses = false;
+let adminSeasonName = "Navidad";
+let failSeasonWithdrawal = false;
+let seasonalWithdrawals = [];
 let productWrites = [];
+const adminSeasonCourse = {
+    id: "admin-seasonal",
+    name: "Queque navideño",
+    summary: "Curso especial de Navidad",
+    description: "Aprenda a preparar un queque navideño.",
+    imageUrl: null,
+    learningOutcomes: [],
+    requiredMaterials: [],
+    courseType: "workshop",
+    seasonName: adminSeasonName,
+    capacity: 6,
+    price: 25000,
+    instructor: "Yamilena",
+    schedule: null,
+    status: "draft",
+    createdAt: "2026-10-01T10:00:00.000Z",
+    updatedAt: "2026-10-01T10:00:00.000Z"
+};
+const regularAdminCourse = {
+    ...adminSeasonCourse,
+    id: "admin-regular",
+    name: "Curso regular",
+    seasonName: null
+};
+const adminCourseRoutes = <Routes>
+    <Route path="/admin/cursos" element={<AdminCoursesList />} />
+    <Route path="/admin/cursos/:id" element={<AdminCourseDetail />} />
+    <Route path="/admin/cursos/:id/editar" element={<AdminCourseEdit />} />
+</Routes>;
 const courses = Array.from({ length: 85 }, (_, index) => ({
     id: String(index), name: `Curso ${index}`, summary: "Curso de prueba",
     courseType: index < 13 ? "workshop" : index < 79 ? "basic"
@@ -71,6 +106,29 @@ window.fetch = async (input, options = {}) => {
     if (url.pathname.endsWith("/categories")) {
         if (failCategories) throw new Error("offline");
         return Response.json([{ id: "harinas", name: "Harinas", productCount: 13 }]);
+    }
+    if (url.pathname.endsWith("/admin/courses/admin-seasonal/seasonal") && options.method === "DELETE") {
+        seasonalWithdrawals.push(url.pathname);
+        if (failSeasonWithdrawal) {
+            return Response.json({ message: "Seasonal withdrawal failed." }, { status: 500 });
+        }
+        adminSeasonName = null;
+        return new Response(null, { status: 204 });
+    }
+    if (url.pathname.endsWith("/admin/courses/admin-seasonal/recipe-books")) {
+        return Response.json([]);
+    }
+    if (url.pathname.endsWith("/admin/courses/admin-seasonal/enrollments")) {
+        return Response.json([]);
+    }
+    if (url.pathname.endsWith("/admin/courses/admin-seasonal")) {
+        return Response.json({ ...adminSeasonCourse, seasonName: adminSeasonName });
+    }
+    if (url.pathname.endsWith("/admin/courses")) {
+        return Response.json([
+            { ...adminSeasonCourse, seasonName: adminSeasonName },
+            regularAdminCourse
+        ]);
     }
     if (url.pathname.endsWith("/products")) {
         if (pendingProducts) await pendingProducts;
@@ -303,6 +361,79 @@ await test("course review displays full saved data and edit links preserve final
     for (const label of ["Precio", "Monto para reservar"]) {
         const term = [...review().querySelectorAll("dt")].find((element) => element.textContent === label);
         assert(term.nextElementSibling.textContent === formatPrice(0), "Zero is a saved amount, not an absent value");
+    }
+});
+
+await test("season actions confirm withdrawals, update admin state and open seasonal editing", async () => {
+    const previousUser = auth.currentUser;
+    auth.currentUser = { getIdToken: async () => "ux-test-token" };
+    adminSeasonName = "Navidad";
+    failSeasonWithdrawal = true;
+    seasonalWithdrawals = [];
+
+    try {
+        await mount(adminCourseRoutes, "/admin/cursos");
+        const seasonalRow = [...container.querySelectorAll("tbody tr")]
+            .find((row) => row.textContent.includes("Queque navideño"));
+        const regularRow = [...container.querySelectorAll("tbody tr")]
+            .find((row) => row.textContent.includes("Curso regular"));
+        assert(seasonalRow?.textContent.includes("Temporada: Navidad"), "Season badge shown");
+        assert(regularRow && !regularRow.textContent.includes("Retirar de temporada"), "Regular courses have no season actions");
+
+        const editLink = [...seasonalRow.querySelectorAll("a")]
+            .find((linkElement) => linkElement.textContent.includes("Editar temporada"));
+        assert(editLink?.getAttribute("href") === "/admin/cursos/admin-seasonal/editar#course-seasonName", "Edit link opens seasonal form section");
+
+        const findRetireButton = (row) => [...row.querySelectorAll("button")]
+            .find((buttonElement) => buttonElement.textContent.includes("Retirar de temporada"));
+        await settle(() => findRetireButton(seasonalRow).click());
+        const dialog = container.querySelector("dialog");
+        assert(dialog?.open, "Withdrawal asks for confirmation");
+        assert(dialog.textContent.includes("Queque navideño") && dialog.textContent.includes("Navidad"), "Confirmation identifies course and season");
+        await settle(() => dialog.querySelector(".btn-danger").click());
+        assert(text().includes("No se pudo") || text().includes("servidor"), "Withdrawal failure is announced");
+        assert(container.querySelector('[title="Temporada: Navidad"]'), "Season label remains after failure");
+        assert(window.location.pathname === "/admin/cursos", "Action does not trigger the row navigation");
+
+        failSeasonWithdrawal = false;
+        const retryRow = [...container.querySelectorAll("tbody tr")]
+            .find((row) => row.textContent.includes("Queque navideño"));
+        const retryButton = findRetireButton(retryRow);
+        await settle(() => retryButton.click());
+        await settle(() => container.querySelector("dialog").querySelector(".btn-danger").click());
+        assert(adminSeasonName === null, "Dedicated delete action clears season designation");
+        assert(!container.querySelector('[title="Temporada: Navidad"]'), "List badge disappears without reload");
+        assert(text().includes("Se retiró"), "Success notice is shown");
+        assert(seasonalWithdrawals.length === 2, "DELETE endpoint is called for each confirmed attempt");
+
+        adminSeasonName = "Navidad";
+        await mount(adminCourseRoutes, "/admin/cursos");
+        const editSeasonLink = [...container.querySelectorAll("a")]
+            .find((linkElement) => linkElement.textContent.includes("Editar temporada"));
+        await settle(() => editSeasonLink.click());
+        assert(
+            container.querySelector("h2")?.textContent.includes("Paso 3 de 5: Lugar y planificación"),
+            "Season editing opens the form section containing season fields"
+        );
+        assert(container.querySelector('[name="seasonName"]')?.value === "Navidad", "Season form is prefilled");
+
+        adminSeasonName = "Navidad";
+        await mount(adminCourseRoutes, "/admin/cursos/admin-seasonal");
+        assert([...container.querySelectorAll("a")].some((linkElement) =>
+            linkElement.textContent.includes("Editar temporada")
+        ), "Detail shows season editing action");
+        await button("Retirar de temporada");
+        const detailDialog = container.querySelector("dialog");
+        assert(detailDialog?.textContent.includes("Queque navideño") && detailDialog.textContent.includes("Navidad"), "Detail confirmation identifies course and season");
+        await settle(() => detailDialog.querySelector(".btn-danger").click());
+        assert(text().includes("Se retiró"), "Detail shows successful withdrawal");
+        assert(![...container.querySelectorAll("a, button")].some((element) =>
+            element.textContent.includes("Retirar de temporada") || element.textContent.includes("Editar temporada")
+        ), "Season actions disappear after withdrawal");
+    } finally {
+        auth.currentUser = previousUser;
+        adminSeasonName = "Navidad";
+        failSeasonWithdrawal = false;
     }
 });
 
