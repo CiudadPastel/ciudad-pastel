@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 
 const fake = vi.hoisted(() => {
@@ -77,7 +77,26 @@ function setupFirestoreMock() {
             };
         }
 
+        const buildQuery = (filters = {}) => ({
+            where: (field, op, val) => buildQuery({ ...filters, [field]: val }),
+            get: async () => {
+                const entries = [...fake.courses.entries()].filter(([_id, data]) => {
+                    for (const [k, v] of Object.entries(filters)) {
+                        if (data[k] !== v) return false;
+                    }
+                    return true;
+                });
+                return {
+                    docs: entries.map(([id, data]) => ({
+                        id,
+                        data: () => ({ ...data })
+                    }))
+                };
+            }
+        });
+
         return {
+            ...buildQuery(),
             doc: (id) => ({
                 get: async () => {
                     const data = fake.courses.get(id);
@@ -129,13 +148,7 @@ function setupFirestoreMock() {
                         data: () => ({ ...stored })
                     })
                 };
-            },
-            get: async () => ({
-                docs: [...fake.courses.entries()].map(([id, data]) => ({
-                    id,
-                    data: () => ({ ...data })
-                }))
-            })
+            }
         };
     });
 }
@@ -442,6 +455,267 @@ describe("Seasonal Course Management API (HU-A08 / CIU-14 - Rama 2)", () => {
 
             expect(res.status).toBe(403);
             expect(fake.courses.get(created.body.id).seasonName).toBe("Original 2026");
+        });
+    });
+
+    describe("GET /api/courses/seasonal (Public Seasonal Catalog - HU-A08 - Rama 3)", () => {
+        function seedCourse(status = COURSE_STATUS.PUBLISHED, overrides = {}) {
+            const id = overrides.id ?? `course-${fake.courses.size + 1}`;
+            const now = new Date(fake.timestamp());
+            const course = {
+                ...VALID_BASE_COURSE,
+                id,
+                status,
+                seasonName: null,
+                createdAt: { toDate: () => now },
+                updatedAt: { toDate: () => now },
+                ...overrides
+            };
+            fake.courses.set(id, course);
+            return course;
+        }
+
+        afterEach(() => {
+            vi.useRealTimers();
+        });
+
+        it("returns only seasonal courses that are published and not yet ended", async () => {
+            const seasonalActive = seedCourse(COURSE_STATUS.PUBLISHED, {
+                id: "seasonal-active-1",
+                name: "Especial Galletas de Navidad",
+                seasonName: "Navidad 2026",
+                schedule: {
+                    startDate: "2026-12-01",
+                    endDate: "2026-12-24"
+                }
+            });
+
+            const res = await request(app).get("/api/courses/seasonal");
+
+            expect(res.status).toBe(200);
+            expect(res.body).toHaveLength(1);
+            expect(res.body[0].id).toBe(seasonalActive.id);
+            expect(res.body[0].seasonName).toBe("Navidad 2026");
+        });
+
+        it("excludes draft, archived, and ended seasonal courses", async () => {
+            seedCourse(COURSE_STATUS.DRAFT, {
+                id: "seasonal-draft",
+                seasonName: "Navidad 2026"
+            });
+
+            seedCourse(COURSE_STATUS.ARCHIVED, {
+                id: "seasonal-archived",
+                seasonName: "Navidad 2026"
+            });
+
+            seedCourse(COURSE_STATUS.PUBLISHED, {
+                id: "seasonal-ended",
+                seasonName: "Navidad 2026",
+                schedule: {
+                    startDate: "2026-01-01",
+                    endDate: "2026-01-10"
+                }
+            });
+
+            const active = seedCourse(COURSE_STATUS.PUBLISHED, {
+                id: "seasonal-active",
+                seasonName: "Navidad 2026",
+                schedule: {
+                    startDate: "2026-12-01",
+                    endDate: "2026-12-24"
+                }
+            });
+
+            const res = await request(app).get("/api/courses/seasonal");
+
+            expect(res.status).toBe(200);
+            expect(res.body).toHaveLength(1);
+            expect(res.body[0].id).toBe(active.id);
+        });
+
+        it("shows a non-seasonal published course in /api/courses but excludes it from /api/courses/seasonal", async () => {
+            const standardCourse = seedCourse(COURSE_STATUS.PUBLISHED, {
+                id: "standard-course-1",
+                name: "Curso Regular de Pastelería",
+                seasonName: null
+            });
+
+            const seasonalCourse = seedCourse(COURSE_STATUS.PUBLISHED, {
+                id: "seasonal-course-1",
+                name: "Curso Especial de Navidad",
+                seasonName: "Navidad 2026",
+                schedule: {
+                    startDate: "2026-12-01",
+                    endDate: "2026-12-24"
+                }
+            });
+
+            const generalRes = await request(app).get("/api/courses");
+            expect(generalRes.status).toBe(200);
+            const generalIds = generalRes.body.map((c) => c.id);
+            expect(generalIds).toContain(standardCourse.id);
+            expect(generalIds).toContain(seasonalCourse.id);
+
+            const seasonalRes = await request(app).get("/api/courses/seasonal");
+            expect(seasonalRes.status).toBe(200);
+            expect(seasonalRes.body).toHaveLength(1);
+            expect(seasonalRes.body[0].id).toBe(seasonalCourse.id);
+            expect(seasonalRes.body.map((c) => c.id)).not.toContain(standardCourse.id);
+        });
+
+        it("orders seasonal courses by startDate ascending, resolves ties by name, and puts courses without schedule last", async () => {
+            const cTie2 = seedCourse(COURSE_STATUS.PUBLISHED, {
+                id: "c-tie-2",
+                name: "Zumo y Masas Navideñas",
+                seasonName: "Navidad 2026",
+                schedule: { startDate: "2026-12-05", endDate: "2026-12-20" }
+            });
+
+            const cTie1 = seedCourse(COURSE_STATUS.PUBLISHED, {
+                id: "c-tie-1",
+                name: "Alfajores Navideños",
+                seasonName: "Navidad 2026",
+                schedule: { startDate: "2026-12-05", endDate: "2026-12-20" }
+            });
+
+            const cEarly = seedCourse(COURSE_STATUS.PUBLISHED, {
+                id: "c-early",
+                name: "Tronco Navideño Temprano",
+                seasonName: "Navidad 2026",
+                schedule: { startDate: "2026-12-01", endDate: "2026-12-10" }
+            });
+
+            const cNoSchedule = seedCourse(COURSE_STATUS.PUBLISHED, {
+                id: "c-no-schedule",
+                name: "Panetón Tradicional",
+                seasonName: "Navidad 2026",
+                schedule: null
+            });
+
+            const res = await request(app).get("/api/courses/seasonal");
+
+            expect(res.status).toBe(200);
+            const ids = res.body.map((c) => c.id);
+            expect(ids).toEqual([
+                cEarly.id,
+                cTie1.id,
+                cTie2.id,
+                cNoSchedule.id
+            ]);
+        });
+
+        it("returns EXACT public keys matching PublicCourse contract", async () => {
+            seedCourse(COURSE_STATUS.PUBLISHED, {
+                id: "seasonal-exact-keys",
+                seasonName: "Especial San Valentín 2026",
+                schedule: { startDate: "2026-12-01", endDate: "2026-12-15" }
+            });
+
+            const res = await request(app).get("/api/courses/seasonal");
+
+            expect(res.status).toBe(200);
+            expect(res.body).toHaveLength(1);
+            const item = res.body[0];
+            const expectedKeys = [
+                "capacity",
+                "courseType",
+                "description",
+                "id",
+                "imageUrl",
+                "instructor",
+                "learningOutcomes",
+                "name",
+                "price",
+                "remainingSpots",
+                "requiredMaterials",
+                "schedule",
+                "seasonName",
+                "summary"
+            ];
+            expect(Object.keys(item).sort()).toEqual(expectedKeys);
+            expect(item).not.toHaveProperty("status");
+            expect(item).not.toHaveProperty("createdAt");
+            expect(item).not.toHaveProperty("updatedAt");
+            expect(item.seasonName).toBe("Especial San Valentín 2026");
+        });
+
+        it("functions without authentication and never calls verifyIdToken", async () => {
+            seedCourse(COURSE_STATUS.PUBLISHED, {
+                seasonName: "Verano 2026",
+                schedule: { startDate: "2026-12-01", endDate: "2026-12-20" }
+            });
+
+            const res = await request(app).get("/api/courses/seasonal");
+
+            expect(res.status).toBe(200);
+            expect(fake.verifyIdToken).not.toHaveBeenCalled();
+        });
+
+        it("returns the course list and NOT a 404 error from the :id route parameter", async () => {
+            const res = await request(app).get("/api/courses/seasonal");
+
+            expect(res.status).toBe(200);
+            expect(Array.isArray(res.body)).toBe(true);
+            expect(res.body).not.toHaveProperty("message");
+        });
+
+        it("ensures GET /api/courses/:id continues working alongside /api/courses/seasonal", async () => {
+            const course = seedCourse(COURSE_STATUS.PUBLISHED, {
+                id: "pub-course-detail-check",
+                seasonName: "Navidad 2026",
+                schedule: { startDate: "2026-12-01", endDate: "2026-12-24" }
+            });
+
+            const detailRes = await request(app).get(`/api/courses/${course.id}`);
+
+            expect(detailRes.status).toBe(200);
+            expect(detailRes.body.id).toBe(course.id);
+            expect(detailRes.body.seasonName).toBe("Navidad 2026");
+        });
+
+        it("applies time boundary rules with vi.useFakeTimers (ends yesterday -> excluded, ends today -> included)", async () => {
+            vi.useFakeTimers();
+            vi.setSystemTime(new Date("2026-11-20T12:00:00.000Z"));
+
+            seedCourse(COURSE_STATUS.PUBLISHED, {
+                id: "course-ended-yesterday",
+                seasonName: "Navidad 2026",
+                schedule: { startDate: "2026-11-10", endDate: "2026-11-19" }
+            });
+
+            const endsToday = seedCourse(COURSE_STATUS.PUBLISHED, {
+                id: "course-ends-today",
+                seasonName: "Navidad 2026",
+                schedule: { startDate: "2026-11-10", endDate: "2026-11-20" }
+            });
+
+            const endsTomorrow = seedCourse(COURSE_STATUS.PUBLISHED, {
+                id: "course-ends-tomorrow",
+                seasonName: "Navidad 2026",
+                schedule: { startDate: "2026-11-10", endDate: "2026-11-21" }
+            });
+
+            const res = await request(app).get("/api/courses/seasonal");
+
+            expect(res.status).toBe(200);
+            const ids = res.body.map((c) => c.id);
+            expect(ids).not.toContain("course-ended-yesterday");
+            expect(ids).toContain(endsToday.id);
+            expect(ids).toContain(endsTomorrow.id);
+        });
+
+        it("returns clean 500 when repository throws an unexpected error", async () => {
+            fake.collection.mockImplementationOnce(() => {
+                throw new Error("FIRESTORE_CLUSTER_UNREACHABLE_SOCKET_TIMEOUT");
+            });
+
+            const res = await request(app).get("/api/courses/seasonal");
+
+            expect(res.status).toBe(500);
+            expect(res.body).toEqual({ message: "Could not retrieve seasonal courses." });
+            expect(JSON.stringify(res.body)).not.toContain("FIRESTORE_CLUSTER_UNREACHABLE_SOCKET_TIMEOUT");
+            expect(res.body.stack).toBeUndefined();
         });
     });
 });

@@ -67,6 +67,26 @@ export function buildCourse(data) {
     };
 }
 
+// Checks if a course is publicly available (published and not ended according to its schedule).
+export function isCoursePubliclyAvailable(course, now = new Date()) {
+    if (!course || course.status !== COURSE_STATUS.PUBLISHED) {
+        return false;
+    }
+
+    const schedule = course.schedule;
+    if (!schedule) {
+        return true;
+    }
+
+    const endDate = schedule.endDate || schedule.startDate;
+    if (!endDate) {
+        return true;
+    }
+
+    const todayStr = typeof now === "string" ? now.slice(0, 10) : now.toISOString().slice(0, 10);
+    return endDate >= todayStr;
+}
+
 // Converts a course entity into its public representation.
 // activeEnrollments: confirmed enrollments of the course (HU-A09), used to
 // show the remaining spots. remainingSpots is null when there is no capacity.
@@ -82,6 +102,7 @@ export function toPublicCourse(course, activeEnrollments = 0) {
         imageUrl: course.imageUrl ?? null,
         learningOutcomes: course.learningOutcomes ?? [],
         requiredMaterials: course.requiredMaterials ?? [],
+        seasonName: course.seasonName ?? null,
         capacity,
         remainingSpots: capacity === null ? null : Math.max(0, capacity - activeEnrollments),
         price: course.price ?? null,

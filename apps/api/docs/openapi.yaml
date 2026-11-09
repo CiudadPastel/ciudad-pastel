@@ -896,6 +896,26 @@ paths:
         "500":
           description: Internal server error.
 
+  /courses/seasonal:
+    get:
+      tags:
+        - Courses
+        - Seasonal Offers
+      summary: List seasonal published courses
+      description: Returns only published courses marked with a seasonal campaign (seasonName is not null) and not yet ended according to their schedule, sorted by start date ascending. Authentication is not required.
+      security: []
+      responses:
+        "200":
+          description: Seasonal published courses retrieved successfully.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PublicCourse"
+        "500":
+          description: Internal server error.
+
   /courses/{id}:
     get:
       tags:
@@ -2010,6 +2030,13 @@ components:
           type: string
           nullable: true
           example: Yamilena Blanco Chaves
+        seasonName:
+          type: string
+          nullable: true
+          minLength: 2
+          maxLength: 60
+          example: Especial Navidad 2026
+          description: Optional seasonal campaign name. Null for standard non-seasonal courses.
         schedule:
           $ref: "#/components/schemas/CourseSchedule"
 

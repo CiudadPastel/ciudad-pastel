@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { buildCourse, COURSE_STATUS, toPublicCourse } from "../models/course.model.js";
+import { buildCourse, COURSE_STATUS, isCoursePubliclyAvailable, toPublicCourse } from "../models/course.model.js";
 
 import {
     validateCourseInput
@@ -34,6 +34,21 @@ function validatePublicationPrice(course) {
     }
 }
 
+function sortCoursesBySchedule(a, b) {
+    const aDate = a.schedule?.startDate;
+    const bDate = b.schedule?.startDate;
+
+    if (aDate && bDate) {
+        const dateComparison = aDate.localeCompare(bDate);
+        if (dateComparison !== 0) return dateComparison;
+        return a.name.localeCompare(b.name);
+    }
+    if (aDate && !bDate) return -1;
+    if (!aDate && bDate) return 1;
+
+    return a.name.localeCompare(b.name);
+}
+
 // Lists only published courses for public access, sorted by schedule start date ascending and then by name.
 export async function getPublishedCourses() {
     const [courses, activeByCourse] = await Promise.all([
@@ -43,20 +58,20 @@ export async function getPublishedCourses() {
 
     return courses
         .map((course) => toPublicCourse(course, activeByCourse.get(course.id) ?? 0))
-        .sort((a, b) => {
-            const aDate = a.schedule?.startDate;
-            const bDate = b.schedule?.startDate;
+        .sort(sortCoursesBySchedule);
+}
 
-            if (aDate && bDate) {
-                const dateComparison = aDate.localeCompare(bDate);
-                if (dateComparison !== 0) return dateComparison;
-                return a.name.localeCompare(b.name);
-            }
-            if (aDate && !bDate) return -1;
-            if (!aDate && bDate) return 1;
+// Lists only published, seasonal, not yet ended courses for public access, sorted by schedule start date ascending and then by name.
+export async function getSeasonalCourses() {
+    const [courses, activeByCourse] = await Promise.all([
+        getCoursesRepository(COURSE_STATUS.PUBLISHED),
+        countActiveEnrollmentsByCourse()
+    ]);
 
-            return a.name.localeCompare(b.name);
-        });
+    return courses
+        .filter((course) => course.seasonName !== null && isCoursePubliclyAvailable(course))
+        .map((course) => toPublicCourse(course, activeByCourse.get(course.id) ?? 0))
+        .sort(sortCoursesBySchedule);
 }
 
 // Retrieves a single published course by its identifier.

@@ -5,6 +5,7 @@ import {
     updateCourse as updateCourseService,
     updateCourseStatus as updateCourseStatusService,
     getPublishedCourses as getPublishedCoursesService,
+    getSeasonalCourses as getSeasonalCoursesService,
     getPublishedCourseById as getPublishedCourseByIdService
 } from "../services/course.service.js";
 
@@ -19,6 +20,21 @@ export async function getPublishedCourses(req, res) {
 
         return res.status(500).json({
             message: "Could not retrieve courses."
+        });
+    }
+}
+
+// Handles the public seasonal course listing.
+export async function getSeasonalCourses(req, res) {
+    try {
+        const courses = await getSeasonalCoursesService();
+
+        return res.status(200).json(courses);
+    } catch (error) {
+        console.error("Seasonal course list error:", error);
+
+        return res.status(500).json({
+            message: "Could not retrieve seasonal courses."
         });
     }
 }
