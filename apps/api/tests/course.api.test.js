@@ -54,6 +54,7 @@ const validInput = {
   prerequisites: "haber llevado el básico",
   reservationAmount: 10000,
   priceNote: "Incluye ingredientes",
+  seasonName: null,
   capacity: 6,
   price: 45000,
   instructor: "Yamilena Blanco Chaves",
@@ -493,7 +494,7 @@ describe("course updates", () => {
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
         ...before,
-        ...Object.fromEntries(["courseType", "whatYouWillLearn", "location", "address", "materialsNote", "prerequisites", "reservationAmount", "priceNote"].map(field => [field, null])),
+        ...Object.fromEntries(["courseType", "whatYouWillLearn", "location", "address", "materialsNote", "prerequisites", "reservationAmount", "priceNote", "seasonName"].map(field => [field, null])),
         ...changes,
         updatedAt: expect.any(String),
       });
@@ -1069,7 +1070,7 @@ describe("application routes and isolation", () => {
 });
 
 const optionalTextFields = ["whatYouWillLearn", "location", "address", "materialsNote", "prerequisites", "priceNote"];
-const newFields = ["courseType", ...optionalTextFields, "reservationAmount"];
+const newFields = ["courseType", ...optionalTextFields, "reservationAmount", "seasonName"];
 const singleSchedule = {
   startDate: "2026-11-03", endDate: null, startTime: "09:00", endTime: "12:00",
   frequency: "single", weekday: null, scheduleNote: null,
