@@ -19,6 +19,7 @@ import {
 import { Link, useLocation, useParams } from "react-router-dom";
 
 import CourseStatusActions from "../../components/admin/CourseStatusActions";
+import CourseSeasonActions from "../../components/admin/CourseSeasonActions";
 import CourseStudents from "../../components/admin/CourseStudents";
 import ConfirmDialog from "../../components/ui/ConfirmDialog";
 import Notice from "../../components/ui/Notice";
@@ -368,6 +369,18 @@ function CourseDetail() {
                                 setNotice({ variant: "success", text: message });
                             }}
                             onError={(message, action) => setNotice({ variant: "error", text: message, action })}
+                        />
+
+                        <CourseSeasonActions
+                            course={course}
+                            editTo={`/admin/cursos/${course.id}/editar#course-seasonName`}
+                            editState={{ from: backTo }}
+                            allowEdit={canEditCourse(course)}
+                            onChanged={(updated, message) => {
+                                setState((previous) => ({ ...previous, course: updated }));
+                                setNotice({ variant: "success", text: message });
+                            }}
+                            onError={(message) => setNotice({ variant: "error", text: message })}
                         />
 
                         {course.summary && (

@@ -3,6 +3,7 @@ import { ChevronRight, ImageOff, Pencil, Plus } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import CourseStatusActions from "../../components/admin/CourseStatusActions";
+import CourseSeasonActions from "../../components/admin/CourseSeasonActions";
 import Notice from "../../components/ui/Notice";
 import StateMessage, { RetryButton } from "../../components/ui/StateMessage";
 import StatusBadge from "../../components/ui/StatusBadge";
@@ -97,6 +98,14 @@ function CoursesList() {
 
     function handleStatusError(message, action) {
         setNotice({ variant: "error", text: message, action });
+    }
+
+    function handleSeasonChanged(updated, message) {
+        setState((previous) => ({
+            ...previous,
+            courses: previous.courses.map((course) => course.id === updated.id ? updated : course)
+        }));
+        setNotice({ variant: "success", text: message });
     }
 
     function changeFilter(value) {
@@ -286,6 +295,14 @@ function CoursesList() {
                                                                 {courseTypeLabel(course.courseType)}
                                                             </span>
                                                         )}
+                                                        {course.seasonName && (
+                                                            <span
+                                                                className={styles.typeTag}
+                                                                title={`Temporada: ${course.seasonName}`}
+                                                            >
+                                                                Temporada: {course.seasonName}
+                                                            </span>
+                                                        )}
                                                     </span>
                                                     <span className={styles.secondary}>
                                                         {course.summary}
@@ -314,6 +331,14 @@ function CoursesList() {
                                                 course={course}
                                                 compact
                                                 onChanged={handleStatusChanged}
+                                                onError={handleStatusError}
+                                            />
+                                            <CourseSeasonActions
+                                                course={course}
+                                                editTo={`${detailUrl}/editar#course-seasonName`}
+                                                editState={detailState}
+                                                allowEdit={canEditCourse(course)}
+                                                onChanged={handleSeasonChanged}
                                                 onError={handleStatusError}
                                             />
                                             {canEditCourse(course) && (

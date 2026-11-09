@@ -1,0 +1,30 @@
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.withdraw {
+  color: var(--cp-danger);
+  border-color: #f4c7c3;
+}
+
+.withdraw:hover:not(:disabled) {
+  border-color: var(--cp-danger);
+  background: var(--cp-danger-50);
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}

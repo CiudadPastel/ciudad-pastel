@@ -10,6 +10,7 @@ const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === "true";
  *   GET  /api/admin/courses/:id   -> detalle de un curso
  *   POST /api/admin/courses       -> crea un curso (queda como "draft")
  *   PUT  /api/admin/courses/:id   -> reemplaza la información editable del curso
+ *   DELETE /api/admin/courses/:id/seasonal -> retira el curso de temporada
  *   PATCH /api/admin/courses/:id/status -> cambia el estado ({ status }); 409 si no se permite
  * Con VITE_USE_MOCKS=true se usan datos de prueba en vez del backend.
  */
@@ -105,6 +106,27 @@ export async function updateCourse(id, data) {
         method: "PUT",
         requiresAuth: true,
         body: JSON.stringify(data)
+    });
+}
+
+export async function withdrawSeasonalPublication(id) {
+    if (USE_MOCKS) {
+        await simulateNetwork();
+        const index = mockStore.findIndex((course) => course.id === id);
+
+        if (index === -1) {
+            throw new ApiError("Curso no encontrado.", 404);
+        }
+
+        mockStore = mockStore.map((course, courseIndex) => courseIndex === index
+            ? { ...course, seasonName: null, updatedAt: new Date().toISOString() }
+            : course);
+        return null;
+    }
+
+    return apiFetch(`/admin/courses/${encodeURIComponent(id)}/seasonal`, {
+        method: "DELETE",
+        requiresAuth: true
     });
 }
 

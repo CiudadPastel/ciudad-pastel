@@ -4,6 +4,9 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import CourseForm from "../src/components/admin/CourseForm";
+import AdminCoursesList from "../src/pages/admin/CoursesList";
+import AdminCourseDetail from "../src/pages/admin/CourseDetail";
+import AdminCourseEdit from "../src/pages/admin/CourseEdit";
 import ProductsList from "../src/pages/public/ProductsList";
 import CoursesList from "../src/pages/public/CoursesList";
 import PublicLayout from "../src/components/public/PublicLayout";
@@ -12,6 +15,7 @@ import ProductCreate from "../src/pages/admin/ProductCreate";
 import { auth } from "../src/config/firebase";
 import { EMPTY_COURSE_FORM, toCoursePayload } from "../src/utils/courseValidation";
 import { formatPrice } from "../src/utils/format";
+import { formatScheduleSummary } from "../src/utils/schedule";
 import "../src/index.css";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -25,12 +29,71 @@ let failCategories = false;
 let pendingProducts;
 let pendingCourses;
 let failCourses = false;
+let seasonalCourses = [];
+let includeSeasonalInCatalog = false;
+let pendingSeasonalCourses;
+let failSeasonalCourses = false;
+let adminSeasonName = "Navidad";
+let failSeasonWithdrawal = false;
+let seasonalWithdrawals = [];
 let productWrites = [];
+const adminSeasonCourse = {
+    id: "admin-seasonal",
+    name: "Queque navideño",
+    summary: "Curso especial de Navidad",
+    description: "Aprenda a preparar un queque navideño.",
+    imageUrl: null,
+    learningOutcomes: [],
+    requiredMaterials: [],
+    courseType: "workshop",
+    seasonName: adminSeasonName,
+    capacity: 6,
+    price: 25000,
+    instructor: "Yamilena",
+    schedule: null,
+    status: "draft",
+    createdAt: "2026-10-01T10:00:00.000Z",
+    updatedAt: "2026-10-01T10:00:00.000Z"
+};
+const regularAdminCourse = {
+    ...adminSeasonCourse,
+    id: "admin-regular",
+    name: "Curso regular",
+    seasonName: null
+};
+const adminCourseRoutes = <Routes>
+    <Route path="/admin/cursos" element={<AdminCoursesList />} />
+    <Route path="/admin/cursos/:id" element={<AdminCourseDetail />} />
+    <Route path="/admin/cursos/:id/editar" element={<AdminCourseEdit />} />
+</Routes>;
 const courses = Array.from({ length: 85 }, (_, index) => ({
     id: String(index), name: `Curso ${index}`, summary: "Curso de prueba",
     courseType: index < 13 ? "workshop" : index < 79 ? "basic"
         : ["demonstrative", "semi_demonstrative", "multi_week", "other", null, null][index - 79], price: 1000
 }));
+const seasonalCourse = {
+    id: "seasonal-course",
+    name: "Galletas decoradas",
+    summary: "Decoración especial para Navidad.",
+    description: "Aprenda a decorar galletas para Navidad.",
+    imageUrl: "/tests/seasonal-course.png",
+    courseType: "workshop",
+    seasonName: "Navidad",
+    price: 15000,
+    capacity: 8,
+    remainingSpots: 8,
+    learningOutcomes: [],
+    requiredMaterials: [],
+    schedule: {
+        startDate: "2026-12-01",
+        endDate: "2026-12-01",
+        startTime: "09:00",
+        endTime: "12:00",
+        frequency: "single",
+        weekday: null,
+        scheduleNote: null
+    }
+};
 
 window.fetch = async (input, options = {}) => {
     const url = new URL(input);
@@ -44,6 +107,29 @@ window.fetch = async (input, options = {}) => {
         if (failCategories) throw new Error("offline");
         return Response.json([{ id: "harinas", name: "Harinas", productCount: 13 }]);
     }
+    if (url.pathname.endsWith("/admin/courses/admin-seasonal/seasonal") && options.method === "DELETE") {
+        seasonalWithdrawals.push(url.pathname);
+        if (failSeasonWithdrawal) {
+            return Response.json({ message: "Seasonal withdrawal failed." }, { status: 500 });
+        }
+        adminSeasonName = null;
+        return new Response(null, { status: 204 });
+    }
+    if (url.pathname.endsWith("/admin/courses/admin-seasonal/recipe-books")) {
+        return Response.json([]);
+    }
+    if (url.pathname.endsWith("/admin/courses/admin-seasonal/enrollments")) {
+        return Response.json([]);
+    }
+    if (url.pathname.endsWith("/admin/courses/admin-seasonal")) {
+        return Response.json({ ...adminSeasonCourse, seasonName: adminSeasonName });
+    }
+    if (url.pathname.endsWith("/admin/courses")) {
+        return Response.json([
+            { ...adminSeasonCourse, seasonName: adminSeasonName },
+            regularAdminCourse
+        ]);
+    }
     if (url.pathname.endsWith("/products")) {
         if (pendingProducts) await pendingProducts;
         if (failProducts) throw new Error("offline");
@@ -56,13 +142,19 @@ window.fetch = async (input, options = {}) => {
                 id: String((page - 1) * limit + index), name: `Producto ${(page - 1) * limit + index}`, price: 1000, available: true
             })) });
     }
+    if (url.pathname.endsWith("/courses/seasonal")) {
+        if (pendingSeasonalCourses) await pendingSeasonalCourses;
+        if (failSeasonalCourses) throw new Error("offline");
+        return Response.json(seasonalCourses);
+    }
     if (url.pathname.endsWith("/courses")) {
         if (pendingCourses) await pendingCourses;
         if (failCourses) throw new Error("offline");
-        return Response.json(courses);
+        return Response.json(includeSeasonalInCatalog ? [...courses, seasonalCourse] : courses);
     }
     if (/\/courses\/[^/]+$/.test(url.pathname)) {
-        return Response.json(courses.find((course) => course.id === url.pathname.split("/").at(-1)));
+        const availableCourses = includeSeasonalInCatalog ? [...courses, seasonalCourse] : courses;
+        return Response.json(availableCourses.find((course) => course.id === url.pathname.split("/").at(-1)));
     }
     return Response.json({});
 };
@@ -272,6 +364,79 @@ await test("course review displays full saved data and edit links preserve final
     }
 });
 
+await test("season actions confirm withdrawals, update admin state and open seasonal editing", async () => {
+    const previousUser = auth.currentUser;
+    auth.currentUser = { getIdToken: async () => "ux-test-token" };
+    adminSeasonName = "Navidad";
+    failSeasonWithdrawal = true;
+    seasonalWithdrawals = [];
+
+    try {
+        await mount(adminCourseRoutes, "/admin/cursos");
+        const seasonalRow = [...container.querySelectorAll("tbody tr")]
+            .find((row) => row.textContent.includes("Queque navideño"));
+        const regularRow = [...container.querySelectorAll("tbody tr")]
+            .find((row) => row.textContent.includes("Curso regular"));
+        assert(seasonalRow?.textContent.includes("Temporada: Navidad"), "Season badge shown");
+        assert(regularRow && !regularRow.textContent.includes("Retirar de temporada"), "Regular courses have no season actions");
+
+        const editLink = [...seasonalRow.querySelectorAll("a")]
+            .find((linkElement) => linkElement.textContent.includes("Editar temporada"));
+        assert(editLink?.getAttribute("href") === "/admin/cursos/admin-seasonal/editar#course-seasonName", "Edit link opens seasonal form section");
+
+        const findRetireButton = (row) => [...row.querySelectorAll("button")]
+            .find((buttonElement) => buttonElement.textContent.includes("Retirar de temporada"));
+        await settle(() => findRetireButton(seasonalRow).click());
+        const dialog = container.querySelector("dialog");
+        assert(dialog?.open, "Withdrawal asks for confirmation");
+        assert(dialog.textContent.includes("Queque navideño") && dialog.textContent.includes("Navidad"), "Confirmation identifies course and season");
+        await settle(() => dialog.querySelector(".btn-danger").click());
+        assert(text().includes("No se pudo") || text().includes("servidor"), "Withdrawal failure is announced");
+        assert(container.querySelector('[title="Temporada: Navidad"]'), "Season label remains after failure");
+        assert(window.location.pathname === "/admin/cursos", "Action does not trigger the row navigation");
+
+        failSeasonWithdrawal = false;
+        const retryRow = [...container.querySelectorAll("tbody tr")]
+            .find((row) => row.textContent.includes("Queque navideño"));
+        const retryButton = findRetireButton(retryRow);
+        await settle(() => retryButton.click());
+        await settle(() => container.querySelector("dialog").querySelector(".btn-danger").click());
+        assert(adminSeasonName === null, "Dedicated delete action clears season designation");
+        assert(!container.querySelector('[title="Temporada: Navidad"]'), "List badge disappears without reload");
+        assert(text().includes("Se retiró"), "Success notice is shown");
+        assert(seasonalWithdrawals.length === 2, "DELETE endpoint is called for each confirmed attempt");
+
+        adminSeasonName = "Navidad";
+        await mount(adminCourseRoutes, "/admin/cursos");
+        const editSeasonLink = [...container.querySelectorAll("a")]
+            .find((linkElement) => linkElement.textContent.includes("Editar temporada"));
+        await settle(() => editSeasonLink.click());
+        assert(
+            container.querySelector("h2")?.textContent.includes("Paso 3 de 5: Lugar y planificación"),
+            "Season editing opens the form section containing season fields"
+        );
+        assert(container.querySelector('[name="seasonName"]')?.value === "Navidad", "Season form is prefilled");
+
+        adminSeasonName = "Navidad";
+        await mount(adminCourseRoutes, "/admin/cursos/admin-seasonal");
+        assert([...container.querySelectorAll("a")].some((linkElement) =>
+            linkElement.textContent.includes("Editar temporada")
+        ), "Detail shows season editing action");
+        await button("Retirar de temporada");
+        const detailDialog = container.querySelector("dialog");
+        assert(detailDialog?.textContent.includes("Queque navideño") && detailDialog.textContent.includes("Navidad"), "Detail confirmation identifies course and season");
+        await settle(() => detailDialog.querySelector(".btn-danger").click());
+        assert(text().includes("Se retiró"), "Detail shows successful withdrawal");
+        assert(![...container.querySelectorAll("a, button")].some((element) =>
+            element.textContent.includes("Retirar de temporada") || element.textContent.includes("Editar temporada")
+        ), "Season actions disappear after withdrawal");
+    } finally {
+        auth.currentUser = previousUser;
+        adminSeasonName = "Navidad";
+        failSeasonWithdrawal = false;
+    }
+});
+
 await test("product categories first, virtual all, filtered incremental totals and browser back", async () => {
     requests = [];
     await mount(<ProductsList />, "/tienda");
@@ -289,6 +454,69 @@ await test("product categories first, virtual all, filtered incremental totals a
     await button("Volver a categorías");
     await link("Ver todos");
     assert(text().includes("Mostrando 12 de 25 productos"), "All must remove category filter");
+});
+
+await test("seasonal courses load independently, render reusable cards and do not duplicate", async () => {
+    seasonalCourses = [seasonalCourse];
+    includeSeasonalInCatalog = true;
+    failSeasonalCourses = false;
+    let releaseSeasonal;
+    pendingSeasonalCourses = new Promise((resolve) => { releaseSeasonal = resolve; });
+
+    try {
+        await mount(courseRoutes, "/cursos?vista=todos");
+        const loadingSection = container.querySelector('[aria-labelledby="seasonal-courses-title"]');
+        assert(loadingSection?.getAttribute("aria-busy") === "true", "Seasonal cards show an independent skeleton");
+        assert(text().includes("Mostrando 12 de 86 cursos"), "The main catalog loads while seasonal courses are pending");
+
+        releaseSeasonal();
+        pendingSeasonalCourses = null;
+        await settle();
+
+        const section = container.querySelector('[aria-labelledby="seasonal-courses-title"]');
+        const featuredCard = section?.querySelector('[data-course-id="seasonal-course"]');
+        assert(section && featuredCard, "Seasonal course is featured");
+        assert(section.textContent.includes("Navidad"), "Season name is visible");
+        assert(section.textContent.includes(formatPrice(seasonalCourse.price)), "Price uses the existing currency helper");
+        assert(section.textContent.includes(formatScheduleSummary(seasonalCourse.schedule)), "Schedule uses the existing formatter");
+        assert(section.querySelector("img")?.getAttribute("loading") === "lazy", "Card image is lazy loaded");
+        assert(text().includes("Mostrando 12 de 85 cursos"), "Featured courses are excluded from the general catalog");
+        assert(container.querySelectorAll('[data-course-id="seasonal-course"]').length === 1, "Course is not duplicated");
+        assert(featuredCard.getAttribute("href") === "/cursos/seasonal-course", "Featured card links to course detail");
+
+        await settle(() => featuredCard.click());
+        assert(window.location.pathname === "/cursos/seasonal-course", "Clicking the card opens course detail");
+    } finally {
+        releaseSeasonal?.();
+        pendingSeasonalCourses = null;
+        seasonalCourses = [];
+        includeSeasonalInCatalog = false;
+        failSeasonalCourses = false;
+    }
+
+    await mount(courseRoutes, "/cursos");
+    assert(!container.querySelector('[aria-labelledby="seasonal-courses-title"]'), "Empty seasonal results leave no section");
+});
+
+await test("seasonal request errors do not block the main catalog and can be retried", async () => {
+    seasonalCourses = [seasonalCourse];
+    includeSeasonalInCatalog = true;
+    failSeasonalCourses = true;
+
+    try {
+        await mount(courseRoutes, "/cursos?vista=todos");
+        assert(text().includes("No se pudieron cargar los cursos de temporada"), "Seasonal error is discreetly reported");
+        assert(text().includes("Mostrando 12 de 86 cursos"), "Main catalog remains available after seasonal error");
+
+        failSeasonalCourses = false;
+        await button("Reintentar");
+        assert(text().includes("Mostrando 12 de 85 cursos"), "Retry loads the featured courses and removes duplicates");
+        assert(container.querySelectorAll('[data-course-id="seasonal-course"]').length === 1, "Retried course appears only once");
+    } finally {
+        seasonalCourses = [];
+        includeSeasonalInCatalog = false;
+        failSeasonalCourses = false;
+    }
 });
 
 await test("responsive catalog cards keep the same width with one or many items", async () => {

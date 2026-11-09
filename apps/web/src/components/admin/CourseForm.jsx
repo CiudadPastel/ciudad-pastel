@@ -62,6 +62,7 @@ const FIELD_ORDER = [
     "price",
     "reservationAmount",
     "priceNote",
+    "seasonName",
     "scheduleType",
     "scheduleWeekday",
     "scheduleSessions",
@@ -191,6 +192,11 @@ function CourseForm({
     function changeScheduleType(type) {
         setTouched((prev) => ({ ...prev, scheduleType: true }));
         updateValue("scheduleType", type);
+    }
+
+    function changeSeasonEnabled(enabled) {
+        setTouched((previous) => ({ ...previous, seasonName: true }));
+        updateValue("seasonEnabled", enabled);
     }
 
     function handleChange(event) {
@@ -621,6 +627,46 @@ function CourseForm({
                     </div>
                 </div>
 
+            </fieldset>
+            <fieldset className={styles.section} hidden={currentStep !== 2} disabled={submitting || currentStep !== 2}>
+                <legend>Temporada</legend>
+
+                <p className={styles.sectionHint}>
+                    Marque el curso como de temporada para identificarlo en la lista del admin.
+                </p>
+
+                <div className={`${styles.field} ${styles.full}`}>
+                    <label className={styles.seasonToggle} htmlFor="course-seasonEnabled">
+                        <input
+                            id="course-seasonEnabled"
+                            name="seasonEnabled"
+                            type="checkbox"
+                            checked={values.seasonEnabled}
+                            onChange={(event) => changeSeasonEnabled(event.target.checked)}
+                            disabled={submitting}
+                        />
+                        <span>Curso de temporada</span>
+                    </label>
+                </div>
+
+                {values.seasonEnabled && (
+                    <div className={`${styles.field} ${styles.full}`}>
+                        <label htmlFor="course-seasonName">
+                            Nombre de la temporada {star}
+                        </label>
+                        <input
+                            type="text"
+                            maxLength={COURSE_LIMITS.seasonName.max}
+                            placeholder="Ej.: Navidad 2026"
+                            required
+                            {...fieldProps("seasonName")}
+                        />
+                        {renderMessages(
+                            "seasonName",
+                            `De 2 a ${COURSE_LIMITS.seasonName.max} caracteres. ${values.seasonName.length}/${COURSE_LIMITS.seasonName.max}.`
+                        )}
+                    </div>
+                )}
             </fieldset>
             <fieldset className={styles.section} hidden={currentStep !== 3} disabled={submitting || currentStep !== 3}>
                 <legend><CalendarDays size={18} aria-hidden="true" /> Horario</legend>

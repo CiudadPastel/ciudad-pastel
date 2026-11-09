@@ -60,6 +60,10 @@
   display: inline-block;
   margin-left: 0.5rem;
   padding: 0.05rem 0.5rem;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   border-radius: 999px;
   background: var(--cp-navy-50);
   color: var(--cp-navy);

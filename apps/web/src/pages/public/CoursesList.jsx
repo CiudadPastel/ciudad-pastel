@@ -7,7 +7,7 @@ import ResultsCount from "../../components/ui/ResultsCount";
 import { COURSE_TYPES } from "../../constants/course";
 import { courseCategories, filterCourses, incrementalItems } from "../../utils/catalog";
 import StateMessage, { RetryButton } from "../../components/ui/StateMessage";
-import { getPublicCourses } from "../../services/publicCourses.service";
+import { getPublicCourses, getPublicSeasonalCourses } from "../../services/publicCourses.service";
 import { formatPrice } from "../../utils/format";
 import { formatScheduleRange, formatScheduleSummary } from "../../utils/schedule";
 
@@ -23,6 +23,7 @@ const COURSE_TYPE_ICONS = {
     "sin-tipo": BookOpen
 };
 const BLOCK_SIZE = 12;
+const EMPTY_COURSES = [];
 
 function CoursesList() {
     const [searchParams, setSearchParams] = useSearchParams();
@@ -36,6 +37,13 @@ function CoursesList() {
     const showCategories = !type && searchParams.get("vista") !== "todos" && !searchParams.has("pagina");
     const [reloadKey, setReloadKey] = useState(0);
     const [state, setState] = useState({ key: null, status: "loading", courses: [], error: null });
+    const [seasonalReloadKey, setSeasonalReloadKey] = useState(0);
+    const [seasonalState, setSeasonalState] = useState({
+        key: null,
+        status: "loading",
+        courses: [],
+        error: null
+    });
 
     useEffect(() => {
         let active = true;
@@ -54,14 +62,64 @@ function CoursesList() {
         };
     }, [reloadKey]);
 
-    const categories = useMemo(() => courseCategories(state.courses, COURSE_TYPES), [state.courses]);
-    const filtered = useMemo(() => filterCourses(state.courses, type), [state.courses, type]);
+    useEffect(() => {
+        let active = true;
+
+        getPublicSeasonalCourses()
+            .then((courses) => {
+                if (!Array.isArray(courses)) {
+                    throw new Error("La lista de cursos de temporada no es válida.");
+                }
+                if (active) {
+                    setSeasonalState({
+                        key: seasonalReloadKey,
+                        status: "success",
+                        courses,
+                        error: null
+                    });
+                }
+            })
+            .catch((error) => {
+                if (active) {
+                    setSeasonalState({
+                        key: seasonalReloadKey,
+                        status: "error",
+                        courses: [],
+                        error
+                    });
+                }
+            });
+
+        return () => {
+            active = false;
+        };
+    }, [seasonalReloadKey]);
+
+    const status = state.key === reloadKey ? state.status : "loading";
+    const seasonalStatus = seasonalState.key === seasonalReloadKey
+        ? seasonalState.status
+        : "loading";
+    const seasonalCourses = seasonalStatus === "success" ? seasonalState.courses : EMPTY_COURSES;
+    const seasonalIds = useMemo(
+        () => new Set(seasonalCourses.map((course) => course.id)),
+        [seasonalCourses]
+    );
+    const catalogCourses = useMemo(
+        () => seasonalStatus === "success"
+            ? state.courses.filter((course) => !seasonalIds.has(course.id))
+            : state.courses,
+        [seasonalStatus, state.courses, seasonalIds]
+    );
+    const categories = useMemo(
+        () => courseCategories(catalogCourses, COURSE_TYPES),
+        [catalogCourses]
+    );
+    const filtered = useMemo(() => filterCourses(catalogCourses, type), [catalogCourses, type]);
     const requestedBlocks = searchParams.get("pagina");
     const { items: visibleCourses, blocks, hasMore } = useMemo(
         () => incrementalItems(filtered, requestedBlocks, BLOCK_SIZE), [filtered, requestedBlocks]
     );
     const catalogUrl = location.pathname + location.search;
-    const status = state.key === reloadKey ? state.status : "loading";
     const selection = showCategories ? "categories" : `type:${type || "all"}`;
     const focusCourseId = location.state?.focusCourseId;
 
@@ -103,10 +161,109 @@ function CoursesList() {
         navigate(catalogUrl, { replace: true, state: { focusCourseId: id } });
     }
 
+    function renderCourseCard(course, featured = false) {
+        const scheduleSummary = formatScheduleSummary(course.schedule);
+        const scheduleRange = formatScheduleRange(course.schedule);
+
+        return (
+            <li key={course.id}>
+                <Link
+                    to={`/cursos/${encodeURIComponent(course.id)}`}
+                    className={styles.card}
+                    data-course-id={course.id}
+                    onClick={() => rememberCourse(course.id)}
+                    state={{ from: catalogUrl, courseId: course.id }}
+                >
+                    {course.imageUrl ? (
+                        <img
+                            src={course.imageUrl}
+                            alt={`Imagen del curso ${course.name}`}
+                            className={styles.image}
+                            loading="lazy"
+                            decoding="async"
+                        />
+                    ) : (
+                        <div className={styles.imageEmpty} aria-hidden="true">
+                            <ImageOff size={28} />
+                        </div>
+                    )}
+                    <div className={styles.cardBody}>
+                        {featured && course.seasonName && (
+                            <span className={styles.seasonalLabel}>{course.seasonName}</span>
+                        )}
+                        <h2>{course.name}</h2>
+                        {course.summary && <p className={styles.summary}>{course.summary}</p>}
+                        <div className={styles.cardMeta}>
+                            <strong>
+                                {course.price == null
+                                    ? "Precio no disponible"
+                                    : course.price === 0 ? "Gratis" : formatPrice(course.price)}
+                            </strong>
+                            {scheduleSummary && <span>{scheduleSummary}</span>}
+                            {scheduleRange && <span>{scheduleRange}</span>}
+                        </div>
+                        <span className={styles.cardLink}>
+                            Ver curso
+                            <ArrowRight size={16} aria-hidden="true" />
+                        </span>
+                    </div>
+                </Link>
+            </li>
+        );
+    }
+
+    function renderSeasonalSection() {
+        if (seasonalStatus === "success" && seasonalCourses.length === 0) return null;
+
+        return (
+            <section
+                className={styles.seasonalSection}
+                aria-labelledby="seasonal-courses-title"
+                aria-busy={seasonalStatus === "loading"}
+            >
+                <header className={styles.seasonalHeading}>
+                    <h2 id="seasonal-courses-title">Cursos de temporada</h2>
+                    <p>Experiencias especiales para cada época del año.</p>
+                </header>
+
+                {seasonalStatus === "loading" && (
+                    <>
+                        <p className="sr-only" role="status">Cargando cursos de temporada…</p>
+                        <ul className={styles.grid} aria-hidden="true">
+                            {[0, 1, 2].map((index) => (
+                                <li key={index} className={styles.seasonalSkeletonCard}>
+                                    <div className={styles.seasonalSkeletonImage} />
+                                    <div className={styles.seasonalSkeletonBody}>
+                                        <span className={styles.seasonalSkeletonName} />
+                                        <span className={styles.seasonalSkeletonMeta} />
+                                    </div>
+                                </li>
+                            ))}
+                        </ul>
+                    </>
+                )}
+
+                {seasonalStatus === "error" && (
+                    <div className={styles.seasonalError}>
+                        <p>No se pudieron cargar los cursos de temporada.</p>
+                        <RetryButton onClick={() => setSeasonalReloadKey((key) => key + 1)} />
+                    </div>
+                )}
+
+                {seasonalStatus === "success" && seasonalCourses.length > 0 && (
+                    <ul className={styles.grid} aria-label="Cursos de temporada">
+                        {seasonalCourses.map((course) => renderCourseCard(course, true))}
+                    </ul>
+                )}
+            </section>
+        );
+    }
+
     if (status === "loading") {
         return (
             <section className={styles.page} aria-busy="true">
                 <h1>Cursos de repostería</h1>
+                {renderSeasonalSection()}
                 <p className={styles.loading} role="status">Cargando cursos…</p>
             </section>
         );
@@ -116,6 +273,7 @@ function CoursesList() {
         return (
             <section className={styles.page}>
                 <h1>Cursos de repostería</h1>
+                {renderSeasonalSection()}
                 <StateMessage
                     variant="error"
                     title="No se pudieron cargar los cursos"
@@ -139,6 +297,8 @@ function CoursesList() {
                     <p className={styles.subtitle}>Encuentra el próximo curso para llevar tus ideas a la mesa.</p>
                 </div>
             </header>
+
+            {renderSeasonalSection()}
 
             {showCategories ? (
                 <>
@@ -169,46 +329,7 @@ function CoursesList() {
                 />
             ) : (
                 <ul ref={listRef} className={styles.grid} aria-label="Cursos disponibles">
-                    {visibleCourses.map((course) => (
-                        <li key={course.id}>
-                            <Link to={`/cursos/${encodeURIComponent(course.id)}`} className={styles.card}
-                                data-course-id={course.id} onClick={() => rememberCourse(course.id)}
-                                state={{ from: catalogUrl, courseId: course.id }}>
-                                {course.imageUrl ? (
-                                    <img
-                                        src={course.imageUrl}
-                                        alt={`Imagen del curso ${course.name}`}
-                                        className={styles.image}
-                                    />
-                                ) : (
-                                    <div className={styles.imageEmpty} aria-hidden="true">
-                                        <ImageOff size={28} />
-                                    </div>
-                                )}
-                                <div className={styles.cardBody}>
-                                    <h2>{course.name}</h2>
-                                    {course.summary && <p className={styles.summary}>{course.summary}</p>}
-                                    <div className={styles.cardMeta}>
-                                        <strong>
-                                            {course.price == null
-                                                ? "Precio no disponible"
-                                                : course.price === 0 ? "Gratis" : formatPrice(course.price)}
-                                        </strong>
-                                        {formatScheduleSummary(course.schedule) && (
-                                            <span>{formatScheduleSummary(course.schedule)}</span>
-                                        )}
-                                        {formatScheduleRange(course.schedule) && (
-                                            <span>{formatScheduleRange(course.schedule)}</span>
-                                        )}
-                                    </div>
-                                    <span className={styles.cardLink}>
-                                        Ver curso
-                                        <ArrowRight size={16} aria-hidden="true" />
-                                    </span>
-                                </div>
-                            </Link>
-                        </li>
-                    ))}
+                    {visibleCourses.map((course) => renderCourseCard(course))}
                 </ul>
             )}
             <div className={styles.pagination}>

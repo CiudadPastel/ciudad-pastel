@@ -25,6 +25,107 @@
   color: var(--cp-muted);
 }
 
+.seasonalSection {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: clamp(1rem, 3vw, 1.75rem);
+  border: 1px solid var(--cp-border);
+  border-radius: var(--radius);
+  background: var(--cp-mint-50);
+}
+
+.seasonalHeading h2 {
+  color: var(--cp-navy);
+  font-size: 1.5rem;
+}
+
+.seasonalHeading p,
+.seasonalError p {
+  color: var(--cp-muted);
+}
+
+.seasonalLabel {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  background: var(--cp-navy);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.seasonalError {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+
+.seasonalSkeletonCard {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid var(--cp-border);
+  border-radius: 8px;
+  background: var(--cp-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.seasonalSkeletonImage,
+.seasonalSkeletonName,
+.seasonalSkeletonMeta {
+  background: linear-gradient(90deg, var(--cp-neutral-50) 25%, var(--cp-surface) 50%, var(--cp-neutral-50) 75%);
+  background-size: 200% 100%;
+  animation: seasonalShimmer 1.4s ease-in-out infinite;
+}
+
+.seasonalSkeletonImage {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+}
+
+.seasonalSkeletonBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-height: 5.6rem;
+  padding: 1rem;
+}
+
+.seasonalSkeletonName {
+  width: 75%;
+  height: 1.45rem;
+  border-radius: 4px;
+}
+
+.seasonalSkeletonMeta {
+  width: 45%;
+  height: 1rem;
+  margin-top: auto;
+  border-radius: 4px;
+}
+
+@keyframes seasonalShimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seasonalSkeletonImage,
+  .seasonalSkeletonName,
+  .seasonalSkeletonMeta {
+    animation: none;
+  }
+}
+
 .grid {
   display: grid;
   /* Fixed tracks prevent an isolated course from growing with the grid. */

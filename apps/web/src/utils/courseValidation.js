@@ -1,4 +1,4 @@
-import { COURSE_TYPES } from "../constants/course";
+import { COURSE_TYPES } from "../constants/course.js";
 import {
     SCHEDULE_TYPE,
     SESSION_LIMITS,
@@ -7,7 +7,7 @@ import {
     scheduleToFormFields,
     weekdayName,
     weekdayOf
-} from "./schedule";
+} from "./schedule.js";
 
 /*
  * Reglas del formulario de curso (crear y editar).
@@ -27,6 +27,7 @@ export const COURSE_LIMITS = {
     price: { min: 0 },
     reservationAmount: { min: 0 },
     instructor: { min: 3, max: 120 },
+    seasonName: { min: 2, max: 60 },
     // Textos libres opcionales (reunión con la cliente del 13 de octubre)
     location: { max: 240 },
     address: { max: 1000 },
@@ -64,6 +65,8 @@ export const EMPTY_COURSE_FORM = {
     price: "",
     reservationAmount: "",
     priceNote: "",
+    seasonEnabled: false,
+    seasonName: "",
     ...scheduleToFormFields(null)
 };
 
@@ -89,6 +92,8 @@ export function courseToFormValues(course) {
         price: numberToField(course.price),
         reservationAmount: numberToField(course.reservationAmount),
         priceNote: course.priceNote ?? "",
+        seasonEnabled: Boolean(course.seasonName?.trim()),
+        seasonName: course.seasonName ?? "",
         ...scheduleToFormFields(course.schedule)
     };
 }
@@ -172,6 +177,16 @@ export function validateCourseForm(values, { requirePrice = false } = {}) {
         if (error) errors.price = error;
     } else if (requirePrice) {
         errors.price = "Un curso publicado necesita precio. Si es gratis, escriba 0.";
+    }
+
+    if (values.seasonEnabled) {
+        const seasonNameError = checkLength(
+            values.seasonName.trim(),
+            COURSE_LIMITS.seasonName,
+            "Escriba el nombre de la temporada.",
+            "El nombre de la temporada"
+        );
+        if (seasonNameError) errors.seasonName = seasonNameError;
     }
 
     const reservation = values.reservationAmount.trim();
@@ -297,6 +312,7 @@ export function toCoursePayload(values) {
         capacity: toNumber(values.capacity),
         price: toNumber(values.price),
         reservationAmount: toNumber(values.reservationAmount),
+        seasonName: values.seasonEnabled ? values.seasonName.trim() : null,
         schedule: toSchedulePayload(values)
     };
 }
@@ -336,6 +352,7 @@ const API_FIELD_MESSAGES = {
     capacity: "El cupo debe ser un número entero de 1 o más.",
     price: "El precio debe ser un número entero de colones, sin decimales.",
     reservationAmount: "El monto de reserva debe ser un número entero de colones, sin decimales.",
+    seasonName: `El nombre de la temporada debe tener entre ${COURSE_LIMITS.seasonName.min} y ${COURSE_LIMITS.seasonName.max} caracteres.`,
     priceNote: "Revise la nota del precio.",
     scheduleType: "Revise el horario del curso.",
     scheduleWeekday: "Elija el día de la semana.",

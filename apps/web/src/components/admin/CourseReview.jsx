@@ -45,7 +45,8 @@ export default function CourseReview({ payload, onEdit, disabled }) {
             ["Cupo", payload.capacity],
             ["Precio", payload.price == null ? null : formatPrice(payload.price)],
             ["Monto para reservar", payload.reservationAmount == null ? null : formatPrice(payload.reservationAmount)],
-            ["Nota del precio", payload.priceNote]
+            ["Nota del precio", payload.priceNote],
+            ["Temporada", payload.seasonName ? `Sí: ${payload.seasonName}` : "No"]
         ],
         [
             ["Horario", formatScheduleSummary(schedule)],

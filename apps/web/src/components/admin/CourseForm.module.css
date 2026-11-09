@@ -176,6 +176,23 @@
   color: var(--cp-muted);
 }
 
+.seasonToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: fit-content;
+  color: var(--cp-navy);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.seasonToggle input {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin: 0;
+  accent-color: var(--cp-mint-600);
+}
+
 .subheading {
   display: flex;
   align-items: center;
