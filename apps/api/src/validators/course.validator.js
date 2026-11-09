@@ -1,6 +1,6 @@
 import { COURSE_TYPE, SCHEDULE_FREQUENCY, WEEKDAY } from "../models/course.model.js";
 
-const COURSE_LIMITS = {
+export const COURSE_LIMITS = {
   name: {
     min: 3,
     max: 120,
@@ -38,6 +38,11 @@ const COURSE_LIMITS = {
   instructor: {
     min: 3,
     max: 120,
+  },
+
+  seasonName: {
+    min: 2,
+    max: 60,
   },
 
   optionalText: { min: 1, max: 5000 },
@@ -370,6 +375,13 @@ export function validateCourseInput(input = {}) {
   const schedule = validateSchedule(input.schedule, errors);
   const courseType = validateEnum(input.courseType, "courseType", COURSE_TYPE, errors);
   const reservationAmount = validateOptionalInteger(input.reservationAmount, "reservationAmount", 0, errors);
+  const seasonName = validateOptionalString(
+    input.seasonName,
+    "seasonName",
+    COURSE_LIMITS.seasonName.min,
+    COURSE_LIMITS.seasonName.max,
+    errors,
+  );
   const textFields = ["whatYouWillLearn", "location", "address", "materialsNote", "prerequisites", "priceNote"];
   const optionalText = Object.fromEntries(textFields.map((field) => {
     const limits = COURSE_LIMITS[field] ?? COURSE_LIMITS.optionalText;
@@ -391,6 +403,7 @@ export function validateCourseInput(input = {}) {
       ...optionalText,
       courseType,
       reservationAmount,
+      seasonName,
       capacity,
       price,
       instructor,

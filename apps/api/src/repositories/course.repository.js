@@ -7,7 +7,7 @@ import { db } from "../config/firebase.js";
 const COURSE_COLLECTION = "courses";
 
 // Maps Firestore data to the shared course response format.
-function mapCourseDocument(documentSnapshot) {
+export function mapCourseDocument(documentSnapshot) {
     const courseData = documentSnapshot.data();
 
     return {
@@ -21,6 +21,7 @@ function mapCourseDocument(documentSnapshot) {
         prerequisites: courseData.prerequisites ?? null,
         reservationAmount: courseData.reservationAmount ?? null,
         priceNote: courseData.priceNote ?? null,
+        seasonName: courseData.seasonName ?? null,
         capacity: courseData.capacity ?? null,
         price: courseData.price ?? null,
         instructor: courseData.instructor ?? null,
