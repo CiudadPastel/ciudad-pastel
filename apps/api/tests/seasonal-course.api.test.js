@@ -923,4 +923,262 @@ describe("Seasonal Course Management API (HU-A08 / CIU-14 - Rama 2)", () => {
             expect(res.body.stack).toBeUndefined();
         });
     });
+
+    describe("Security, Authorization and Protection Matrix (HU-A08 / CIU-14 - Rama 5)", () => {
+        const INVALID_TOKEN = "invalid-token-xyz";
+        const INVALID_AUTH_HEADER = { Authorization: `Bearer ${INVALID_TOKEN}` };
+
+        function seedCourse(status = COURSE_STATUS.PUBLISHED, overrides = {}) {
+            const id = overrides.id ?? `sec-course-${fake.courses.size + 1}`;
+            const now = new Date(fake.timestamp());
+            const course = {
+                ...VALID_BASE_COURSE,
+                id,
+                status,
+                seasonName: null,
+                createdAt: { toDate: () => now },
+                updatedAt: { toDate: () => now },
+                ...overrides
+            };
+            fake.courses.set(id, course);
+            return course;
+        }
+
+        describe("POST /api/admin/courses (with seasonName)", () => {
+            const newSeasonalCourse = {
+                ...VALID_BASE_COURSE,
+                seasonName: "Verano 2027"
+            };
+
+            it("rejects request without token with 401 and does not touch repository", async () => {
+                const initialCount = fake.courses.size;
+                const res = await request(app)
+                    .post("/api/admin/courses")
+                    .send(newSeasonalCourse);
+
+                expect(res.status).toBe(401);
+                expect(res.body).toEqual({ message: "Authentication required" });
+                expect(fake.courses.size).toBe(initialCount);
+            });
+
+            it("rejects request with invalid token with 401 and does not touch repository", async () => {
+                const initialCount = fake.courses.size;
+                const res = await request(app)
+                    .post("/api/admin/courses")
+                    .set(INVALID_AUTH_HEADER)
+                    .send(newSeasonalCourse);
+
+                expect(res.status).toBe(401);
+                expect(res.body).toEqual({ message: "Invalid or expired authentication token" });
+                expect(fake.courses.size).toBe(initialCount);
+            });
+
+            it("rejects request from non-admin user with 403 and does not touch repository", async () => {
+                const initialCount = fake.courses.size;
+                const res = await request(app)
+                    .post("/api/admin/courses")
+                    .set(USER_AUTH_HEADER)
+                    .send(newSeasonalCourse);
+
+                expect(res.status).toBe(403);
+                expect(res.body).toEqual({ message: "Administrator privileges required" });
+                expect(fake.courses.size).toBe(initialCount);
+            });
+
+            it("allows request from admin user with 201", async () => {
+                const res = await request(app)
+                    .post("/api/admin/courses")
+                    .set(ADMIN_AUTH_HEADER)
+                    .send(newSeasonalCourse);
+
+                expect(res.status).toBe(201);
+                expect(res.body.seasonName).toBe("Verano 2027");
+                expect(fake.courses.get(res.body.id)).toBeDefined();
+            });
+        });
+
+        describe("PUT /api/admin/courses/:id (with seasonName)", () => {
+            it("rejects request without token with 401 and does not modify course", async () => {
+                const course = seedCourse(COURSE_STATUS.PUBLISHED, {
+                    id: "auth-put-no-token",
+                    seasonName: "Otoño 2026"
+                });
+
+                const res = await request(app)
+                    .put(`/api/admin/courses/${course.id}`)
+                    .send({
+                        ...VALID_BASE_COURSE,
+                        seasonName: "Invierno 2026"
+                    });
+
+                expect(res.status).toBe(401);
+                expect(res.body).toEqual({ message: "Authentication required" });
+                expect(fake.courses.get(course.id).seasonName).toBe("Otoño 2026");
+            });
+
+            it("rejects request with invalid token with 401 and does not modify course", async () => {
+                const course = seedCourse(COURSE_STATUS.PUBLISHED, {
+                    id: "auth-put-invalid-token",
+                    seasonName: "Otoño 2026"
+                });
+
+                const res = await request(app)
+                    .put(`/api/admin/courses/${course.id}`)
+                    .set(INVALID_AUTH_HEADER)
+                    .send({
+                        ...VALID_BASE_COURSE,
+                        seasonName: "Invierno 2026"
+                    });
+
+                expect(res.status).toBe(401);
+                expect(res.body).toEqual({ message: "Invalid or expired authentication token" });
+                expect(fake.courses.get(course.id).seasonName).toBe("Otoño 2026");
+            });
+
+            it("rejects request from non-admin user with 403 and does not modify course", async () => {
+                const course = seedCourse(COURSE_STATUS.PUBLISHED, {
+                    id: "auth-put-non-admin",
+                    seasonName: "Otoño 2026"
+                });
+
+                const res = await request(app)
+                    .put(`/api/admin/courses/${course.id}`)
+                    .set(USER_AUTH_HEADER)
+                    .send({
+                        ...VALID_BASE_COURSE,
+                        seasonName: "Invierno 2026"
+                    });
+
+                expect(res.status).toBe(403);
+                expect(res.body).toEqual({ message: "Administrator privileges required" });
+                expect(fake.courses.get(course.id).seasonName).toBe("Otoño 2026");
+            });
+
+            it("allows request from admin user with 200", async () => {
+                const course = seedCourse(COURSE_STATUS.PUBLISHED, {
+                    id: "auth-put-admin",
+                    seasonName: "Otoño 2026"
+                });
+
+                const res = await request(app)
+                    .put(`/api/admin/courses/${course.id}`)
+                    .set(ADMIN_AUTH_HEADER)
+                    .send({
+                        ...VALID_BASE_COURSE,
+                        seasonName: "Invierno 2026"
+                    });
+
+                expect(res.status).toBe(200);
+                expect(res.body.seasonName).toBe("Invierno 2026");
+                expect(fake.courses.get(course.id).seasonName).toBe("Invierno 2026");
+            });
+        });
+
+        describe("DELETE /api/admin/courses/:id/seasonal (Seasonal withdrawal)", () => {
+            it("rejects request without token with 401 and does not modify course", async () => {
+                const course = seedCourse(COURSE_STATUS.PUBLISHED, {
+                    id: "auth-del-no-token",
+                    seasonName: "Navidad 2026"
+                });
+
+                const res = await request(app)
+                    .delete(`/api/admin/courses/${course.id}/seasonal`);
+
+                expect(res.status).toBe(401);
+                expect(res.body).toEqual({ message: "Authentication required" });
+                expect(fake.courses.get(course.id).seasonName).toBe("Navidad 2026");
+            });
+
+            it("rejects request with invalid token with 401 and does not modify course", async () => {
+                const course = seedCourse(COURSE_STATUS.PUBLISHED, {
+                    id: "auth-del-invalid-token",
+                    seasonName: "Navidad 2026"
+                });
+
+                const res = await request(app)
+                    .delete(`/api/admin/courses/${course.id}/seasonal`)
+                    .set(INVALID_AUTH_HEADER);
+
+                expect(res.status).toBe(401);
+                expect(res.body).toEqual({ message: "Invalid or expired authentication token" });
+                expect(fake.courses.get(course.id).seasonName).toBe("Navidad 2026");
+            });
+
+            it("rejects request from non-admin user with 403 and does not modify course", async () => {
+                const course = seedCourse(COURSE_STATUS.PUBLISHED, {
+                    id: "auth-del-non-admin",
+                    seasonName: "Navidad 2026"
+                });
+
+                const res = await request(app)
+                    .delete(`/api/admin/courses/${course.id}/seasonal`)
+                    .set(USER_AUTH_HEADER);
+
+                expect(res.status).toBe(403);
+                expect(res.body).toEqual({ message: "Administrator privileges required" });
+                expect(fake.courses.get(course.id).seasonName).toBe("Navidad 2026");
+            });
+
+            it("allows request from admin user with 204", async () => {
+                const course = seedCourse(COURSE_STATUS.PUBLISHED, {
+                    id: "auth-del-admin",
+                    seasonName: "Navidad 2026"
+                });
+
+                const res = await request(app)
+                    .delete(`/api/admin/courses/${course.id}/seasonal`)
+                    .set(ADMIN_AUTH_HEADER);
+
+                expect(res.status).toBe(204);
+                expect(fake.courses.get(course.id).seasonName).toBeNull();
+            });
+        });
+
+        describe("Public endpoints operation without token & absence of public modification routes", () => {
+            it("GET /api/courses and GET /api/courses/seasonal work without token and never call verifyIdToken", async () => {
+                seedCourse(COURSE_STATUS.PUBLISHED, {
+                    id: "pub-course-auth-check",
+                    seasonName: "Pascua 2027"
+                });
+
+                fake.verifyIdToken.mockClear();
+
+                const listRes = await request(app).get("/api/courses");
+                expect(listRes.status).toBe(200);
+
+                const seasonalRes = await request(app).get("/api/courses/seasonal");
+                expect(seasonalRes.status).toBe(200);
+
+                expect(fake.verifyIdToken).not.toHaveBeenCalled();
+            });
+
+            it("returns 404 for non-permitted methods on /api/courses/seasonal (POST, PUT, PATCH, DELETE)", async () => {
+                const postRes = await request(app).post("/api/courses/seasonal").send({});
+                expect(postRes.status).toBe(404);
+
+                const putRes = await request(app).put("/api/courses/seasonal").send({});
+                expect(putRes.status).toBe(404);
+
+                const patchRes = await request(app).patch("/api/courses/seasonal").send({});
+                expect(patchRes.status).toBe(404);
+
+                const delRes = await request(app).delete("/api/courses/seasonal");
+                expect(delRes.status).toBe(404);
+            });
+
+            it("returns 404 when attempting to call seasonal deletion without /admin prefix", async () => {
+                const course = seedCourse(COURSE_STATUS.PUBLISHED, {
+                    id: "no-admin-route-check",
+                    seasonName: "Navidad 2026"
+                });
+
+                const res = await request(app)
+                    .delete(`/api/courses/${course.id}/seasonal`)
+                    .set(ADMIN_AUTH_HEADER);
+
+                expect(res.status).toBe(404);
+                expect(fake.courses.get(course.id).seasonName).toBe("Navidad 2026");
+            });
+        });
+    });
 });
