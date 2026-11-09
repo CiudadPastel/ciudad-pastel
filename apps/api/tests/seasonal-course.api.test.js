@@ -718,4 +718,209 @@ describe("Seasonal Course Management API (HU-A08 / CIU-14 - Rama 2)", () => {
             expect(res.body.stack).toBeUndefined();
         });
     });
+
+    describe("DELETE /api/admin/courses/:id/seasonal (Seasonal Publication Withdrawal - HU-A08 - Rama 4)", () => {
+        function seedCourse(status = COURSE_STATUS.PUBLISHED, overrides = {}) {
+            const id = overrides.id ?? `course-${fake.courses.size + 1}`;
+            const now = new Date(fake.timestamp());
+            const course = {
+                ...VALID_BASE_COURSE,
+                id,
+                status,
+                seasonName: null,
+                createdAt: { toDate: () => now },
+                updatedAt: { toDate: () => now },
+                ...overrides
+            };
+            fake.courses.set(id, course);
+            return course;
+        }
+
+        it("returns 204 and clears seasonName to null while preserving all other fields and status", async () => {
+            const course = seedCourse(COURSE_STATUS.PUBLISHED, {
+                id: "course-withdraw-1",
+                name: "Curso de Galletas Festivas",
+                seasonName: "Navidad 2026",
+                capacity: 10,
+                price: 40000
+            });
+
+            const res = await request(app)
+                .delete(`/api/admin/courses/${course.id}/seasonal`)
+                .set(ADMIN_AUTH_HEADER);
+
+            expect(res.status).toBe(204);
+            expect(res.body).toEqual({});
+
+            const updated = fake.courses.get(course.id);
+            expect(updated.seasonName).toBeNull();
+            expect(updated.name).toBe("Curso de Galletas Festivas");
+            expect(updated.status).toBe(COURSE_STATUS.PUBLISHED);
+            expect(updated.capacity).toBe(10);
+            expect(updated.price).toBe(40000);
+            expect(updated.description).toBe(course.description);
+            expect(updated.learningOutcomes).toEqual(course.learningOutcomes);
+            expect(updated.schedule).toEqual(course.schedule);
+        });
+
+        it("causes course to disappear from /api/courses/seasonal while remaining in /api/courses", async () => {
+            const course = seedCourse(COURSE_STATUS.PUBLISHED, {
+                id: "course-withdraw-visibility",
+                seasonName: "Pascua 2026",
+                schedule: { startDate: "2026-12-01", endDate: "2026-12-15" }
+            });
+
+            // Initially visible in both
+            const beforeSeasonal = await request(app).get("/api/courses/seasonal");
+            expect(beforeSeasonal.body.map((c) => c.id)).toContain(course.id);
+            const beforeGeneral = await request(app).get("/api/courses");
+            expect(beforeGeneral.body.map((c) => c.id)).toContain(course.id);
+
+            // Withdraw seasonal publication
+            const res = await request(app)
+                .delete(`/api/admin/courses/${course.id}/seasonal`)
+                .set(ADMIN_AUTH_HEADER);
+            expect(res.status).toBe(204);
+
+            // Now excluded from seasonal
+            const afterSeasonal = await request(app).get("/api/courses/seasonal");
+            expect(afterSeasonal.body.map((c) => c.id)).not.toContain(course.id);
+
+            // Still included in general catalog
+            const afterGeneral = await request(app).get("/api/courses");
+            expect(afterGeneral.body.map((c) => c.id)).toContain(course.id);
+            const generalItem = afterGeneral.body.find((c) => c.id === course.id);
+            expect(generalItem.seasonName).toBeNull();
+        });
+
+        it("ensures other courses in the database remain completely untouched", async () => {
+            const targetCourse = seedCourse(COURSE_STATUS.PUBLISHED, {
+                id: "target-course",
+                seasonName: "Navidad 2026"
+            });
+            const otherCourse1 = seedCourse(COURSE_STATUS.PUBLISHED, {
+                id: "other-course-1",
+                name: "Otro Curso Navideño",
+                seasonName: "Navidad 2026"
+            });
+            const otherCourse2 = seedCourse(COURSE_STATUS.DRAFT, {
+                id: "other-course-2",
+                name: "Curso Regular Borrador",
+                seasonName: null
+            });
+
+            const beforeOther1 = { ...fake.courses.get(otherCourse1.id) };
+            const beforeOther2 = { ...fake.courses.get(otherCourse2.id) };
+
+            const res = await request(app)
+                .delete(`/api/admin/courses/${targetCourse.id}/seasonal`)
+                .set(ADMIN_AUTH_HEADER);
+            expect(res.status).toBe(204);
+
+            expect(fake.courses.get(otherCourse1.id)).toEqual(beforeOther1);
+            expect(fake.courses.get(otherCourse2.id)).toEqual(beforeOther2);
+        });
+
+        it("is idempotent: withdrawing twice returns 204 on both attempts", async () => {
+            const course = seedCourse(COURSE_STATUS.PUBLISHED, {
+                id: "idempotent-withdraw",
+                seasonName: "Navidad 2026"
+            });
+
+            const first = await request(app)
+                .delete(`/api/admin/courses/${course.id}/seasonal`)
+                .set(ADMIN_AUTH_HEADER);
+            expect(first.status).toBe(204);
+
+            const second = await request(app)
+                .delete(`/api/admin/courses/${course.id}/seasonal`)
+                .set(ADMIN_AUTH_HEADER);
+            expect(second.status).toBe(204);
+
+            expect(fake.courses.get(course.id).seasonName).toBeNull();
+        });
+
+        it("returns 404 Course not found when course does not exist", async () => {
+            const res = await request(app)
+                .delete("/api/admin/courses/non-existent-course-id/seasonal")
+                .set(ADMIN_AUTH_HEADER);
+
+            expect(res.status).toBe(404);
+            expect(res.body).toEqual({ message: "Course not found." });
+        });
+
+        it("rejects unauthenticated request with 401 without modifying course", async () => {
+            const course = seedCourse(COURSE_STATUS.PUBLISHED, {
+                id: "unauth-withdraw",
+                seasonName: "Navidad 2026"
+            });
+
+            const res = await request(app)
+                .delete(`/api/admin/courses/${course.id}/seasonal`);
+
+            expect(res.status).toBe(401);
+            expect(fake.courses.get(course.id).seasonName).toBe("Navidad 2026");
+        });
+
+        it("rejects non-admin request with 403 without modifying course", async () => {
+            const course = seedCourse(COURSE_STATUS.PUBLISHED, {
+                id: "non-admin-withdraw",
+                seasonName: "Navidad 2026"
+            });
+
+            const res = await request(app)
+                .delete(`/api/admin/courses/${course.id}/seasonal`)
+                .set(USER_AUTH_HEADER);
+
+            expect(res.status).toBe(403);
+            expect(fake.courses.get(course.id).seasonName).toBe("Navidad 2026");
+        });
+
+        it("allows re-marking the course as seasonal with PUT after withdrawal", async () => {
+            const course = seedCourse(COURSE_STATUS.PUBLISHED, {
+                id: "remark-after-withdraw",
+                seasonName: "Navidad 2026"
+            });
+
+            // Withdraw
+            const withdrawRes = await request(app)
+                .delete(`/api/admin/courses/${course.id}/seasonal`)
+                .set(ADMIN_AUTH_HEADER);
+            expect(withdrawRes.status).toBe(204);
+            expect(fake.courses.get(course.id).seasonName).toBeNull();
+
+            // Re-mark via PUT
+            const remarkRes = await request(app)
+                .put(`/api/admin/courses/${course.id}`)
+                .set(ADMIN_AUTH_HEADER)
+                .send({
+                    ...VALID_BASE_COURSE,
+                    seasonName: "Especial San Valentín 2027"
+                });
+
+            expect(remarkRes.status).toBe(200);
+            expect(remarkRes.body.seasonName).toBe("Especial San Valentín 2027");
+            expect(fake.courses.get(course.id).seasonName).toBe("Especial San Valentín 2027");
+        });
+
+        it("returns clean 500 when repository fails unexpectedly on withdrawal", async () => {
+            const course = seedCourse(COURSE_STATUS.PUBLISHED, {
+                id: "fault-withdraw-500",
+                seasonName: "Navidad 2026"
+            });
+
+            fake.collection.mockImplementationOnce(() => {
+                throw new Error("UNEXPECTED_TRANSACTION_FAILURE");
+            });
+
+            const res = await request(app)
+                .delete(`/api/admin/courses/${course.id}/seasonal`)
+                .set(ADMIN_AUTH_HEADER);
+
+            expect(res.status).toBe(500);
+            expect(res.body).toEqual({ message: "Could not withdraw seasonal publication." });
+            expect(JSON.stringify(res.body)).not.toContain("UNEXPECTED_TRANSACTION_FAILURE");
+            expect(res.body.stack).toBeUndefined();
+        });
+    });
 });
