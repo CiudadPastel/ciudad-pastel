@@ -1,5 +1,13 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import YAML from "yaml";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const openApiPath = path.join(__dirname, "../docs/openapi.yaml");
 
 const fake = vi.hoisted(() => {
     const courses = new Map();
@@ -32,7 +40,14 @@ vi.mock("firebase-admin/firestore", () => ({
 vi.mock("../src/config/firebase.js", () => ({
     auth: { verifyIdToken: fake.verifyIdToken },
     db: {
-        collection: (...args) => fake.collection(...args)
+        collection: (...args) => fake.collection(...args),
+        runTransaction: async (callback) => {
+            const transaction = {
+                get: async (ref) => ref.get(),
+                update: (ref, patch) => ref.update(patch)
+            };
+            return callback(transaction);
+        }
     }
 }));
 vi.mock("../src/repositories/enrollment.repository.js", () => ({
@@ -1178,6 +1193,210 @@ describe("Seasonal Course Management API (HU-A08 / CIU-14 - Rama 2)", () => {
 
                 expect(res.status).toBe(404);
                 expect(fake.courses.get(course.id).seasonName).toBe("Navidad 2026");
+            });
+        });
+    });
+
+    describe("Full Acceptance Criteria & End-to-End Lifecycle Verification (HU-A08 / CIU-14 - Rama 6)", () => {
+        function seedCourse(status = COURSE_STATUS.PUBLISHED, overrides = {}) {
+            const id = overrides.id ?? `e2e-course-${fake.courses.size + 1}`;
+            const now = new Date(fake.timestamp());
+            const course = {
+                ...VALID_BASE_COURSE,
+                id,
+                status,
+                seasonName: null,
+                createdAt: { toDate: () => now },
+                updatedAt: { toDate: () => now },
+                ...overrides
+            };
+            fake.courses.set(id, course);
+            return course;
+        }
+
+        describe("OpenAPI schema conformity for seasonal courses", () => {
+            it("ensures PublicCourse schema defines seasonName as nullable string", () => {
+                const rawYaml = fs.readFileSync(openApiPath, "utf8");
+                const spec = YAML.parse(rawYaml);
+                const schema = spec.components?.schemas?.PublicCourse;
+
+                expect(schema).toBeDefined();
+                expect(schema.properties.seasonName).toBeDefined();
+                expect(schema.properties.seasonName.type).toBe("string");
+                expect(schema.properties.seasonName.nullable).toBe(true);
+            });
+
+            it("ensures GET /api/courses/seasonal response items strictly match OpenAPI PublicCourse schema keys", async () => {
+                const rawYaml = fs.readFileSync(openApiPath, "utf8");
+                const spec = YAML.parse(rawYaml);
+                const publicCourseSchema = spec.components?.schemas?.PublicCourse;
+                const expectedProperties = Object.keys(publicCourseSchema.properties).sort();
+                const requiredProperties = publicCourseSchema.required || [];
+
+                seedCourse(COURSE_STATUS.PUBLISHED, {
+                    id: "openapi-seasonal-test-1",
+                    name: "Panetón Tradicional Navideño",
+                    seasonName: "Navidad 2026",
+                    schedule: { startDate: "2026-12-01", endDate: "2026-12-20" }
+                });
+
+                const res = await request(app).get("/api/courses/seasonal");
+                expect(res.status).toBe(200);
+                expect(Array.isArray(res.body)).toBe(true);
+                expect(res.body.length).toBeGreaterThan(0);
+
+                const item = res.body[0];
+                const actualKeys = Object.keys(item).sort();
+                expect(actualKeys).toEqual(expectedProperties);
+
+                for (const reqProp of requiredProperties) {
+                    expect(item).toHaveProperty(reqProp);
+                }
+
+                expect(typeof item.id).toBe("string");
+                expect(typeof item.name).toBe("string");
+                expect(typeof item.summary).toBe("string");
+                expect(typeof item.description).toBe("string");
+                expect(typeof item.imageUrl).toBe("string");
+                expect(Array.isArray(item.learningOutcomes)).toBe(true);
+                expect(Array.isArray(item.requiredMaterials)).toBe(true);
+                expect(typeof item.capacity).toBe("number");
+                expect(typeof item.price).toBe("number");
+                expect(typeof item.instructor).toBe("string");
+                expect(typeof item.schedule).toBe("object");
+                expect(typeof item.seasonName).toBe("string");
+                expect(item.seasonName).toBe("Navidad 2026");
+            });
+
+            it("ensures GET /api/courses item matches OpenAPI PublicCourse schema when seasonName is null", async () => {
+                const rawYaml = fs.readFileSync(openApiPath, "utf8");
+                const spec = YAML.parse(rawYaml);
+                const publicCourseSchema = spec.components?.schemas?.PublicCourse;
+                const expectedProperties = Object.keys(publicCourseSchema.properties).sort();
+
+                seedCourse(COURSE_STATUS.PUBLISHED, {
+                    id: "openapi-non-seasonal-test",
+                    name: "Curso Estándar de Repostería",
+                    seasonName: null,
+                    schedule: { startDate: "2026-12-05", endDate: "2026-12-25" }
+                });
+
+                const res = await request(app).get("/api/courses");
+                expect(res.status).toBe(200);
+
+                const found = res.body.find((c) => c.id === "openapi-non-seasonal-test");
+                expect(found).toBeDefined();
+                expect(Object.keys(found).sort()).toEqual(expectedProperties);
+                expect(found.seasonName).toBeNull();
+            });
+        });
+
+        describe("End-to-End Course Seasonal Lifecycle", () => {
+            it("executes full lifecycle: draft with seasonName -> not public -> publish -> visible in /seasonal & /courses -> update seasonName -> withdraw season -> disappears from /seasonal, remains in /courses with seasonName: null", async () => {
+                // Seed an existing untouched course to verify zero side-effects
+                const bystanderCourse = seedCourse(COURSE_STATUS.PUBLISHED, {
+                    id: "bystander-lifecycle-course",
+                    name: "Curso Regular Inalterado",
+                    seasonName: "Temporada de Fresas 2026",
+                    price: 25000,
+                    capacity: 12
+                });
+
+                // Step 1: Administrator creates a draft course with seasonName
+                const createRes = await request(app)
+                    .post("/api/admin/courses")
+                    .set(ADMIN_AUTH_HEADER)
+                    .send({
+                        ...VALID_BASE_COURSE,
+                        name: "Tronco Navideño de Chocolate",
+                        seasonName: "Navidad 2026"
+                    });
+
+                expect(createRes.status).toBe(201);
+                const courseId = createRes.body.id;
+                expect(courseId).toBeDefined();
+                expect(createRes.body.status).toBe(COURSE_STATUS.DRAFT);
+                expect(createRes.body.seasonName).toBe("Navidad 2026");
+
+                // Step 1b: Verify draft course does NOT appear in public seasonal catalog or regular catalog
+                const seasonalResDraft = await request(app).get("/api/courses/seasonal");
+                expect(seasonalResDraft.status).toBe(200);
+                expect(seasonalResDraft.body.some((c) => c.id === courseId)).toBe(false);
+
+                const catalogResDraft = await request(app).get("/api/courses");
+                expect(catalogResDraft.status).toBe(200);
+                expect(catalogResDraft.body.some((c) => c.id === courseId)).toBe(false);
+
+                // Step 2: Administrator publishes the course
+                const publishRes = await request(app)
+                    .patch(`/api/admin/courses/${courseId}/status`)
+                    .set(ADMIN_AUTH_HEADER)
+                    .send({ status: COURSE_STATUS.PUBLISHED });
+
+                expect(publishRes.status).toBe(200);
+                expect(publishRes.body.status).toBe(COURSE_STATUS.PUBLISHED);
+
+                // Step 2b: Verify published course now appears in both public seasonal catalog and public catalog
+                const seasonalResPublished = await request(app).get("/api/courses/seasonal");
+                expect(seasonalResPublished.status).toBe(200);
+                const publishedSeasonalEntry = seasonalResPublished.body.find((c) => c.id === courseId);
+                expect(publishedSeasonalEntry).toBeDefined();
+                expect(publishedSeasonalEntry.seasonName).toBe("Navidad 2026");
+                expect(publishedSeasonalEntry.name).toBe("Tronco Navideño de Chocolate");
+
+                const catalogResPublished = await request(app).get("/api/courses");
+                expect(catalogResPublished.status).toBe(200);
+                const publishedCatalogEntry = catalogResPublished.body.find((c) => c.id === courseId);
+                expect(publishedCatalogEntry).toBeDefined();
+                expect(publishedCatalogEntry.seasonName).toBe("Navidad 2026");
+
+                // Step 3: Administrator modifies the seasonal name via PUT
+                const updateRes = await request(app)
+                    .put(`/api/admin/courses/${courseId}`)
+                    .set(ADMIN_AUTH_HEADER)
+                    .send({
+                        ...VALID_BASE_COURSE,
+                        name: "Tronco Navideño de Chocolate",
+                        seasonName: "Edición Especial Navidad y Año Nuevo 2026"
+                    });
+
+                expect(updateRes.status).toBe(200);
+                expect(updateRes.body.seasonName).toBe("Edición Especial Navidad y Año Nuevo 2026");
+
+                // Step 3b: Verify updated seasonal name is reflected in public catalog
+                const seasonalResUpdated = await request(app).get("/api/courses/seasonal");
+                const updatedSeasonalEntry = seasonalResUpdated.body.find((c) => c.id === courseId);
+                expect(updatedSeasonalEntry).toBeDefined();
+                expect(updatedSeasonalEntry.seasonName).toBe("Edición Especial Navidad y Año Nuevo 2026");
+
+                // Step 4: Administrator withdraws seasonal publication via DELETE /:id/seasonal
+                const withdrawRes = await request(app)
+                    .delete(`/api/admin/courses/${courseId}/seasonal`)
+                    .set(ADMIN_AUTH_HEADER);
+
+                expect(withdrawRes.status).toBe(204);
+                expect(withdrawRes.text).toBe("");
+
+                // Step 4b: Verify course disappears completely from /api/courses/seasonal
+                const seasonalResWithdrawn = await request(app).get("/api/courses/seasonal");
+                expect(seasonalResWithdrawn.status).toBe(200);
+                expect(seasonalResWithdrawn.body.some((c) => c.id === courseId)).toBe(false);
+
+                // Step 4c: Verify course remains present in regular public catalog /api/courses with seasonName: null
+                const catalogResWithdrawn = await request(app).get("/api/courses");
+                expect(catalogResWithdrawn.status).toBe(200);
+                const finalCatalogEntry = catalogResWithdrawn.body.find((c) => c.id === courseId);
+                expect(finalCatalogEntry).toBeDefined();
+                expect(finalCatalogEntry.seasonName).toBeNull();
+                expect(finalCatalogEntry.name).toBe("Tronco Navideño de Chocolate");
+                expect(finalCatalogEntry.price).toBe(VALID_BASE_COURSE.price);
+                expect(finalCatalogEntry.capacity).toBe(VALID_BASE_COURSE.capacity);
+
+                // Step 5: Verify the bystander course remained untouched
+                const storedBystander = fake.courses.get(bystanderCourse.id);
+                expect(storedBystander.seasonName).toBe("Temporada de Fresas 2026");
+                expect(storedBystander.price).toBe(25000);
+                expect(storedBystander.capacity).toBe(12);
             });
         });
     });
