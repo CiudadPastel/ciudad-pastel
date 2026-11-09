@@ -114,6 +114,7 @@ export async function updateCourse(id, courseData) {
             prerequisites: courseData.prerequisites,
             reservationAmount: courseData.reservationAmount,
             priceNote: courseData.priceNote,
+            seasonName: courseData.seasonName,
             capacity: courseData.capacity,
             price: courseData.price,
             instructor: courseData.instructor,
