@@ -12,6 +12,7 @@ import ProductCreate from "../src/pages/admin/ProductCreate";
 import { auth } from "../src/config/firebase";
 import { EMPTY_COURSE_FORM, toCoursePayload } from "../src/utils/courseValidation";
 import { formatPrice } from "../src/utils/format";
+import { formatScheduleSummary } from "../src/utils/schedule";
 import "../src/index.css";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -25,12 +26,39 @@ let failCategories = false;
 let pendingProducts;
 let pendingCourses;
 let failCourses = false;
+let seasonalCourses = [];
+let includeSeasonalInCatalog = false;
+let pendingSeasonalCourses;
+let failSeasonalCourses = false;
 let productWrites = [];
 const courses = Array.from({ length: 85 }, (_, index) => ({
     id: String(index), name: `Curso ${index}`, summary: "Curso de prueba",
     courseType: index < 13 ? "workshop" : index < 79 ? "basic"
         : ["demonstrative", "semi_demonstrative", "multi_week", "other", null, null][index - 79], price: 1000
 }));
+const seasonalCourse = {
+    id: "seasonal-course",
+    name: "Galletas decoradas",
+    summary: "Decoración especial para Navidad.",
+    description: "Aprenda a decorar galletas para Navidad.",
+    imageUrl: "/tests/seasonal-course.png",
+    courseType: "workshop",
+    seasonName: "Navidad",
+    price: 15000,
+    capacity: 8,
+    remainingSpots: 8,
+    learningOutcomes: [],
+    requiredMaterials: [],
+    schedule: {
+        startDate: "2026-12-01",
+        endDate: "2026-12-01",
+        startTime: "09:00",
+        endTime: "12:00",
+        frequency: "single",
+        weekday: null,
+        scheduleNote: null
+    }
+};
 
 window.fetch = async (input, options = {}) => {
     const url = new URL(input);
@@ -56,13 +84,19 @@ window.fetch = async (input, options = {}) => {
                 id: String((page - 1) * limit + index), name: `Producto ${(page - 1) * limit + index}`, price: 1000, available: true
             })) });
     }
+    if (url.pathname.endsWith("/courses/seasonal")) {
+        if (pendingSeasonalCourses) await pendingSeasonalCourses;
+        if (failSeasonalCourses) throw new Error("offline");
+        return Response.json(seasonalCourses);
+    }
     if (url.pathname.endsWith("/courses")) {
         if (pendingCourses) await pendingCourses;
         if (failCourses) throw new Error("offline");
-        return Response.json(courses);
+        return Response.json(includeSeasonalInCatalog ? [...courses, seasonalCourse] : courses);
     }
     if (/\/courses\/[^/]+$/.test(url.pathname)) {
-        return Response.json(courses.find((course) => course.id === url.pathname.split("/").at(-1)));
+        const availableCourses = includeSeasonalInCatalog ? [...courses, seasonalCourse] : courses;
+        return Response.json(availableCourses.find((course) => course.id === url.pathname.split("/").at(-1)));
     }
     return Response.json({});
 };
@@ -289,6 +323,69 @@ await test("product categories first, virtual all, filtered incremental totals a
     await button("Volver a categorías");
     await link("Ver todos");
     assert(text().includes("Mostrando 12 de 25 productos"), "All must remove category filter");
+});
+
+await test("seasonal courses load independently, render reusable cards and do not duplicate", async () => {
+    seasonalCourses = [seasonalCourse];
+    includeSeasonalInCatalog = true;
+    failSeasonalCourses = false;
+    let releaseSeasonal;
+    pendingSeasonalCourses = new Promise((resolve) => { releaseSeasonal = resolve; });
+
+    try {
+        await mount(courseRoutes, "/cursos?vista=todos");
+        const loadingSection = container.querySelector('[aria-labelledby="seasonal-courses-title"]');
+        assert(loadingSection?.getAttribute("aria-busy") === "true", "Seasonal cards show an independent skeleton");
+        assert(text().includes("Mostrando 12 de 86 cursos"), "The main catalog loads while seasonal courses are pending");
+
+        releaseSeasonal();
+        pendingSeasonalCourses = null;
+        await settle();
+
+        const section = container.querySelector('[aria-labelledby="seasonal-courses-title"]');
+        const featuredCard = section?.querySelector('[data-course-id="seasonal-course"]');
+        assert(section && featuredCard, "Seasonal course is featured");
+        assert(section.textContent.includes("Navidad"), "Season name is visible");
+        assert(section.textContent.includes(formatPrice(seasonalCourse.price)), "Price uses the existing currency helper");
+        assert(section.textContent.includes(formatScheduleSummary(seasonalCourse.schedule)), "Schedule uses the existing formatter");
+        assert(section.querySelector("img")?.getAttribute("loading") === "lazy", "Card image is lazy loaded");
+        assert(text().includes("Mostrando 12 de 85 cursos"), "Featured courses are excluded from the general catalog");
+        assert(container.querySelectorAll('[data-course-id="seasonal-course"]').length === 1, "Course is not duplicated");
+        assert(featuredCard.getAttribute("href") === "/cursos/seasonal-course", "Featured card links to course detail");
+
+        await settle(() => featuredCard.click());
+        assert(window.location.pathname === "/cursos/seasonal-course", "Clicking the card opens course detail");
+    } finally {
+        releaseSeasonal?.();
+        pendingSeasonalCourses = null;
+        seasonalCourses = [];
+        includeSeasonalInCatalog = false;
+        failSeasonalCourses = false;
+    }
+
+    await mount(courseRoutes, "/cursos");
+    assert(!container.querySelector('[aria-labelledby="seasonal-courses-title"]'), "Empty seasonal results leave no section");
+});
+
+await test("seasonal request errors do not block the main catalog and can be retried", async () => {
+    seasonalCourses = [seasonalCourse];
+    includeSeasonalInCatalog = true;
+    failSeasonalCourses = true;
+
+    try {
+        await mount(courseRoutes, "/cursos?vista=todos");
+        assert(text().includes("No se pudieron cargar los cursos de temporada"), "Seasonal error is discreetly reported");
+        assert(text().includes("Mostrando 12 de 86 cursos"), "Main catalog remains available after seasonal error");
+
+        failSeasonalCourses = false;
+        await button("Reintentar");
+        assert(text().includes("Mostrando 12 de 85 cursos"), "Retry loads the featured courses and removes duplicates");
+        assert(container.querySelectorAll('[data-course-id="seasonal-course"]').length === 1, "Retried course appears only once");
+    } finally {
+        seasonalCourses = [];
+        includeSeasonalInCatalog = false;
+        failSeasonalCourses = false;
+    }
 });
 
 await test("responsive catalog cards keep the same width with one or many items", async () => {

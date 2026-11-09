@@ -286,6 +286,14 @@ function CoursesList() {
                                                                 {courseTypeLabel(course.courseType)}
                                                             </span>
                                                         )}
+                                                        {course.seasonName && (
+                                                            <span
+                                                                className={styles.typeTag}
+                                                                title={`Temporada: ${course.seasonName}`}
+                                                            >
+                                                                Temporada: {course.seasonName}
+                                                            </span>
+                                                        )}
                                                     </span>
                                                     <span className={styles.secondary}>
                                                         {course.summary}
