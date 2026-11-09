@@ -15,6 +15,7 @@ const fake = vi.hoisted(() => ({
     getCourseById: vi.fn(),
     updateCourse: vi.fn(),
     updateCourseStatus: vi.fn(),
+    withdrawCourseSeason: vi.fn(),
   },
 }));
 

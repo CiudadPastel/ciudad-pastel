@@ -10,10 +10,18 @@ import {
     getCourses,
     getCourseById,
     updateCourse,
-    updateCourseStatus
+    updateCourseStatus,
+    withdrawSeasonalPublication
 } from "../controllers/course.controller.js";
 
 const router = Router();
+
+router.delete(
+    "/:id/seasonal",
+    authenticateUser,
+    requireAdmin,
+    withdrawSeasonalPublication
+);
 
 router.patch(
     "/:id/status",

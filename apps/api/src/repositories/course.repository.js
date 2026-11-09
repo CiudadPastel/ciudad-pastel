@@ -135,6 +135,36 @@ export async function updateCourse(id, courseData) {
     return updatedCourse.exists ? mapCourseDocument(updatedCourse) : null;
 }
 
+// Removes the seasonal designation from a course by setting seasonName to null.
+export async function withdrawCourseSeason(id) {
+    const courseRef = db
+        .collection(COURSE_COLLECTION)
+        .doc(id);
+
+    const course = await courseRef.get();
+
+    if (!course.exists) {
+        return null;
+    }
+
+    try {
+        await courseRef.update({
+            seasonName: null,
+            updatedAt: FieldValue.serverTimestamp()
+        });
+    } catch (error) {
+        if (error.code === 5) {
+            return null;
+        }
+
+        throw error;
+    }
+
+    const updatedCourse = await courseRef.get();
+
+    return updatedCourse.exists ? mapCourseDocument(updatedCourse) : null;
+}
+
 // Creates a new course document in Firestore.
 export async function createCourse(course) {
     const {

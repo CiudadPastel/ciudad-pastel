@@ -6,7 +6,8 @@ import {
     updateCourseStatus as updateCourseStatusService,
     getPublishedCourses as getPublishedCoursesService,
     getSeasonalCourses as getSeasonalCoursesService,
-    getPublishedCourseById as getPublishedCourseByIdService
+    getPublishedCourseById as getPublishedCourseByIdService,
+    withdrawSeasonalPublication as withdrawSeasonalPublicationService
 } from "../services/course.service.js";
 
 // Handles the public published-course listing.
@@ -35,6 +36,27 @@ export async function getSeasonalCourses(req, res) {
 
         return res.status(500).json({
             message: "Could not retrieve seasonal courses."
+        });
+    }
+}
+
+// Handles withdrawing the seasonal campaign from a course (204 No Content).
+export async function withdrawSeasonalPublication(req, res) {
+    try {
+        await withdrawSeasonalPublicationService(req.params.id);
+
+        return res.status(204).send();
+    } catch (error) {
+        if (error.name === "NotFoundError") {
+            return res.status(404).json({
+                message: error.message
+            });
+        }
+
+        console.error("Course seasonal withdrawal error:", error);
+
+        return res.status(500).json({
+            message: "Could not withdraw seasonal publication."
         });
     }
 }

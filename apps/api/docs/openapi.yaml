@@ -718,6 +718,34 @@ paths:
         "500":
           description: Internal server error.
 
+  /admin/courses/{id}/seasonal:
+    delete:
+      tags:
+        - Courses
+        - Seasonal Offers
+      summary: Withdraw seasonal publication from a course
+      description: Removes the seasonal campaign designation from a course by setting seasonName to null (HU-A08). The course retains all other information, enrollments, and status. If the course was not seasonal, the operation is idempotent and returns 204.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Course document ID.
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Seasonal publication withdrawn successfully.
+        "401":
+          description: Authentication required or invalid token.
+        "403":
+          description: Administrator privileges required.
+        "404":
+          description: Course not found.
+        "500":
+          description: Internal server error.
+
   /admin/courses/{courseId}/recipe-books:
     post:
       tags:

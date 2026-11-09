@@ -13,7 +13,8 @@ import {
     getCourses as getCoursesRepository,
     getCourseById as getCourseByIdRepository,
     updateCourse as updateCourseRepository,
-    updateCourseStatus as updateCourseStatusRepository
+    updateCourseStatus as updateCourseStatusRepository,
+    withdrawCourseSeason as withdrawCourseSeasonRepository
 } from "../repositories/course.repository.js";
 
 const COURSE_STATUS_TRANSITIONS = {
@@ -231,4 +232,17 @@ export async function createCourse(input) {
     return createCourseRepository(
         courseWithId
     );
+}
+
+// Withdraws the seasonal campaign designation from a course (HU-A08).
+export async function withdrawSeasonalPublication(id) {
+    const course = await withdrawCourseSeasonRepository(id);
+
+    if (!course) {
+        const error = new Error("Course not found.");
+        error.name = "NotFoundError";
+        throw error;
+    }
+
+    return course;
 }
