@@ -2,19 +2,15 @@ import { auth } from "../config/firebase.js";
 
 export async function authenticateUser(req, res, next) {
     try {
-        const authorizationHeader = req.headers.authorization;
+        const bearer = /^Bearer (\S+)$/.exec(req.headers.authorization ?? "");
 
-        if (
-            !authorizationHeader ||
-            !authorizationHeader.startsWith("Bearer ")
-        ) {
+        if (!bearer) {
             return res.status(401).json({
                 message: "Authentication required"
             });
         }
 
-        const token = authorizationHeader.split("Bearer ")[1];
-
+        const [, token] = bearer;
         const decodedToken = await auth.verifyIdToken(token);
 
         req.user = decodedToken;
@@ -30,7 +26,7 @@ export async function authenticateUser(req, res, next) {
 }
 
 export function requireAdmin(req, res, next) {
-    if (!req.user?.admin) {
+    if (req.user?.admin !== true) {
         return res.status(403).json({
             message: "Administrator privileges required"
         });
