@@ -103,6 +103,8 @@ function expectValidation(response, field) {
 beforeEach(() => {
   vi.resetAllMocks();
   vi.stubEnv("GOOGLE_APPLICATION_CREDENTIALS", "");
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-01T12:00:00Z"));
   fake.courses.clear();
   fake.clock = 0;
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -163,6 +165,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
 });

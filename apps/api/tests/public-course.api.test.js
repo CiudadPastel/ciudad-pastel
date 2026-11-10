@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 
 const fake = vi.hoisted(() => {
@@ -90,6 +90,12 @@ describe("Public Courses API Acceptance Criteria Suite [CIU-74 / CIU-80]", () =>
     beforeEach(() => {
         fake.courses.clear();
         vi.clearAllMocks();
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(new Date("2026-11-09T12:00:00Z"));
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
     });
 
     describe("GET /api/courses (Public Catalog)", () => {
@@ -170,6 +176,7 @@ describe("Public Courses API Acceptance Criteria Suite [CIU-74 / CIU-80]", () =>
             const c1 = seedCourse(COURSE_STATUS.PUBLISHED, "c1");
             c1.name = "B Pasteles";
             c1.schedule.startDate = "2026-12-01";
+            c1.schedule.endDate = "2026-12-15";
 
             const c2 = seedCourse(COURSE_STATUS.PUBLISHED, "c2");
             c2.name = "Z Galletas Mismo Dia";
