@@ -2,6 +2,7 @@ import { Router } from "express";
 
 import {
     getPublishedCourses,
+    getCourseFilterOptions,
     getSeasonalCourses,
     getPublishedCourseById
 } from "../controllers/course.controller.js";
@@ -12,6 +13,7 @@ const router = Router();
 
 router.get("/", getPublishedCourses);
 router.get("/seasonal", getSeasonalCourses);
+router.get("/filter-options", getCourseFilterOptions);
 router.get("/:id", getPublishedCourseById);
 
 // Public enrollment request (HU-A05): no account needed, limited by IP against spam.

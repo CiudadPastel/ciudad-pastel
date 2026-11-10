@@ -1,10 +1,16 @@
 import { randomUUID } from "node:crypto";
 
-import { buildCourse, COURSE_STATUS, isCoursePubliclyAvailable, toPublicCourse } from "../models/course.model.js";
-
 import {
-    validateCourseInput
-} from "../validators/course.validator.js";
+    buildCourse,
+    courseCalendarDate,
+    COURSE_STATUS,
+    isCoursePubliclyAvailable,
+    normalizeCourseInstructor,
+    toPublicCourse
+} from "../models/course.model.js";
+import { normalizeSearchText } from "../utils/search-text.js";
+import { validateCourseFilters } from "../validators/course-filter.validator.js";
+import { isValidIsoDate, validateCourseInput } from "../validators/course.validator.js";
 
 import { countActiveEnrollmentsByCourse } from "../repositories/enrollment.repository.js";
 
@@ -42,37 +48,91 @@ function sortCoursesBySchedule(a, b) {
     if (aDate && bDate) {
         const dateComparison = aDate.localeCompare(bDate);
         if (dateComparison !== 0) return dateComparison;
-        return a.name.localeCompare(b.name);
     }
     if (aDate && !bDate) return -1;
     if (!aDate && bDate) return 1;
 
-    return a.name.localeCompare(b.name);
+    const nameComparison = a.name.localeCompare(b.name);
+    if (nameComparison !== 0) return nameComparison;
+    if (a.id === b.id) return 0;
+    return a.id < b.id ? -1 : 1;
 }
 
-// Lists only published courses for public access, sorted by schedule start date ascending and then by name.
-export async function getPublishedCourses() {
+async function getAvailableCourses() {
+    const courses = await getCoursesRepository(COURSE_STATUS.PUBLISHED);
+    const today = courseCalendarDate();
+    return courses.filter((course) => isCoursePubliclyAvailable(course, today));
+}
+
+function isValidFilterPrice(price) {
+    return Number.isSafeInteger(price) && price >= 0;
+}
+
+function matchesCourseFilters(course, { words, instructor, minPrice, maxPrice, from, to }) {
+    if (instructor !== undefined && normalizeCourseInstructor(course.instructor) !== instructor) return false;
+
+    if (minPrice !== undefined || maxPrice !== undefined) {
+        const { price } = course;
+        if (!isValidFilterPrice(price) || price < (minPrice ?? 0) || price > (maxPrice ?? Number.MAX_SAFE_INTEGER)) {
+            return false;
+        }
+    }
+
+    if (from !== undefined || to !== undefined) {
+        const startDate = course.schedule?.startDate;
+        if (!isValidIsoDate(startDate) || (from && startDate < from) || (to && startDate > to)) return false;
+    }
+
+    if (!words) return true;
+    const text = [course.name, course.summary, course.description].map(normalizeSearchText).join(" ");
+    return words.every((word) => text.includes(word));
+}
+
+async function listPublicCourses(matches) {
     const [courses, activeByCourse] = await Promise.all([
-        getCoursesRepository(COURSE_STATUS.PUBLISHED),
+        getAvailableCourses(),
         countActiveEnrollmentsByCourse()
     ]);
 
     return courses
+        .filter(matches)
         .map((course) => toPublicCourse(course, activeByCourse.get(course.id) ?? 0))
         .sort(sortCoursesBySchedule);
 }
 
-// Lists only published, seasonal, not yet ended courses for public access, sorted by schedule start date ascending and then by name.
+export async function getPublishedCourses(query = new URLSearchParams()) {
+    const filters = validateCourseFilters(query);
+    return listPublicCourses((course) => matchesCourseFilters(course, filters));
+}
+
 export async function getSeasonalCourses() {
-    const [courses, activeByCourse] = await Promise.all([
-        getCoursesRepository(COURSE_STATUS.PUBLISHED),
-        countActiveEnrollmentsByCourse()
-    ]);
+    return listPublicCourses((course) => course.seasonName != null);
+}
 
-    return courses
-        .filter((course) => course.seasonName !== null && isCoursePubliclyAvailable(course))
-        .map((course) => toPublicCourse(course, activeByCourse.get(course.id) ?? 0))
-        .sort(sortCoursesBySchedule);
+export async function getCourseFilterOptions() {
+    const courses = await getAvailableCourses();
+    const instructorsByName = new Map();
+    let min = null;
+    let max = null;
+
+    for (const { instructor, price } of courses) {
+        const key = normalizeCourseInstructor(instructor);
+        if (key) {
+            const label = instructor.trim();
+            const existing = instructorsByName.get(key);
+            if (existing === undefined || label < existing) instructorsByName.set(key, label);
+        }
+
+        if (isValidFilterPrice(price)) {
+            min = min === null ? price : Math.min(min, price);
+            max = max === null ? price : Math.max(max, price);
+        }
+    }
+
+    return {
+        instructors: [...instructorsByName.values()].sort((a, b) => a.localeCompare(b, "es-CR")),
+        priceRange: { min, max }
+    };
 }
 
 // Retrieves a single published course by its identifier.

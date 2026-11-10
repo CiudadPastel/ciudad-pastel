@@ -173,6 +173,8 @@ describe("Seasonal Course Management API (HU-A08 / CIU-14 - Rama 2)", () => {
         vi.clearAllMocks();
         fake.courses.clear();
         setupFirestoreMock();
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(new Date("2026-11-09T12:00:00Z"));
 
         fake.verifyIdToken.mockImplementation(async (token) => {
             if (token === ADMIN_TOKEN) {
@@ -183,6 +185,10 @@ describe("Seasonal Course Management API (HU-A08 / CIU-14 - Rama 2)", () => {
             }
             throw new Error("Invalid or expired token");
         });
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
     });
 
     describe("POST /api/admin/courses (Creating courses with seasonal data)", () => {
@@ -490,10 +496,6 @@ describe("Seasonal Course Management API (HU-A08 / CIU-14 - Rama 2)", () => {
             return course;
         }
 
-        afterEach(() => {
-            vi.useRealTimers();
-        });
-
         it("returns only seasonal courses that are published and not yet ended", async () => {
             const seasonalActive = seedCourse(COURSE_STATUS.PUBLISHED, {
                 id: "seasonal-active-1",
@@ -690,7 +692,6 @@ describe("Seasonal Course Management API (HU-A08 / CIU-14 - Rama 2)", () => {
         });
 
         it("applies time boundary rules with vi.useFakeTimers (ends yesterday -> excluded, ends today -> included)", async () => {
-            vi.useFakeTimers();
             vi.setSystemTime(new Date("2026-11-20T12:00:00.000Z"));
 
             seedCourse(COURSE_STATUS.PUBLISHED, {

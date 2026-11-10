@@ -202,7 +202,7 @@ function validateOptionalString(
 }
 
 // Checks that a value is a real calendar date in YYYY-MM-DD format.
-function isValidIsoDate(value) {
+export function isValidIsoDate(value) {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return false;
   }

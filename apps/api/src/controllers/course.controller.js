@@ -5,6 +5,7 @@ import {
     updateCourse as updateCourseService,
     updateCourseStatus as updateCourseStatusService,
     getPublishedCourses as getPublishedCoursesService,
+    getCourseFilterOptions as getCourseFilterOptionsService,
     getSeasonalCourses as getSeasonalCoursesService,
     getPublishedCourseById as getPublishedCourseByIdService,
     withdrawSeasonalPublication as withdrawSeasonalPublicationService
@@ -13,10 +14,19 @@ import {
 // Handles the public published-course listing.
 export async function getPublishedCourses(req, res) {
     try {
-        const courses = await getPublishedCoursesService();
+        const queryStart = req.originalUrl.indexOf("?");
+        const query = queryStart === -1 ? "" : req.originalUrl.slice(queryStart);
+        const courses = await getPublishedCoursesService(new URLSearchParams(query));
 
         return res.status(200).json(courses);
     } catch (error) {
+        if (error.name === "ValidationError") {
+            return res.status(400).json({
+                message: error.message,
+                errors: error.details
+            });
+        }
+
         console.error("Published course list error:", error);
 
         return res.status(500).json({
@@ -57,6 +67,18 @@ export async function withdrawSeasonalPublication(req, res) {
 
         return res.status(500).json({
             message: "Could not withdraw seasonal publication."
+        });
+    }
+}
+
+export async function getCourseFilterOptions(req, res) {
+    try {
+        return res.status(200).json(await getCourseFilterOptionsService());
+    } catch (error) {
+        console.error("Course filter options error:", error);
+
+        return res.status(500).json({
+            message: "Could not retrieve course filter options."
         });
     }
 }
