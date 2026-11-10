@@ -67,6 +67,24 @@ export function buildCourse(data) {
     };
 }
 
+const courseCalendar = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Costa_Rica",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+});
+
+export function courseCalendarDate(now = new Date()) {
+    const parts = Object.fromEntries(courseCalendar.formatToParts(now).map(({ type, value }) => [type, value]));
+    return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+export function normalizeCourseInstructor(value) {
+    if (typeof value !== "string") return "";
+
+    return value.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim().replace(/\s+/gu, " ");
+}
+
 // Checks if a course is publicly available (published and not ended according to its schedule).
 export function isCoursePubliclyAvailable(course, now = new Date()) {
     if (!course || course.status !== COURSE_STATUS.PUBLISHED) {
@@ -83,7 +101,7 @@ export function isCoursePubliclyAvailable(course, now = new Date()) {
         return true;
     }
 
-    const todayStr = typeof now === "string" ? now.slice(0, 10) : now.toISOString().slice(0, 10);
+    const todayStr = typeof now === "string" ? now.slice(0, 10) : courseCalendarDate(now);
     return endDate >= todayStr;
 }
 
