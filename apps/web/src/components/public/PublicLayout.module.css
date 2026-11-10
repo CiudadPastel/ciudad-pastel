@@ -110,3 +110,13 @@
     padding: 0.75rem 0;
   }
 }
+.footerInner .teamLink {
+  color: var(--cp-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+.footerInner .teamLink:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
