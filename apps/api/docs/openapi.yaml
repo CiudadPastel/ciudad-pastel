@@ -909,18 +909,119 @@ paths:
     get:
       tags:
         - Courses
-      summary: List published courses
-      description: Returns only published courses sorted by start date ascending. Authentication is not required; draft and archived courses are excluded.
+      summary: List available published courses
+      description: |
+        Returns available published courses, including current seasonal courses. A course remains
+        available through its end date in America/Costa_Rica, using its start date as a fallback.
+        Published courses without either date remain visible. Results are sorted by start date
+        ascending (undated last), then by name and ID. Optional filters are combined with AND.
+        Price and date filters exclude courses without a valid price or start date respectively.
+        Each recognized parameter must be a single non-empty value. The filtering contract is
+        provisional pending confirmation with Ciudad Pastel (CIU-245).
       security: []
+      parameters:
+        - in: query
+          name: q
+          description: All normalized terms must occur in the public name, summary, or description. Case and diacritics are ignored.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+          example: galletas decoración
+        - in: query
+          name: instructor
+          description: Exact match after normalizing case, diacritics, and whitespace. The length limit applies after trimming.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 120
+          example: Yamilena Blanco Chaves
+        - in: query
+          name: minPrice
+          description: Inclusive lower price in colones. Use decimal digits only. Zero indicates a free course.
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 9007199254740991
+          example: 0
+        - in: query
+          name: maxPrice
+          description: Inclusive upper price in colones. Use decimal digits only. Must be at least minPrice when both are supplied.
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 9007199254740991
+          example: 45000
+        - in: query
+          name: from
+          description: Inclusive lower bound for schedule.startDate. Use a valid calendar date in YYYY-MM-DD.
+          schema:
+            type: string
+            format: date
+          example: "2026-11-20"
+        - in: query
+          name: to
+          description: Inclusive upper bound for schedule.startDate. Use a valid calendar date in YYYY-MM-DD, at least from when both are supplied.
+          schema:
+            type: string
+            format: date
+          example: "2026-12-15"
       responses:
         "200":
-          description: Published courses retrieved successfully.
+          description: Available courses matching the filters. Returns an empty array when there are no matches.
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: "#/components/schemas/PublicCourse"
+        "400":
+          description: Invalid course filters, including repeated or nested values and inverted ranges.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message, errors]
+                properties:
+                  message:
+                    type: string
+                  errors:
+                    type: array
+                    items:
+                      type: string
+              example:
+                message: Course filter validation failed.
+                errors:
+                  - minPrice must not exceed maxPrice.
+        "500":
+          description: Internal server error.
+
+  /courses/filter-options:
+    get:
+      tags:
+        - Courses
+      summary: Get public course filter options
+      description: |
+        Returns unique public instructor labels sorted in Spanish and the range of valid prices
+        from the same available courses as the unfiltered public catalog. Free courses contribute
+        a price of zero. No authentication is required. The contract is provisional (CIU-245).
+      security: []
+      responses:
+        "200":
+          description: Filter options. The instructor list may be empty, and both price limits are null when no price is valid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CourseFilterOptions"
+              examples:
+                available:
+                  value:
+                    instructors: [Yamilena Blanco Chaves]
+                    priceRange: { min: 0, max: 45000 }
+                empty:
+                  value:
+                    instructors: []
+                    priceRange: { min: null, max: null }
         "500":
           description: Internal server error.
 
@@ -930,7 +1031,7 @@ paths:
         - Courses
         - Seasonal Offers
       summary: List seasonal published courses
-      description: Returns only published courses marked with a seasonal campaign (seasonName is not null) and not yet ended according to their schedule, sorted by start date ascending. Authentication is not required.
+      description: Returns published courses with a seasonal campaign (seasonName is not null), using the same availability and sorting rules as GET /courses. Authentication is not required.
       security: []
       responses:
         "200":
@@ -949,7 +1050,7 @@ paths:
       tags:
         - Courses
       summary: Get published course details
-      description: Returns public course details by identifier. Only published courses are returned; drafts, archived, or nonexistent courses return 404.
+      description: Returns public course details by identifier for published courses, including past courses that are still published. Drafts, archived courses, and nonexistent courses return 404.
       security: []
       parameters:
         - in: path
@@ -1995,6 +2096,32 @@ components:
           type: string
           format: date-time
           example: "2026-10-16T12:00:00.000Z"
+
+    CourseFilterOptions:
+      type: object
+      additionalProperties: false
+      required: [instructors, priceRange]
+      properties:
+        instructors:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+        priceRange:
+          type: object
+          additionalProperties: false
+          required: [min, max]
+          properties:
+            min:
+              type: integer
+              nullable: true
+              minimum: 0
+              maximum: 9007199254740991
+            max:
+              type: integer
+              nullable: true
+              minimum: 0
+              maximum: 9007199254740991
 
     PublicCourse:
       type: object
