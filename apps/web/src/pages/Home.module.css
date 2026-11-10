@@ -2,3 +2,9 @@
 @media(max-width:900px){.hero{grid-template-columns:1fr}.heroCopy{padding:70px 7%}.scrollHint{margin-top:45px}.heroImage{min-height:380px;height:480px}.store{grid-template-columns:1fr}.storeImage{min-height:380px;height:420px}.storeCopy{padding:70px 7%}.about{grid-template-columns:1fr}.menuButton{display:block}.nav{display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#f8f6f1;box-shadow:0 16px 30px #1f3a5a20;padding:24px 7%;flex-direction:column;align-items:stretch}.navOpen{display:flex}.nav a{padding:10px 0}}
 @media(max-width:650px){.header{padding:10px 5%;min-height:72px}.brand{font-size:21px}.brand img{width:43px;height:43px}.heroCopy{padding:48px 6%}.hero h1{font-size:clamp(45px,11vw,64px)}.heroImage{height:375px;min-height:375px}.seal{height:110px;width:110px;font-size:10px;bottom:20px;right:20px}.manifesto{gap:10px;font-size:20px}.academy{padding:60px 6%}.sectionHeading{display:block}.sectionHeading .textLink{margin-top:22px}.courseGrid{grid-template-columns:1fr}.courseImage{height:260px}.storeImage{height:340px;min-height:340px}.storeCopy{padding:60px 6%}.about{padding:60px 6%;gap:25px}.aboutImage{height:290px}.footer{padding:40px 6%}}
 @media(prefers-reduced-motion:reduce){.page *{scroll-behavior:auto!important}}
+
+/* Espacio discreto para créditos y futuros enlaces legales. */
+.footerBottom{flex:0 0 100%;border-top:1px solid rgba(255,255,255,.18);padding-top:16px;margin-top:4px;text-align:right}
+.footerBottom a{font-size:12px;font-weight:600;color:#c0d3d5;text-decoration:none}
+.footerBottom a:hover{text-decoration:underline;text-underline-offset:4px}
+@media(max-width:650px){.footerBottom{text-align:left}}

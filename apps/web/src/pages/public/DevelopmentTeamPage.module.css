@@ -1,0 +1,28 @@
+.page {
+  background: var(--cp-bg);
+  color: var(--cp-navy);
+}
+
+.navigation {
+  padding: 0 0 1.5rem;
+}
+
+.navigation a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--cp-navy);
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.navigation a:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.navigation a:focus-visible {
+  outline: 3px solid var(--cp-mint);
+  outline-offset: 3px;
+}

@@ -67,6 +67,7 @@ function PublicLayout() {
                 <div className={styles.footerInner}>
                     <span>Ciudad Pastel</span>
                     <span>Academia de repostería</span>
+                    <Link to="/equipo-desarrollo" className={styles.teamLink}>Equipo desarrollador</Link>
                 </div>
             </footer>
         </div>

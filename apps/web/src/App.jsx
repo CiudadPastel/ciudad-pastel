@@ -66,6 +66,7 @@ import PublicProductDetail
 
 import Home
     from "./pages/Home";
+import DevelopmentTeamPage from "./pages/public/DevelopmentTeamPage";
 import HomeContent from "./pages/admin/HomeContent";
 
 import Cart from "./pages/public/Cart";
@@ -78,6 +79,10 @@ function App() {
                 path="/"
                 element={<Home />}
             />
+
+            <Route element={<PublicLayout />}>
+                <Route path="/equipo-desarrollo" element={<DevelopmentTeamPage />} />
+            </Route>
 
             <Route
                 path="/cursos"

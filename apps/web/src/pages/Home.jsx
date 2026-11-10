@@ -3,7 +3,6 @@ import { ArrowRight, BookOpen, ImageOff, Menu, MessageCircle, X } from "lucide-r
 import { Link } from "react-router-dom";
 
 import logo from "../assets/logo-ciudad-pastel.png";
-import DevelopmentTeam from "../components/public/DevelopmentTeam";
 import { getPublicCourses } from "../services/publicCourses.service";
 import { getPublicCategories } from "../services/publicProducts.service";
 import { getPublicHomeContent, DEFAULT_HOME_CONTENT } from "../services/homeContent.service";
@@ -136,11 +135,11 @@ export default function Home() {
                 </div>
                 {about.imageUrl && <HomePicture src={about.imageUrl} alt="Imagen sobre Ciudad Pastel" className={styles.aboutImage}/>}
             </section>}
-            <DevelopmentTeam />
         </main>
         <footer className={styles.footer}>
             <div><strong>Ciudad <em>Pastel</em></strong><p>Academia y tienda de repostería.</p></div>
             <div className={styles.footerLinks}>{waUrl && <a href={waUrl} target="_blank" rel="noopener noreferrer">WhatsApp</a>}<Link to="/admin">Administración</Link><a href="#inicio">Volver arriba ↑</a></div>
+            <div className={styles.footerBottom}><Link to="/equipo-desarrollo">Equipo desarrollador</Link></div>
         </footer>
     </div>;
 }
