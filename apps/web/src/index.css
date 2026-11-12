@@ -36,6 +36,12 @@
   --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
   --shadow-md: 0 4px 12px rgba(16, 24, 40, 0.08);
 
+  /* Ancho máximo del contenido. En rem, así crece junto con el texto
+     en monitores grandes (ver las media queries de abajo). */
+  --page-width: 75rem;
+  --admin-page-width: 75rem;
+  --admin-form-width: 55rem;
+
   color-scheme: light;
   font-family: var(--font-body);
   font-size: 16px;
@@ -50,6 +56,30 @@
 *::before,
 *::after {
   box-sizing: border-box;
+}
+
+/* Monitores grandes: el texto y el contenido crecen un poco para no
+   quedar como una columna angosta con mucho espacio vacío a los lados. */
+@media (min-width: 1600px) {
+  :root {
+    font-size: 17px;
+    --page-width: 80rem;
+    --admin-page-width: 84rem;
+  }
+}
+
+@media (min-width: 1920px) {
+  :root {
+    font-size: 18px;
+  }
+}
+
+@media (min-width: 2400px) {
+  :root {
+    font-size: 20px;
+    --page-width: 84rem;
+    --admin-page-width: 90rem;
+  }
 }
 
 body {
@@ -78,6 +108,11 @@ a {
 
 button {
   font: inherit;
+}
+
+/* Títulos que reciben el foco por código (para lectores de pantalla) no muestran el recuadro */
+[tabindex="-1"]:focus {
+  outline: none;
 }
 
 :focus-visible {

@@ -2,7 +2,9 @@
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-  max-width: 1200px;
+  width: 100%;
+  max-width: var(--admin-page-width);
+  margin-inline: auto;
 }
 
 .page h1 {

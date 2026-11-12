@@ -8,3 +8,5 @@
 .footerBottom a{font-size:12px;font-weight:600;color:#c0d3d5;text-decoration:none}
 .footerBottom a:hover{text-decoration:underline;text-underline-offset:4px}
 @media(max-width:650px){.footerBottom{text-align:left}}
+/* Monitores muy anchos: el encabezado y las secciones usan más espacio */
+@media (min-width:1800px){.header,.academy,.about{max-width:1760px}.courseImage{height:400px}.lead,.aboutDescription{font-size:18px}.nav a{font-size:16px}}
