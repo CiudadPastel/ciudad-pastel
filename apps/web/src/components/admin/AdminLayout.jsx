@@ -1,5 +1,6 @@
 import { BookOpen, ClipboardList, LayoutDashboard, LogOut, Package, Image } from "lucide-react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { useEffect, useRef } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../../auth/authContext";
 
@@ -20,6 +21,16 @@ const NAV_ITEMS = [
 function AdminLayout() {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
+    const { pathname } = useLocation();
+    const navRef = useRef(null);
+
+    // En el celular el menú se desliza de lado: se deja a la vista la sección abierta
+    useEffect(() => {
+        const nav = navRef.current;
+        const active = nav?.querySelector('[aria-current="page"]');
+        if (!nav || !active || nav.scrollWidth <= nav.clientWidth) return;
+        nav.scrollTo({ left: active.offsetLeft - (nav.clientWidth - active.offsetWidth) / 2 });
+    }, [pathname]);
 
     async function handleLogout() {
         await logout();
@@ -35,7 +46,7 @@ function AdminLayout() {
                     <span className={styles.brandTag}>Administración</span>
                 </div>
 
-                <nav aria-label="Administración" className={styles.nav}>
+                <nav ref={navRef} aria-label="Administración" className={styles.nav}>
                     {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
                         <NavLink
                             key={to}
