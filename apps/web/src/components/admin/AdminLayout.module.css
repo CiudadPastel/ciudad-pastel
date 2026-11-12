@@ -158,6 +158,7 @@
 
   /* Las secciones caben en una fila que se desliza de lado */
   .nav {
+    position: relative;
     flex-direction: row;
     order: 3;
     width: calc(100% + 2rem);

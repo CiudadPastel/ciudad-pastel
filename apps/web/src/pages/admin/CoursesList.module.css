@@ -383,3 +383,42 @@
     gap: 0.6rem;
   }
 }
+
+/* Celular: tarjeta de curso más clara y botones que no se salen */
+@media (max-width: 800px) {
+  .table td[data-label="Curso"] {
+    display: block;
+    text-align: left;
+  }
+
+  .table td[data-label="Curso"]::before {
+    content: none;
+  }
+
+  .table td > div.courseCell {
+    flex-direction: row;
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .table td.action {
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.5rem;
+    margin-top: 0.35rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--cp-border);
+    white-space: normal;
+  }
+
+  .table td.action > div {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .detailLink {
+    margin-left: auto;
+  }
+}
