@@ -1,6 +1,6 @@
 .shell {
   display: grid;
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: 15rem minmax(0, 1fr);
   min-height: 100svh;
 }
 
@@ -123,17 +123,19 @@
 /* Celular: la barra lateral pasa a ser una barra superior */
 @media (max-width: 800px) {
   .shell {
-    grid-template-columns: 1fr;
+    /* minmax(0, ...) evita que el menú ensanche la página y cause scroll de lado */
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .sidebar {
-    position: static;
+    position: sticky;
+    z-index: 10;
     height: auto;
     flex-direction: row;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.75rem 1rem;
-    padding: 0.75rem 1rem;
+    gap: 0.5rem 1rem;
+    padding: 0.6rem 1rem 0.5rem;
   }
 
   .brand {
@@ -154,18 +156,34 @@
     display: none;
   }
 
+  /* Las secciones caben en una fila que se desliza de lado */
   .nav {
     flex-direction: row;
     order: 3;
-    width: 100%;
+    width: calc(100% + 2rem);
+    margin-inline: -1rem;
+    padding: 0 1rem 0.15rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .nav::-webkit-scrollbar {
+    display: none;
   }
 
   .navLink {
-    padding: 0.5rem 0.75rem;
+    flex-shrink: 0;
+    padding: 0.45rem 0.75rem;
+    white-space: nowrap;
   }
 
   .account {
+    flex-direction: row;
     margin: 0 0 0 auto;
+  }
+
+  .logout {
+    padding: 0.4rem 0.65rem;
   }
 
   .content {

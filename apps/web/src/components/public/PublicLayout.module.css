@@ -15,7 +15,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  width: min(100% - 2rem, 1160px);
+  width: min(100% - 2rem, var(--page-width));
   margin: 0 auto;
 }
 
@@ -61,7 +61,7 @@
 
 .main {
   flex: 1;
-  width: min(100% - 2rem, 1160px);
+  width: min(100% - 2rem, var(--page-width));
   margin: 0 auto;
   padding: 2.5rem 0 3rem;
 }
@@ -80,7 +80,7 @@
 @media (max-width: 600px) {
   .headerInner,
   .footerInner {
-    width: min(100% - 1.5rem, 1160px);
+    width: min(100% - 1.5rem, var(--page-width));
   }
 
   .headerInner {
@@ -88,13 +88,28 @@
     padding: 0.75rem 0;
   }
 
+  /* Celular: los botones van en una sola fila que se desliza de lado */
   .header nav {
-    width: 100%;
+    flex-wrap: nowrap;
     justify-content: flex-start;
+    width: calc(100% + 1.5rem);
+    margin-inline: -0.75rem;
+    padding: 0 0.75rem 0.15rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .header nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .header nav a {
+    flex-shrink: 0;
+    white-space: nowrap;
   }
 
   .main {
-    width: min(100% - 1.5rem, 1160px);
+    width: min(100% - 1.5rem, var(--page-width));
     padding: 1.75rem 0 2rem;
   }
 
