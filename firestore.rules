@@ -1,0 +1,13 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // La aplicación web interactúa exclusivamente a través del backend (apps/api),
+    // el cual utiliza Firebase Admin SDK con credenciales de cuenta de servicio.
+    // Se deniega todo acceso directo desde clientes web/móviles para proteger la base de datos.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+

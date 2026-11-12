@@ -33,30 +33,27 @@ dotenv.config();
 
 const app = express();
 
-const FRONTEND_URL =
-    process.env.FRONTEND_URL || "http://localhost:5173";
-
-
-// Resolves the API documentation file path.
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const openApiPath = path.join(
-    __dirname,
-    "../docs/openapi.yaml"
-);
-
-
-// Loads the OpenAPI specification from YAML.
-const openApiDocument = YAML.parse(
-    fs.readFileSync(openApiPath, "utf8")
-);
-
+const rawFrontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+const allowedOrigins = rawFrontendUrl
+    .split(",")
+    .map((url) => url.trim().replace(/\/+$/, ""))
+    .filter(Boolean);
 
 // Enables requests from the configured frontend.
 app.use(
     cors({
-        origin: FRONTEND_URL,
+        origin: (origin, callback) => {
+            if (!origin) return callback(null, true);
+            const cleanOrigin = origin.replace(/\/+$/, "");
+            if (
+                allowedOrigins.includes(cleanOrigin) ||
+                allowedOrigins.includes("*")
+            ) {
+                return callback(null, true);
+            }
+            callback(new Error(`CORS bloqueado: Origen no permitido (${origin})`));
+        },
+        credentials: true,
         methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allowedHeaders: ["Authorization", "Content-Type"]
     })
@@ -69,6 +66,20 @@ app.use("/api/student-access", studentAccessRoutes);
 // Parses incoming JSON request bodies for the remaining routes.
 app.use(express.json());
 
+
+// Resolves the API documentation file path.
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const openApiPath = path.join(
+    __dirname,
+    "../docs/openapi.yaml"
+);
+
+// Loads the OpenAPI specification from YAML.
+const openApiDocument = YAML.parse(
+    fs.readFileSync(openApiPath, "utf8")
+);
 
 // Serves the interactive API documentation.
 app.use(
