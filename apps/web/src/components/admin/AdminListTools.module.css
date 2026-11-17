@@ -3,6 +3,8 @@
 .search { flex: 1 1 18rem; }
 .field input, .field select, .searchInput { border: 1px solid var(--cp-border); border-radius: var(--radius); background: var(--cp-surface); min-height: 44px; font: inherit; color: var(--cp-text); }
 .field input, .field select { padding: .6rem; }
+.field input:focus-visible, .field select:focus-visible { outline: 3px solid var(--cp-mint-600); outline-offset: 2px; border-color: var(--cp-mint-600); }
+.field input:disabled, .field select:disabled { cursor: not-allowed; opacity: .65; }
 .searchInput { display: flex; align-items: center; gap: .5rem; padding: 0 .75rem; }
 .searchInput input { width: 100%; min-width: 0; border: 0; background: transparent; font: inherit; padding: .65rem 0; }
 .searchInput:focus-within { outline: 2px solid var(--cp-mint-700); outline-offset: 2px; }

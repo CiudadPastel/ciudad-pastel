@@ -36,6 +36,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+  min-height: 44px;
   padding: 0.45rem 0.9rem;
   color: var(--cp-navy);
   background: var(--cp-surface);
@@ -44,10 +45,20 @@
   font: inherit;
   font-weight: 600;
   cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s, color 0.15s, transform 0.1s;
 }
 
 .filter:hover {
   border-color: var(--cp-navy);
+}
+
+.filter:focus-visible {
+  outline: 3px solid var(--cp-mint-600);
+  outline-offset: 2px;
+}
+
+.filter:active {
+  transform: scale(0.98);
 }
 
 .filterActive,
@@ -450,6 +461,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .filter {
+    transition: none;
+  }
+
   .productRow {
     transition: none;
   }

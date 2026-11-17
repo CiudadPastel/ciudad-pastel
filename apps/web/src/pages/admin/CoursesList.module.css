@@ -43,6 +43,7 @@
 }
 
 .typeFilter select {
+  min-height: 44px;
   padding: 0.45rem 0.7rem;
   border: 1px solid var(--cp-border);
   border-radius: 8px;
@@ -50,9 +51,10 @@
   color: var(--cp-text);
   font: inherit;
   font-weight: 400;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.typeFilter select:focus {
+.typeFilter select:focus-visible {
   outline: none;
   border-color: var(--cp-mint-600);
   box-shadow: 0 0 0 3px rgba(98, 180, 150, 0.3);
@@ -85,6 +87,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+  min-height: 44px;
   padding: 0.45rem 0.9rem;
   border-radius: 999px;
   border: 1px solid var(--cp-border);
@@ -92,10 +95,20 @@
   color: var(--cp-navy);
   font-weight: 600;
   cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s, color 0.15s, transform 0.1s;
 }
 
 .filter:hover:not(:disabled) {
   border-color: var(--cp-navy);
+}
+
+.filter:focus-visible {
+  outline: 3px solid var(--cp-mint-600);
+  outline-offset: 2px;
+}
+
+.filter:active:not(:disabled) {
+  transform: scale(0.98);
 }
 
 .filter:disabled {
@@ -300,6 +313,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .filter,
+  .typeFilter select {
+    transition: none;
+  }
+
   .skeleton {
     animation: none;
   }

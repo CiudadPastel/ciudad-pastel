@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, BookOpen, CalendarDays, ChefHat, Eye, GraduationCap, Hand, ImageOff } from "lucide-react";
+import { ArrowRight, BookOpen, CalendarDays, ChefHat, Eye, GraduationCap, Hand, ImageOff, Sparkles } from "lucide-react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import CategoryGrid from "../../components/public/CategoryGrid";
@@ -161,7 +161,7 @@ function CoursesList() {
         navigate(catalogUrl, { replace: true, state: { focusCourseId: id } });
     }
 
-    function renderCourseCard(course, featured = false) {
+    function renderCourseCard(course) {
         const scheduleSummary = formatScheduleSummary(course.schedule);
         const scheduleRange = formatScheduleRange(course.schedule);
 
@@ -188,9 +188,6 @@ function CoursesList() {
                         </div>
                     )}
                     <div className={styles.cardBody}>
-                        {featured && course.seasonName && (
-                            <span className={styles.seasonalLabel}>{course.seasonName}</span>
-                        )}
                         <h2>{course.name}</h2>
                         {course.summary && <p className={styles.summary}>{course.summary}</p>}
                         <div className={styles.cardMeta}>
@@ -212,25 +209,76 @@ function CoursesList() {
         );
     }
 
-    function renderSeasonalSection() {
-        if (seasonalStatus === "success" && seasonalCourses.length === 0) return null;
+    function renderSeasonalCard(course) {
+        const scheduleSummary = formatScheduleSummary(course.schedule);
+        const scheduleRange = formatScheduleRange(course.schedule);
 
         return (
-            <section
-                className={styles.seasonalSection}
+            <li key={course.id}>
+                <Link
+                    to={`/cursos/${encodeURIComponent(course.id)}`}
+                    className={styles.seasonalCard}
+                    data-course-id={course.id}
+                    onClick={() => rememberCourse(course.id)}
+                    state={{ from: catalogUrl, courseId: course.id }}
+                >
+                    {course.imageUrl ? (
+                        <img
+                            src={course.imageUrl}
+                            alt={`Imagen del curso ${course.name}`}
+                            className={styles.seasonalImage}
+                            loading="lazy"
+                            decoding="async"
+                        />
+                    ) : (
+                        <div className={styles.seasonalImageEmpty} aria-hidden="true">
+                            <ImageOff size={22} />
+                        </div>
+                    )}
+                    <div className={styles.seasonalCardBody}>
+                        {course.seasonName && (
+                            <span className={styles.seasonalLabel}>{course.seasonName}</span>
+                        )}
+                        <h3>{course.name}</h3>
+                        <div className={styles.seasonalMeta}>
+                            <strong>
+                                {course.price == null
+                                    ? "Precio no disponible"
+                                    : course.price === 0 ? "Gratis" : formatPrice(course.price)}
+                            </strong>
+                            {scheduleSummary && <span>{scheduleSummary}</span>}
+                            {scheduleRange && <span>{scheduleRange}</span>}
+                        </div>
+                        <span className={styles.cardLink}>
+                            Ver curso
+                            <ArrowRight size={14} aria-hidden="true" />
+                        </span>
+                    </div>
+                </Link>
+            </li>
+        );
+    }
+
+    function renderSeasonalAside() {
+        return (
+            <aside
+                className={styles.seasonalAside}
                 aria-labelledby="seasonal-courses-title"
                 aria-busy={seasonalStatus === "loading"}
             >
                 <header className={styles.seasonalHeading}>
-                    <h2 id="seasonal-courses-title">Cursos de temporada</h2>
-                    <p>Experiencias especiales para cada época del año.</p>
+                    <Sparkles size={18} aria-hidden="true" />
+                    <div>
+                        <h2 id="seasonal-courses-title">Cursos de temporada</h2>
+                        <p>Experiencias especiales para cada época del año.</p>
+                    </div>
                 </header>
 
                 {seasonalStatus === "loading" && (
                     <>
                         <p className="sr-only" role="status">Cargando cursos de temporada…</p>
-                        <ul className={styles.grid} aria-hidden="true">
-                            {[0, 1, 2].map((index) => (
+                        <ul className={styles.seasonalList} aria-hidden="true">
+                            {[0, 1].map((index) => (
                                 <li key={index} className={styles.seasonalSkeletonCard}>
                                     <div className={styles.seasonalSkeletonImage} />
                                     <div className={styles.seasonalSkeletonBody}>
@@ -250,97 +298,109 @@ function CoursesList() {
                     </div>
                 )}
 
+                {seasonalStatus === "success" && seasonalCourses.length === 0 && (
+                    <p className={styles.seasonalEmpty}>
+                        Por ahora no hay cursos de temporada. Vuelve pronto para conocer los próximos.
+                    </p>
+                )}
+
                 {seasonalStatus === "success" && seasonalCourses.length > 0 && (
-                    <ul className={styles.grid} aria-label="Cursos de temporada">
-                        {seasonalCourses.map((course) => renderCourseCard(course, true))}
+                    <ul className={styles.seasonalList} aria-label="Cursos de temporada">
+                        {seasonalCourses.map(renderSeasonalCard)}
                     </ul>
                 )}
-            </section>
+            </aside>
         );
     }
 
-    if (status === "loading") {
-        return (
-            <section className={styles.page} aria-busy="true">
-                <h1>Cursos de repostería</h1>
-                {renderSeasonalSection()}
-                <p className={styles.loading} role="status">Cargando cursos…</p>
-            </section>
-        );
-    }
+    function renderCatalog() {
+        if (status === "loading") {
+            return <p className={styles.loading} role="status">Cargando cursos…</p>;
+        }
 
-    if (status === "error") {
-        return (
-            <section className={styles.page}>
-                <h1>Cursos de repostería</h1>
-                {renderSeasonalSection()}
+        if (status === "error") {
+            return (
                 <StateMessage
                     variant="error"
                     title="No se pudieron cargar los cursos"
                     description={state.error?.message}
                     action={<RetryButton onClick={() => setReloadKey((key) => key + 1)} />}
                 />
-            </section>
+            );
+        }
+
+        if (showCategories) {
+            return (
+                <>
+                    {state.courses.length === 0 && <p role="status">No hay cursos disponibles por el momento.</p>}
+                    <CategoryGrid categories={categories} label="Tipos de curso" categoryIcons={COURSE_TYPE_ICONS}
+                        categoryUrl={(id) => id ? "?tipo=" + encodeURIComponent(id) : "?vista=todos"} />
+                </>
+            );
+        }
+
+        return (
+            <>
+                <nav aria-label="Explorar cursos" className={styles.navigation}>
+                    <button type="button" className="btn btn-secondary" onClick={() => setSearchParams({})}>Volver a categorías</button>
+                    <label className={styles.typeFilter}>
+                        <span>Tipo de curso</span>
+                        <select value={type || ""} onChange={(event) => {
+                            const next = new URLSearchParams(searchParams);
+                            next.delete("pagina");
+                            next.set("vista", "todos");
+                            if (event.target.value) next.set("tipo", event.target.value);
+                            else next.delete("tipo");
+                            setSearchParams(next);
+                        }}>
+                            <option value="">Todos los cursos</option>
+                            {type && !categories.some((category) => category.id === type) && <option value={type}>Tipo no disponible</option>}
+                            {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                        </select>
+                    </label>
+                </nav>
+                {filtered.length === 0 ? (
+                    <StateMessage
+                        title={type ? "No hay cursos disponibles de este tipo" : "No hay cursos disponibles por el momento"}
+                        description="Vuelve pronto para conocer las próximas fechas."
+                    />
+                ) : (
+                    <ul ref={listRef} className={styles.grid} aria-label="Cursos disponibles">
+                        {visibleCourses.map((course) => renderCourseCard(course))}
+                    </ul>
+                )}
+                <div className={styles.pagination}>
+                    <ResultsCount shown={visibleCourses.length} total={filtered.length} noun="cursos" />
+                    {hasMore ? (
+                        <button type="button" className="btn btn-secondary" onClick={loadMore}>Cargar más cursos</button>
+                    ) : filtered.length > 0 && (
+                        <p className={styles.loading}>Llegaste al final de los cursos disponibles.</p>
+                    )}
+                </div>
+            </>
         );
     }
 
+    const title = status !== "success" || showCategories
+        ? "Cursos de repostería"
+        : type
+            ? `Cursos: ${categories.find((category) => category.id === type)?.name || "Tipo no disponible"}`
+            : "Todos los cursos";
+
     return (
-        <section className={styles.page}>
+        <section className={styles.page} aria-busy={status === "loading" || undefined}>
             <header className={styles.heading}>
                 <div>
                     <p className={styles.eyebrow}>Ciudad Pastel · Academia</p>
-                    <h1 ref={headingRef} tabIndex={-1}>
-                        {showCategories ? "Cursos de repostería" : type
-                            ? `Cursos: ${categories.find((category) => category.id === type)?.name || "Tipo no disponible"}`
-                            : "Todos los cursos"}
-                    </h1>
+                    <h1 ref={headingRef} tabIndex={-1}>{title}</h1>
                     <p className={styles.subtitle}>Encuentra el próximo curso para llevar tus ideas a la mesa.</p>
                 </div>
             </header>
 
-            {renderSeasonalSection()}
-
-            {showCategories ? (
-                <>
-                    {state.courses.length === 0 && <p role="status">No hay cursos disponibles por el momento.</p>}
-                    <CategoryGrid categories={categories} label="Tipos de curso" categoryIcons={COURSE_TYPE_ICONS}
-                        categoryUrl={(id) => id ? '?tipo=' + encodeURIComponent(id) : '?vista=todos'} />
-                </>
-            ) : <>
-                <nav aria-label="Explorar cursos" className={styles.navigation}>
-                    <button type="button" className="btn btn-secondary" onClick={() => setSearchParams({})}>Volver a categorías</button>
-                    <label>Tipo de curso <select value={type || ""} onChange={(event) => {
-                        const next = new URLSearchParams(searchParams);
-                        next.delete("pagina");
-                        next.set("vista", "todos");
-                        if (event.target.value) next.set("tipo", event.target.value);
-                        else next.delete("tipo");
-                        setSearchParams(next);
-                    }}>
-                        <option value="">Todos los cursos</option>
-                        {type && !categories.some((category) => category.id === type) && <option value={type}>Tipo no disponible</option>}
-                        {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-                    </select></label>
-                </nav>
-            {filtered.length === 0 ? (
-                <StateMessage
-                    title={type ? "No hay cursos disponibles de este tipo" : "No hay cursos disponibles por el momento"}
-                    description="Vuelve pronto para conocer las próximas fechas."
-                />
-            ) : (
-                <ul ref={listRef} className={styles.grid} aria-label="Cursos disponibles">
-                    {visibleCourses.map((course) => renderCourseCard(course))}
-                </ul>
-            )}
-            <div className={styles.pagination}>
-                <ResultsCount shown={visibleCourses.length} total={filtered.length} noun="cursos" />
-                {hasMore ? (
-                    <button type="button" className="btn btn-secondary" onClick={loadMore}>Cargar más cursos</button>
-                ) : filtered.length > 0 && (
-                    <p className={styles.loading}>Llegaste al final de los cursos disponibles.</p>
-                )}
+            <div className={styles.layout}>
+                {renderSeasonalAside()}
+                <div className={styles.catalog}>{renderCatalog()}</div>
             </div>
-            </>}
         </section>
     );
 }

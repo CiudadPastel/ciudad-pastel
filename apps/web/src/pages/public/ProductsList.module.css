@@ -70,6 +70,10 @@
   outline-offset: 2px;
 }
 
+.clear:active {
+  transform: scale(0.98);
+}
+
 .grid {
   display: grid;
   /* On wide screens each track is genuinely fixed: 1 or 20 results look alike. */

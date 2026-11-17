@@ -495,7 +495,10 @@ await test("seasonal courses load independently, render reusable cards and do no
     }
 
     await mount(courseRoutes, "/cursos");
-    assert(!container.querySelector('[aria-labelledby="seasonal-courses-title"]'), "Empty seasonal results leave no section");
+    const emptyAside = container.querySelector('[aria-labelledby="seasonal-courses-title"]');
+    assert(emptyAside, "Seasonal sidebar stays visible without seasonal courses");
+    assert(emptyAside.textContent.includes("Por ahora no hay cursos de temporada"), "Empty seasonal sidebar explains there are no courses");
+    assert(!emptyAside.querySelector("[data-course-id]"), "Empty seasonal sidebar lists no courses");
 });
 
 await test("seasonal request errors do not block the main catalog and can be retried", async () => {
