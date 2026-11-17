@@ -1,3 +1,6 @@
+import useAdminList from "../../hooks/useAdminList";
+import { matchesSearch, paginateRecords, sortRecords } from "../../utils/adminList";
+import { AdminListTools, AdminListPagination, AdminListSelect } from "../../components/admin/AdminListTools";
 import { useEffect, useRef, useState } from "react";
 import { ImageOff, LoaderCircle, Pencil, Plus, Trash2 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -54,7 +57,11 @@ function ProductImage({ product }) {
 function ProductsList() {
     const [state, setState] = useState({ status: "loading", products: [], error: null });
     const [reloadKey, setReloadKey] = useState(0);
-    const [filter, setFilter] = useState("all");
+    const list = useAdminList();
+    const filter = FILTERS.some((item) => item.value === list.params.get("estado")) ? list.params.get("estado") : "all";
+    const setFilter = (value) => list.setParam("estado", value === "all" ? "" : value);
+    const category = list.params.get("categoria") ?? "";
+    const availability = ["true", "false"].includes(list.params.get("disponibilidad")) ? list.params.get("disponibilidad") : "";
     const [confirmingProduct, setConfirmingProduct] = useState(null);
     const [pendingProductId, setPendingProductId] = useState(null);
     const [notice, setNotice] = useState(null);
@@ -133,14 +140,17 @@ function ProductsList() {
         }
     }
 
-    const counts = {
-        all: state.products.length,
-        published: state.products.filter((product) => product.status === "published").length,
-        withdrawn: state.products.filter((product) => product.status === "withdrawn").length
-    };
-    const visibleProducts = state.products.filter((product) =>
-        filter === "all" || product.status === filter
-    );
+    const categories = [...new Map(state.products.map((product) => [product.category?.id ?? "sin-categoria", product.category?.name ?? "Sin categoría"])).entries()].sort((a, b) => a[1].localeCompare(b[1], "es"));
+    const searched = state.products.filter((product) => matchesSearch([product.name], list.debounced)
+        && (!category || (product.category?.id ?? "sin-categoria") === category)
+        && (!availability || String(product.available) === availability));
+    const counts = Object.fromEntries(FILTERS.map(({ value }) => [value, searched.filter((product) => value === "all" || product.status === value).length]));
+    const orders = [["updated-desc", "Última modificación"], ["name-asc", "Nombre: A–Z"], ["name-desc", "Nombre: Z–A"], ["price-asc", "Precio: menor a mayor"], ["price-desc", "Precio: mayor a menor"]];
+    const order = orders.some(([key]) => key === list.params.get("orden")) ? list.params.get("orden") : "updated-desc";
+    const filteredProducts = sortRecords(searched.filter((product) => filter === "all" || product.status === filter), order);
+    const pagination = paginateRecords(filteredProducts, list.params.get("pagina"));
+    const visibleProducts = pagination.items;
+    const detailState = { from: location.pathname + location.search };
     const visibleNotice = notice ?? (
         state.status === "success" && location.state?.flash
             ? { variant: "success", text: location.state.flash }
@@ -179,6 +189,17 @@ function ProductsList() {
                 </Notice>
             )}
 
+            <AdminListTools list={list} placeholder="Buscar por nombre del producto…" orders={orders} defaultOrder="updated-desc" disabled={state.status !== "success"}>
+                <AdminListSelect label="Categoría" value={category} onChange={(value) => list.setParam("categoria", value)}>
+                    <option value="">Todas las categorías</option>
+                    {categories.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+                    {category && !categories.some(([id]) => id === category) && <option value={category}>Categoría sin productos</option>}
+                </AdminListSelect>
+                <AdminListSelect label="Disponibilidad" value={availability} onChange={(value) => list.setParam("disponibilidad", value)}>
+                    <option value="">Cualquier disponibilidad</option><option value="true">Disponible</option><option value="false">Agotado</option>
+                </AdminListSelect>
+            </AdminListTools>
+            {state.status === "success" && <AdminListPagination total={filteredProducts.length} noun="productos" pagination={pagination} onPage={(page) => list.setParam("pagina", String(page))} />}
             {state.status === "loading" && (
                 <div className={styles.loading} role="status" aria-label="Cargando productos">
                     <span />
@@ -222,10 +243,10 @@ function ProductsList() {
 
             {state.status === "success" && state.products.length > 0 && visibleProducts.length === 0 && (
                 <StateMessage
-                    title={filter === "published" ? "No hay productos publicados" : "No hay productos retirados"}
+                    title="No hay productos con estos filtros"
                     description="Seleccione otro filtro para ver los demás productos."
                     action={
-                        <button type="button" className="btn btn-secondary" onClick={() => setFilter("all")}>
+                        <button type="button" className="btn btn-secondary" onClick={list.clear}>
                             Ver todos
                         </button>
                     }
@@ -254,11 +275,11 @@ function ProductsList() {
                                     role="link"
                                     tabIndex={0}
                                     aria-label={`Ver detalle de ${product.name}`}
-                                    onClick={() => navigate(`/admin/productos/${encodeURIComponent(product.id)}`)}
+                                    onClick={() => navigate(`/admin/productos/${encodeURIComponent(product.id)}`, { state: detailState })}
                                     onKeyDown={(event) => {
                                         if (event.target === event.currentTarget && event.key === "Enter") {
                                             event.preventDefault();
-                                            navigate(`/admin/productos/${encodeURIComponent(product.id)}`);
+                                            navigate(`/admin/productos/${encodeURIComponent(product.id)}`, { state: detailState });
                                         }
                                     }}
                                 >
@@ -293,6 +314,7 @@ function ProductsList() {
                                         <div className={styles.rowActionButtons}>
                                             <Link
                                                 to={`/admin/productos/${encodeURIComponent(product.id)}/editar`}
+                                                state={detailState}
                                                 className={styles.editLink}
                                                 aria-label={`Editar ${product.name}`}
                                                 onClick={(event) => event.stopPropagation()}

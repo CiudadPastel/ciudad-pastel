@@ -1,6 +1,7 @@
+import { adminReturnTo } from "../../utils/adminList";
 import { useEffect, useState } from "react";
 import { ArrowLeft } from "lucide-react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 
 import ProductCreate from "./ProductCreate";
 import StateMessage, { RetryButton } from "../../components/ui/StateMessage";
@@ -10,6 +11,8 @@ import styles from "./Products.module.css";
 
 function ProductEdit() {
     const { id } = useParams();
+    const location = useLocation();
+    const backTo = adminReturnTo(location.state?.from, "/admin/productos");
     const [state, setState] = useState({ id: null, status: "loading", product: null, error: null });
     const [reloadKey, setReloadKey] = useState(0);
 
@@ -42,7 +45,7 @@ function ProductEdit() {
     if (status === "loading") {
         return (
             <section className={styles.page}>
-                <Link to={`/admin/productos/${encodeURIComponent(id)}`} className={styles.backLink}>
+                <Link to={`/admin/productos/${encodeURIComponent(id)}`} state={{ from: backTo }} className={styles.backLink}>
                     <ArrowLeft size={18} aria-hidden="true" />
                     Volver al producto
                 </Link>
@@ -63,7 +66,7 @@ function ProductEdit() {
                     title="No encontramos este producto"
                     description="Puede que el enlace no sea válido o que el producto ya no exista."
                     action={
-                        <Link to="/admin/productos" className="btn btn-primary">
+                        <Link to={backTo} className="btn btn-primary">
                             Volver a productos
                         </Link>
                     }
@@ -92,7 +95,7 @@ function ProductEdit() {
                     title="Este producto fue retirado"
                     description="Los productos retirados no se pueden editar."
                     action={
-                        <Link to={`/admin/productos/${encodeURIComponent(product.id)}`} className="btn btn-primary">
+                        <Link to={`/admin/productos/${encodeURIComponent(product.id)}`} state={{ from: backTo }} className="btn btn-primary">
                             Volver al producto
                         </Link>
                     }

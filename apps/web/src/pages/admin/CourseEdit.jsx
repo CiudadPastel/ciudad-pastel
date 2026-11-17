@@ -1,3 +1,4 @@
+import { adminReturnTo } from "../../utils/adminList";
 import { useEffect, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
@@ -18,7 +19,7 @@ function CourseEdit() {
 
     const detailUrl = `/admin/cursos/${id}`;
     // Para que "Volver a cursos" en el detalle conserve el filtro de la lista
-    const listUrl = location.state?.from || "/admin/cursos";
+    const listUrl = adminReturnTo(location.state?.from, "/admin/cursos");
 
     const [state, setState] = useState({ id: null, status: "loading", course: null, error: null });
     const [reloadKey, setReloadKey] = useState(0);
@@ -80,7 +81,7 @@ function CourseEdit() {
 
         return (
             <section className={styles.page}>
-                <Link to="/admin/cursos" className={styles.back}>
+                <Link to={listUrl} className={styles.back}>
                     <ArrowLeft size={16} aria-hidden="true" />
                     Volver a cursos
                 </Link>
@@ -94,7 +95,7 @@ function CourseEdit() {
                     }
                     action={
                         notFound ? (
-                            <Link to="/admin/cursos" className="btn btn-primary">
+                            <Link to={listUrl} className="btn btn-primary">
                                 Ir a la lista de cursos
                             </Link>
                         ) : (
