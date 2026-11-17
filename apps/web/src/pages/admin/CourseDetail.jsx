@@ -1,3 +1,4 @@
+import { adminReturnTo } from "../../utils/adminList";
 import { useEffect, useRef, useState } from "react";
 import {
     ArrowLeft,
@@ -45,7 +46,7 @@ function CourseDetail() {
     const location = useLocation();
 
     // Vuelve a la lista con el mismo filtro que tenía la persona
-    const backTo = location.state?.from || "/admin/cursos";
+    const backTo = adminReturnTo(location.state?.from, "/admin/cursos");
 
     // Aviso que llega desde otra pantalla, ej. "El curso se creó correctamente"
     const flash = location.state?.flash;
@@ -259,7 +260,7 @@ function CourseDetail() {
     const backLink = (
         <Link to={backTo} className={styles.back}>
             <ArrowLeft size={16} aria-hidden="true" />
-            Volver a cursos
+            {backTo.startsWith("/admin/solicitudes") ? "Volver a solicitudes" : "Volver a cursos"}
         </Link>
     );
 
@@ -293,7 +294,7 @@ function CourseDetail() {
                     }
                     action={
                         notFound ? (
-                            <Link to="/admin/cursos" className="btn btn-primary">
+                            <Link to={backTo} className="btn btn-primary">
                                 Ir a la lista de cursos
                             </Link>
                         ) : (

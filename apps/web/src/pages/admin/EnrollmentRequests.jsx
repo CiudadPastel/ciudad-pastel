@@ -1,3 +1,6 @@
+import useAdminList from "../../hooks/useAdminList";
+import { matchesSearch, paginateRecords, sortRecords, matchesRequestDates } from "../../utils/adminList";
+import { AdminListTools, AdminListPagination, AdminListDate } from "../../components/admin/AdminListTools";
 import { useEffect, useState } from "react";
 import {
     Ban,
@@ -10,7 +13,7 @@ import {
     RotateCcw,
     UserCheck
 } from "lucide-react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 import EnrollmentFormDialog from "../../components/admin/EnrollmentFormDialog";
 import Notice from "../../components/ui/Notice";
@@ -92,7 +95,11 @@ function EnrollmentRequests() {
     const [confirming, setConfirming] = useState(null);
 
     // Los filtros viven en la URL: ?estado=pendientes&curso=<id>
-    const [searchParams, setSearchParams] = useSearchParams();
+    const list = useAdminList();
+    const searchParams = list.params;
+    const from = searchParams.get("desde") ?? "";
+    const to = searchParams.get("hasta") ?? "";
+    const returnState = { from: "/admin/solicitudes" + (searchParams.size ? "?" + searchParams : "") };
     const filter = FILTERS.find((f) => f.value === searchParams.get("estado")) ?? FILTERS[0];
     const courseFilter = searchParams.get("curso") ?? "";
 
@@ -112,12 +119,7 @@ function EnrollmentRequests() {
         };
     }, [reloadKey]);
 
-    function setParam(name, value) {
-        const next = new URLSearchParams(searchParams);
-        if (value) next.set(name, value);
-        else next.delete(name);
-        setSearchParams(next, { replace: true });
-    }
+    const setParam = list.setParam;
 
     async function changeStatus(request, status) {
         setPending({ id: request.id, to: status });
@@ -152,7 +154,7 @@ function EnrollmentRequests() {
         setNotice({
             variant: "success",
             text: `Se matriculó a ${enrollment.fullName} en "${enrollment.courseName}".`,
-            action: { to: `/admin/cursos/${enrollment.courseId}#estudiantes`, label: "Ver estudiantes del curso" }
+            action: { to: `/admin/cursos/${enrollment.courseId}#estudiantes`, state: returnState, label: "Ver estudiantes del curso" }
         });
     }
 
@@ -162,11 +164,17 @@ function EnrollmentRequests() {
         .sort((a, b) => a.name.localeCompare(b.name));
     const selectedCourse = courses.find((c) => c.id === courseFilter);
 
-    const ofCourse = state.requests.filter((r) => !courseFilter || r.courseId === courseFilter);
+    const ofCourse = state.requests.filter((r) => (!courseFilter || r.courseId === courseFilter)
+        && matchesSearch([r.id, r.fullName, r.idNumber, r.phone, r.courseName], list.debounced)
+        && matchesRequestDates(r.createdAt, from, to));
     const counts = Object.fromEntries(
         FILTERS.map((f) => [f.value, ofCourse.filter((r) => !f.status || r.status === f.status).length])
     );
-    const visible = ofCourse.filter((r) => !filter.status || r.status === filter.status);
+    const orders = [["created-desc", "Recibidas más recientes"], ["created-asc", "Recibidas más antiguas"]];
+    const order = searchParams.get("orden") === "created-asc" ? "created-asc" : "created-desc";
+    const filteredRequests = sortRecords(ofCourse.filter((r) => !filter.status || r.status === filter.status), order);
+    const pagination = paginateRecords(filteredRequests, searchParams.get("pagina"));
+    const visible = pagination.items;
 
     return (
         <section className={styles.page}>
@@ -184,6 +192,11 @@ function EnrollmentRequests() {
                 </Notice>
             )}
 
+            <AdminListTools list={list} placeholder="Buscar por nombre, identificación, teléfono o solicitud…" orders={orders} defaultOrder="created-desc" disabled={state.status !== "success"}>
+                <AdminListDate label="Desde (Costa Rica)" value={from} max={to || undefined} onChange={(value) => setParam("desde", value)} />
+                <AdminListDate label="Hasta (Costa Rica)" value={to} min={from || undefined} onChange={(value) => setParam("hasta", value)} />
+            </AdminListTools>
+            {from && to && from > to && <p role="alert">La fecha inicial debe ser anterior o igual a la fecha final.</p>}
             <div className={styles.filterBar}>
                 <div className={styles.filters} role="group" aria-label="Filtrar por estado">
                     {FILTERS.map((f) => (
@@ -219,6 +232,7 @@ function EnrollmentRequests() {
                 </label>
             </div>
 
+            {state.status === "success" && <AdminListPagination total={filteredRequests.length} noun="solicitudes" pagination={pagination} onPage={(page) => setParam("pagina", String(page))} />}
             {state.status === "loading" && (
                 <p className={styles.loading} role="status">
                     <LoaderCircle size={18} className={styles.spin} aria-hidden="true" />
@@ -247,7 +261,7 @@ function EnrollmentRequests() {
                             : "Pruebe con otro estado o curso."
                     }
                     action={state.requests.length > 0 && (
-                        <button type="button" className="btn btn-secondary" onClick={() => setSearchParams({}, { replace: true })}>
+                        <button type="button" className="btn btn-secondary" onClick={list.clear}>
                             Ver todas
                         </button>
                     )}
@@ -297,11 +311,12 @@ function EnrollmentRequests() {
 
                                 <div className={styles.course}>
                                     <span className={styles.label}>Curso</span>
-                                    <Link to={`/admin/cursos/${request.courseId}`}>{request.courseName}</Link>
+                                    <Link to={`/admin/cursos/${request.courseId}`} state={returnState}>{request.courseName}</Link>
                                 </div>
 
                                 <div className={styles.statusCell}>
                                     <EnrollmentStatusBadge status={request.status} />
+                                    {CONFIRMABLE.includes(request.status) && <span className={styles.attention}>Requiere atención</span>}
                                     <div className={styles.actions}>
                                         {CONFIRMABLE.includes(request.status) && (
                                             <button
@@ -316,7 +331,7 @@ function EnrollmentRequests() {
                                         )}
                                         {request.status === ENROLLMENT_STATUS.CONFIRMED && (
                                             <Link
-                                                to={`/admin/cursos/${request.courseId}#estudiantes`}
+                                                to={`/admin/cursos/${request.courseId}#estudiantes`} state={returnState}
                                                 className={styles.confirmedLink}
                                             >
                                                 Ver en la lista del curso

@@ -20,7 +20,7 @@ function Notice({ variant = "success", children, action, onClose }) {
             <span className={styles.text}>
                 {children}
                 {action && (
-                    <Link to={action.to} className={styles.action}>
+                    <Link to={action.to} state={action.state} className={styles.action}>
                         {action.label}
                         <ArrowRight size={14} aria-hidden="true" />
                     </Link>

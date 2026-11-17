@@ -290,3 +290,5 @@
     max-width: none;
   }
 }
+
+.attention { font-size: .8rem; font-weight: 800; color: var(--cp-navy); border-left: 3px solid var(--cp-mint-700); padding-left: .5rem; }

@@ -1,6 +1,7 @@
+import { adminReturnTo } from "../../utils/adminList";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, CircleAlert, LoaderCircle, Save, X } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import StepProgress from "../../components/ui/StepProgress";
 import { RetryButton } from "../../components/ui/StateMessage";
@@ -144,6 +145,8 @@ function mapServerValidationErrors(details) {
 function ProductCreate({ product = null }) {
     const isEditing = product !== null;
     const navigate = useNavigate();
+    const location = useLocation();
+    const backTo = adminReturnTo(location.state?.from, "/admin/productos");
     const formRef = useRef(null);
     const stepHeadingRef = useRef(null);
     const initialValues = productToFormValues(product);
@@ -260,7 +263,7 @@ function ProductCreate({ product = null }) {
             if (isEditing) await updateAdminProduct(product.id, payload);
             else await createAdminProduct(payload);
 
-            navigate("/admin/productos", {
+            navigate(backTo, {
                 replace: true,
                 state: {
                     flash: isEditing
@@ -321,7 +324,8 @@ function ProductCreate({ product = null }) {
     return (
         <section className={styles.page}>
             <Link
-                to={isEditing ? `/admin/productos/${encodeURIComponent(product.id)}` : "/admin/productos"}
+                to={isEditing ? `/admin/productos/${encodeURIComponent(product.id)}` : backTo}
+                state={{ from: backTo }}
                 className={styles.back}
             >
                 <ArrowLeft size={16} aria-hidden="true" />
@@ -515,7 +519,8 @@ function ProductCreate({ product = null }) {
                         onClick={() => navigate(
                             isEditing
                                 ? `/admin/productos/${encodeURIComponent(product.id)}`
-                                : "/admin/productos"
+                                : backTo,
+                            { state: { from: backTo } }
                         )}
                         disabled={submitting}
                     >

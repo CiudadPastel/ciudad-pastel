@@ -1,3 +1,4 @@
+import { adminReturnTo } from "../../utils/adminList";
 import { useEffect, useState } from "react";
 import { ArrowLeft, ImageOff, Package, Pencil, Trash2 } from "lucide-react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
@@ -18,6 +19,7 @@ const PRODUCT_STATUS_LABELS = {
 function ProductDetail() {
     const { id } = useParams();
     const location = useLocation();
+    const backTo = adminReturnTo(location.state?.from, "/admin/productos");
     const navigate = useNavigate();
     const [state, setState] = useState({ id: null, status: "loading", product: null, error: null });
     const [reloadKey, setReloadKey] = useState(0);
@@ -55,7 +57,7 @@ function ProductDetail() {
         setNotice(null);
         try {
             await removeAdminProduct(product.id);
-            navigate("/admin/productos", {
+            navigate(backTo, {
                 replace: true,
                 state: { flash: "Producto retirado correctamente." }
             });
@@ -77,7 +79,7 @@ function ProductDetail() {
 
     return (
         <section className={styles.page}>
-            <Link to="/admin/productos" className={styles.backLink}>
+            <Link to={backTo} className={styles.backLink}>
                 <ArrowLeft size={18} aria-hidden="true" />
                 Volver a productos
             </Link>
@@ -103,7 +105,7 @@ function ProductDetail() {
                     title="No encontramos este producto"
                     description="Puede que el enlace no sea válido o que el producto ya no esté disponible."
                     action={
-                        <Link to="/admin/productos" className="btn btn-primary">
+                        <Link to={backTo} className="btn btn-primary">
                             Volver a productos
                         </Link>
                     }
@@ -191,6 +193,7 @@ function ProductDetail() {
                             ) : (
                                 <Link
                                     to={`/admin/productos/${encodeURIComponent(product.id)}/editar`}
+                                    state={{ from: backTo }}
                                     className="btn btn-secondary"
                                 >
                                     <Pencil size={16} aria-hidden="true" />
@@ -218,7 +221,7 @@ function ProductDetail() {
                     description="Puede que el enlace no sea válido o que el producto ya no esté disponible."
                     icon={Package}
                     action={
-                        <Link to="/admin/productos" className="btn btn-primary">
+                        <Link to={backTo} className="btn btn-primary">
                             Volver a productos
                         </Link>
                     }

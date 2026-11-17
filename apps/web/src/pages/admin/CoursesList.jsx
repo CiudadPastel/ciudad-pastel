@@ -1,6 +1,9 @@
+import useAdminList from "../../hooks/useAdminList";
+import { matchesSearch, paginateRecords, sortRecords } from "../../utils/adminList";
+import { AdminListTools, AdminListPagination } from "../../components/admin/AdminListTools";
 import { useEffect, useState } from "react";
 import { ChevronRight, ImageOff, Pencil, Plus } from "lucide-react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import CourseStatusActions from "../../components/admin/CourseStatusActions";
 import CourseSeasonActions from "../../components/admin/CourseSeasonActions";
@@ -27,11 +30,6 @@ const FILTER_STATUS = {
     archivados: COURSE_STATUS.ARCHIVED
 };
 
-const EMPTY_FILTER_TITLES = {
-    publicados: "No hay cursos publicados",
-    borradores: "No hay cursos en borrador",
-    archivados: "No hay cursos archivados"
-};
 
 function matchesFilter(course, filter) {
     return filter === "todos" || course.status === FILTER_STATUS[filter];
@@ -54,7 +52,8 @@ function CoursesList() {
     const [notice, setNotice] = useState(null);
 
     // El filtro vive en la URL (?estado=...) para conservarlo al volver del detalle
-    const [searchParams, setSearchParams] = useSearchParams();
+    const list = useAdminList();
+    const searchParams = list.params;
     const filter = FILTERS.some((f) => f.value === searchParams.get("estado"))
         ? searchParams.get("estado")
         : "todos";
@@ -108,27 +107,14 @@ function CoursesList() {
         setNotice({ variant: "success", text: message });
     }
 
-    function changeFilter(value) {
-        const next = new URLSearchParams(searchParams);
-        if (value === "todos") next.delete("estado");
-        else next.set("estado", value);
-        setSearchParams(next, { replace: true });
-    }
-
-    function changeType(value) {
-        const next = new URLSearchParams(searchParams);
-        if (value === TYPE_ALL) next.delete("tipo");
-        else next.set("tipo", value);
-        setSearchParams(next, { replace: true });
-    }
-
-    function clearFilters() {
-        setSearchParams(new URLSearchParams(), { replace: true });
-    }
+    const changeFilter = (value) => list.setParam("estado", value === "todos" ? "" : value);
+    const changeType = (value) => list.setParam("tipo", value);
+    const clearFilters = list.clear;
+    const searched = state.courses.filter((course) => matchesSearch([course.name], list.debounced));
 
     // Los contadores de estado respetan el tipo elegido, y viceversa
-    const ofType = state.courses.filter((c) => matchesType(c, typeFilter));
-    const ofStatus = state.courses.filter((c) => matchesFilter(c, filter));
+    const ofType = searched.filter((c) => matchesType(c, typeFilter));
+    const ofStatus = searched.filter((c) => matchesFilter(c, filter));
 
     const counts = {
         todos: ofType.length,
@@ -140,7 +126,11 @@ function CoursesList() {
     const typeCount = (value) => ofStatus.filter((c) => matchesType(c, value)).length;
     const hasUntyped = state.courses.some((c) => !c.courseType);
 
-    const visibleCourses = ofType.filter((c) => matchesFilter(c, filter));
+    const orders = [["updated-desc", "Última modificación"], ["created-desc", "Creados más recientes"], ["created-asc", "Creados más antiguos"], ["name-asc", "Nombre: A–Z"], ["name-desc", "Nombre: Z–A"]];
+    const order = orders.some(([key]) => key === searchParams.get("orden")) ? searchParams.get("orden") : "updated-desc";
+    const filteredCourses = sortRecords(ofType.filter((c) => matchesFilter(c, filter)), order);
+    const pagination = paginateRecords(filteredCourses, searchParams.get("pagina"));
+    const visibleCourses = pagination.items;
     const detailState = { from: `/admin/cursos${searchParams.size ? `?${searchParams}` : ""}` };
 
     return (
@@ -169,6 +159,7 @@ function CoursesList() {
                 </Notice>
             )}
 
+            <AdminListTools list={list} placeholder="Buscar por nombre del curso…" orders={orders} defaultOrder="updated-desc" disabled={state.status !== "success"} />
             <div className={styles.filterBar}>
             <div
                 className={styles.filters}
@@ -215,6 +206,7 @@ function CoursesList() {
                 </label>
             </div>
 
+            {state.status === "success" && <AdminListPagination total={filteredCourses.length} noun="cursos" pagination={pagination} onPage={(page) => list.setParam("pagina", String(page))} />}
             {state.status === "loading" && <LoadingTable />}
 
             {state.status === "error" && (
@@ -243,11 +235,7 @@ function CoursesList() {
                 state.courses.length > 0 &&
                 visibleCourses.length === 0 && (
                     <StateMessage
-                        title={
-                            typeFilter === TYPE_ALL
-                                ? EMPTY_FILTER_TITLES[filter]
-                                : "No hay cursos con estos filtros"
-                        }
+                        title="No hay cursos con estos filtros"
                         description="Pruebe con otro filtro para ver el resto de los cursos."
                         action={
                             <button
